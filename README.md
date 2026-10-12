@@ -95,8 +95,14 @@ hostch.py map --pe generated/bin/Release/Specter.Internal.dll --dllmain --hide-s
 **visible** et son adresse de départ tomberait dans la mémoire manual-mappée —
 signal d'anti-cheat classique. Le `framework/dllmain.cpp` généré (qui fait un
 `CreateThread`) n'est donc **pas compilé** : on fournit notre propre `DllMain`
-dans `entry.cpp`, qui s'exécute inline. Les futurs workers persistants (boucles,
-hooks) seront créés **côté hôte** via `hostch.py ct … --hide-system`. Détails :
+dans `entry.cpp`, qui s'exécute inline.
+
+Pour un worker persistant (boucle, hooks), on utilise `nt::spawn_hidden()`
+(`src/Specter.Internal/nt.cpp`) : il appelle l'entrée dédiée non exportée
+`HostchSpawnThread` du fork (`wine-hostch/patches/hostch-spawnthread.patch`), qui
+crée un thread **caché** (`is_system`). La RVA de cette entrée est bakée par
+`wine-hostch/emit-hostch-rva.sh` dans `src/Specter.Internal/hostch-rva.h` (à
+régénérer après chaque rebuild du fork). Détails :
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), « Injection, threads et discrétion ».
 
 ## Logs (pipe vers Linux)

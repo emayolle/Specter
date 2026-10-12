@@ -63,6 +63,8 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 | `entry.cpp` | possède `DllMain` + `LOG_FILE`, appelle `specter::start()` inline | adaptateur (point d'entrée, sans logique) |
 | `specter.{h,cpp}` | l'interface du produit | module profond |
 | `runtime.{h,cpp}` | localise `GameAssembly.dll`, résout l'API IL2CPP | seam interne |
+| `nt.{h,cpp}` | pont NT/hostch : `spawn_hidden()` → `HostchSpawnThread` | adaptateur (fork) |
+| `hostch-rva.h` | RVA bakée du point d'entrée `HostchSpawnThread` | généré par le build |
 | `log.{h,cpp}` | journalisation : pipe hôte, repli fichier | seam interne (2 adaptateurs) |
 
 ### Pourquoi `runtime` est un vrai seam (et pas de l'indirection)
@@ -155,19 +157,33 @@ c'est pourquoi le `framework/dllmain.cpp` généré (qui fait un `CreateThread`)
 n'est pas compilé. C'est suffisant pour le périmètre actuel (logs courts,
 compatibles avec le loader lock).
 
-### Workers persistants (à venir)
+### Workers persistants : `nt::spawn_hidden()`
 
-Dès qu'une fonctionnalité demandera une **boucle** ou un **dispatcher de hooks**
-persistant, le worker devra être créé **côté hôte via hostch** :
+Plutôt que de solliciter l'hôte à chaque worker, on a **étendu notre fork**.
+`wine-hostch/patches/hostch-spawnthread.patch` ajoute une entrée **dédiée et non
+exportée** `HostchSpawnThread` dans `ntdll.dll` : elle crée un thread `is_system`.
+Notre DLL la résout par **RVA** — bakée par le build dans `hostch-rva.h` via
+`wine-hostch/emit-hostch-rva.sh` — et l'appelle :
 
+```cpp
+// src/Specter.Internal/nt.cpp
+uintptr_t base = (uintptr_t)GetModuleHandleW(L"ntdll.dll");
+auto fn = (HostchSpawnFn)(base + SPECTER_HOSTCH_SPAWN_RVA);
+fn(&h, SPECTER_HOSTCH_SPAWN_MAGIC, worker, arg);   // -> thread is_system
 ```
-hostch.py ct <base+RVA entrée worker> --hide-system
-```
 
-et **non** depuis la DLL. C'est le seul moyen de garder le thread `is_system`.
-(`base` est renvoyé par `map` ; l'entrée worker est exposée par notre payload.)
-Tant que la première fonctionnalité n'existe pas, on n'introduit **aucun** module
-`worker` — et il ne devra jamais encapsuler un simple `CreateThread`.
+**Pourquoi non exportée :** un export nommé dans `ntdll` serait **énumérable** par
+NEP2 (un *tell*). Le nom n'existe que chez nous et dans le source Wine, et un
+**magic** (loquet) garantit que seul un appelant connaissant le secret peut créer
+un thread caché.
+
+**Pourquoi par RVA :** c'est le prix de la non-exportation ; le build émet la RVA
+(cf. `emit-hostch-rva.sh`), à régénérer à chaque rebuild de `ntdll`.
+
+La règle devient donc : **depuis la DLL, on ne crée un thread que via
+`nt::spawn_hidden()`** — jamais `CreateThread`. Et comme le thread naît **hors
+loader**, il ne reçoit pas `DLL_THREAD_ATTACH` : le worker doit initialiser son
+CRT par-thread (`_CRT_INIT((HMODULE)&__ImageBase, DLL_THREAD_ATTACH, nullptr)`).
 
 ---
 

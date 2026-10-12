@@ -21,6 +21,9 @@
     <ClCompile Include="runtime.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="nt.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="log.cpp">
       <Filter>src</Filter>
     </ClCompile>
@@ -39,6 +42,12 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="runtime.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="nt.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="hostch-rva.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="log.h">
