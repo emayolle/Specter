@@ -164,7 +164,11 @@ void leave_menu()
     } else {
         real_clip_cursor(nullptr);
     }
-    real_set_cursor(::LoadCursorW(nullptr, IDC_ARROW));
+    // The game keeps its hardware cursor hidden by setting it to NULL; we must
+    // hand that state back exactly (a stray IDC_ARROW here would stay visible —
+    // the game never re-hides it because the gate swallowed its SetCursor calls
+    // while the menu was open).
+    real_set_cursor(nullptr);
     g_cursor_saved = false;
     log::info("input: menu closed - cursor state restored");
 }
