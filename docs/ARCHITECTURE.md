@@ -272,6 +272,15 @@ Discrétion : hooks en mémoire dans `dxgi.dll` (jamais de fichier écrit — vo
 `io.IniFilename = nullptr`), fenêtre sonde cachée, aucun `CreateThread` (le
 worker vient de `nt::spawn_hidden`). La touche **SUPPR** ouvre/ferme le menu.
 
+`overlay/d3dcompiler_shim.cpp` : le backend ImGui DX12 compile ses shaders via
+`D3DCompile`, et `d3dcompiler.lib` créerait un **import au chargement** sur
+`D3DCOMPILER_47.dll` — que le jeu ne charge pas, donc `map --pe` échouerait
+(tous les imports doivent être résidents avant le mapping). Comme `D3DCompile`
+n'est pas `__declspec(dllimport)`, on fournit notre propre `D3DCompile` qui
+résout la vraie implémentation à la première utilisation (chargement paresseux de
+`d3dcompiler_XX.dll`). La table d'imports du module ne contient plus que des
+modules déjà résidents dans le guest.
+
 Le seul contrat partagé est `overlay/d3d12_overlay.h` (3 fonctions) ;
 `detour` et `dxgi_hook` sont des détails d'implémentation cachés derrière
 `dxgi_install()`.

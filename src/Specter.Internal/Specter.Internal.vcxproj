@@ -49,6 +49,7 @@
     <ClCompile Include="overlay\detour.cpp" />
     <ClCompile Include="overlay\dxgi_hook.cpp" />
     <ClCompile Include="overlay\d3d12_overlay.cpp" />
+    <ClCompile Include="overlay\d3dcompiler_shim.cpp" />
   </ItemGroup>
 
   <!-- Vendored Dear ImGui cores + D3D12/Win32 backends (no Specter PCH). -->
