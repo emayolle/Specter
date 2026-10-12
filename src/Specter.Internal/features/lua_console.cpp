@@ -44,6 +44,8 @@ using luaL_loadbuffer_fn = int(__cdecl*)(lua_State*, const char*, size_t,
 using lua_pcall_fn = int(__cdecl*)(lua_State*, int, int, int);
 using lua_gettop_fn = int(__cdecl*)(lua_State*);
 using lua_settop_fn = void(__cdecl*)(lua_State*, int);
+using lua_getglobal_fn = void(__cdecl*)(lua_State*, const char*);
+using lua_type_fn = int(__cdecl*)(lua_State*, int);
 using lua_tolstring_fn = const char*(__cdecl*)(lua_State*, int, size_t*);
 using lua_toboolean_fn = int(__cdecl*)(lua_State*, int);
 
@@ -51,6 +53,8 @@ luaL_loadbuffer_fn p_loadbuffer = nullptr;
 lua_pcall_fn p_pcall = nullptr;
 lua_gettop_fn p_gettop = nullptr;
 lua_settop_fn p_settop = nullptr;
+lua_getglobal_fn p_getglobal = nullptr;
+lua_type_fn p_type = nullptr;
 lua_tolstring_fn p_tolstring = nullptr;
 lua_toboolean_fn p_toboolean = nullptr;
 
@@ -59,6 +63,7 @@ std::atomic<bool> g_hook_installed{false};
 std::atomic<bool> g_seen_state{false};
 std::atomic<void*> g_lua_state{nullptr};
 std::atomic<unsigned long long> g_ticks{0};
+std::atomic<bool> g_inf_stamina{false};
 
 // ---- detour ----------------------------------------------------------------
 
@@ -74,6 +79,7 @@ constexpr int kMaxCode = 32 * 1024;
 char g_code[kMaxCode];
 int g_code_len = 0;
 bool g_pending = false;
+bool g_pending_silent = false;  // pump consumes without relaying a result
 
 constexpr int kMaxOut = 48 * 1024;
 char g_out[kMaxOut];
@@ -250,10 +256,12 @@ bool resolve_xlua()
     bind(m, "lua_pcall", p_pcall);
     bind(m, "lua_gettop", p_gettop);
     bind(m, "lua_settop", p_settop);
+    bind(m, "lua_getglobal", p_getglobal);
+    bind(m, "lua_type", p_type);
     bind(m, "lua_tolstring", p_tolstring);
     bind(m, "lua_toboolean", p_toboolean);
     if (!p_loadbuffer || !p_pcall || !p_gettop || !p_settop || !p_tolstring ||
-        !p_toboolean) {
+        !p_toboolean || !p_getglobal || !p_type) {
         log::error("lua: xlua.dll found but some Lua C API exports are missing");
         return false;
     }
@@ -313,6 +321,32 @@ void run_chunk(lua_State* L, const char* code, int len)
     p_settop(L, top);
 }
 
+// Execute a chunk without relaying any result (used by the stamina toggle and
+// its background maintenance so they never disturb the CLI channel/out.txt).
+// Errors are silently discarded; the print-capture wrapper is reused so the
+// code sees the same environment as a normal chunk.
+void run_silent(lua_State* L, const char* code, int len)
+{
+    static char src[kMaxCode + sizeof(kPrefix) + sizeof(kSuffix)];
+    const int plen = static_cast<int>(sizeof(kPrefix) - 1);
+    const int slen = static_cast<int>(sizeof(kSuffix) - 1);
+    if (len > kMaxCode) {
+        len = kMaxCode;
+    }
+    std::memcpy(src, kPrefix, static_cast<std::size_t>(plen));
+    std::memcpy(src + plen, code, static_cast<std::size_t>(len));
+    std::memcpy(src + plen + len, kSuffix, static_cast<std::size_t>(slen));
+
+    const int top = p_gettop(L);
+    if (p_loadbuffer(L, src, static_cast<size_t>(plen + len + slen),
+                     "@specter") != 0) {
+        p_settop(L, top);
+        return;
+    }
+    (void)p_pcall(L, 0, 0, 0);
+    p_settop(L, top);
+}
+
 // ---- the pump --------------------------------------------------------------
 
 // Claim and run a chunk dropped by tools/lua.sh. Throttled: one filesystem
@@ -342,6 +376,77 @@ void poll_cli(lua_State* L)
     run_chunk(L, code, n);
 }
 
+// ---- infinite movement stamina (opt-in) ------------------------------------
+//
+// Sandbox discovery: chunks submitted to this bridge run in the game's
+// sandboxed Lua environment. Reads of existing globals (pg, package.loaded, …)
+// fall through to the real global table, but **writes** (even `_G.foo = …`)
+// land in a per-chunk shadow and never reach the real _G. That is exactly why
+// the first attempt — an install chunk defining `__SpecterStaminaTick` and a
+// pump-side `lua_getglobal` + pcall per frame — silently did nothing.
+//
+// The robust lever is a per-instance method hook: assigning
+// `actorCombatAttribute.changeStamina` on the player's instance shadows the
+// metatable method for that object only. Instance field writes are ordinary
+// writes on a live object, so they stick regardless of the sandbox. Movement
+// costs (sprint/dash/glide/climb) all funnel through ClientStaminaComponent →
+// `actorCombatAttribute:changeStamina(-cost)`; swallowing those negative
+// deltas is "infinite stamina" at the source, and it does not race the game's
+// per-frame drain (a pre-update refill would just be undone later in the
+// frame).
+//
+// IMPORTANT (freeze fix): do NOT pin stamina with setAttribute() on every
+// drain — each call runs the game's full attribute-change pipeline
+// (recalc + HUD notifications + event dispatch) and stutters the frame. The
+// hook swallows drains with a bare `return true` (nanoseconds), and stamina is
+// pinned to max exactly ONCE when the hook is (re)installed.
+//
+// The toggle state lives in C++ (g_inf_stamina):
+//   * ON  -> queue the idempotent installer (silently). The pump also re-runs
+//            it silently every ~10 s so a fresh entity/aca after a relog gets
+//            re-hooked. Stamina is pinned to max once at install time.
+//   * OFF -> queue the restorer that puts the metatable method back.
+// The silent path means none of this touches out.txt / the seq counter, so the
+// CLI channel is never disturbed by maintenance traffic.
+
+constexpr char kStaminaInstall[] =
+    R"lua(local ent
+for _k,_v in pairs(pg.global.actorMgr.uid2Ent) do ent=_v break end
+if not ent then return end
+local aca=ent.actorCombatAttribute
+if not aca then return end
+local AC=package.loaded['Common.Const.AttributeConst']
+if not AC then return end
+if not aca.__SpecterHooked then
+  local orig=aca.changeStamina
+  if type(orig)~='function' then return end
+  aca.changeStamina=function(self,delta)
+    if delta and delta<0 then return true end
+    return orig(self,delta)
+  end
+  aca.__SpecterHooked=true
+end
+local mx=aca:getMaxStamina()
+if mx and mx>0 and aca:getAttribValue(AC.stamina_cur)<mx then
+  aca:setAttribute(AC.stamina_cur,mx)
+end
+)lua";
+
+constexpr char kStaminaDisable[] =
+    R"lua(local ent
+for _k,_v in pairs(pg.global.actorMgr.uid2Ent) do ent=_v break end
+if not ent then return end
+local aca=ent.actorCombatAttribute
+if not aca then return end
+local mt=getmetatable(aca)
+if mt and type(mt.changeStamina)=='function' then
+  aca.changeStamina=mt.changeStamina
+end
+aca.__SpecterHooked=nil
+)lua";
+
+unsigned long long g_stamina_install_ticks = 0;  // Lua thread only
+
 void pump(void* self)
 {
     g_ticks.fetch_add(1, std::memory_order_relaxed);
@@ -362,6 +467,7 @@ void pump(void* self)
     static char local[kMaxCode];
     int len = 0;
     bool has = false;
+    bool silent = false;
     ensure_lock();
     ::EnterCriticalSection(&g_lock);
     if (g_pending) {
@@ -371,16 +477,32 @@ void pump(void* self)
         }
         std::memcpy(local, g_code, static_cast<std::size_t>(len));
         g_pending = false;
+        silent = g_pending_silent;
+        g_pending_silent = false;
         has = true;
     }
     ::LeaveCriticalSection(&g_lock);
 
     if (has) {
-        run_chunk(L, local, len);
+        if (silent) {
+            run_silent(L, local, len);
+        } else {
+            run_chunk(L, local, len);
+        }
     }
 
     // Then the CLI channel (tools/lua.sh), if a chunk is pending.
     poll_cli(L);
+
+    // Infinite stamina: keep the cost hook applied. The installer is idempotent
+    // and runs silently (no out.txt/seq traffic) about every 10 s while ON, so
+    // a fresh player entity/aca after a relog gets re-hooked.
+    if (g_inf_stamina.load(std::memory_order_relaxed)) {
+        if (++g_stamina_install_ticks >= 600) {
+            g_stamina_install_ticks = 0;
+            run_silent(L, kStaminaInstall, sizeof(kStaminaInstall) - 1);
+        }
+    }
 }
 
 void common_update_hook(void* self, void* method)
@@ -455,6 +577,53 @@ bool submit(const char* code, int len)
     g_pending = true;
     ::LeaveCriticalSection(&g_lock);
     return true;
+}
+
+// Same as submit(), but the pump consumes the chunk with run_silent(): no
+// result is relayed to the pipe or out.txt and the seq counter is untouched,
+// so an in-flight tools/lua.sh command is never disturbed. Used by the stamina
+// toggle (render thread) for its one-shot install/restore chunks.
+bool submit_silent(const char* code, int len)
+{
+    if (!g_hook_installed.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    if (!code || len <= 0) {
+        return false;
+    }
+    if (len > kMaxCode) {
+        len = kMaxCode;
+    }
+    ensure_lock();
+    ::EnterCriticalSection(&g_lock);
+    std::memcpy(g_code, code, static_cast<std::size_t>(len));
+    g_code_len = len;
+    g_pending = true;
+    g_pending_silent = true;
+    ::LeaveCriticalSection(&g_lock);
+    return true;
+}
+
+bool set_infinite_stamina(bool on)
+{
+    if (!g_hook_installed.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    const bool was = g_inf_stamina.exchange(on, std::memory_order_relaxed);
+    if (on && !was) {
+        // Apply now (render thread -> queue; the pump runs it silently).
+        submit_silent(kStaminaInstall, sizeof(kStaminaInstall) - 1);
+        log::info("lua: infinite movement stamina enabled");
+    } else if (!on && was) {
+        submit_silent(kStaminaDisable, sizeof(kStaminaDisable) - 1);
+        log::info("lua: infinite movement stamina disabled");
+    }
+    return true;
+}
+
+bool infinite_stamina()
+{
+    return g_inf_stamina.load(std::memory_order_relaxed);
 }
 
 bool take_result(char* out, int cap, bool* out_ok)

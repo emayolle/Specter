@@ -45,5 +45,17 @@ const char* status();
 // Number of CommonUpdate ticks observed (liveness for the UI).
 unsigned long long ticks();
 
+// Opt-in "infinite movement stamina" (sprint/dash/glide/climb). While enabled,
+// the game's own `actorCombatAttribute.changeStamina` is hooked (on the
+// player's instance): negative deltas — the movement costs — are swallowed and
+// stamina is pinned to max once at install time, through the game's own
+// attribute API (so the HUD and stamina change notifications keep firing). The
+// installer is re-run silently by the pump every ~10 s to re-hook a fresh
+// entity/attribute object after a relog. Scope is the player's stamina only;
+// unlike Const.NO_COST_MODE it does not also disable skill or water costs.
+// Returns false if the bridge hook is not installed.
+bool set_infinite_stamina(bool on);
+bool infinite_stamina();
+
 }  // namespace lua
 }  // namespace specter::features

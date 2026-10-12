@@ -112,3 +112,63 @@ fenêtre (`overlay/game_input.cpp`) qui avale déjà les messages du jeu les
 pour que les modificateurs (Maj/Ctrl) soient lus correctement. Comme SUPPR sert
 de touche de bascule du menu, elle est laissée à ImGui quand un champ de texte a
 le focus (le menu se ferme alors par le bouton **Fermer le menu**).
+
+---
+
+## Stamina de déplacement infinie (toggle)
+
+L'épuisement de stamina est piloté côté Lua : les composants de mouvement
+(sprint, dash, glide, climb) passent tous par `ClientStaminaComponent` →
+`actorCombatAttribute:changeStamina(-coût)` (`Common.Ability.Attribute.
+ActorCombatAttribute`), avec lecture via `getAttribValue(AttributeConst.
+stamina_cur)`.
+
+### Mécanisme : hook `changeStamina` par instance
+
+Le toggle « Stamina de déplacement infinie » du panneau installe une fois un
+**remplacement de `changeStamina` sur l'instance du joueur** (shadow de la
+méthode du metatable pour cet objet uniquement) :
+
+- les **deltas négatifs** (une dépense de stamina : sprint/dash/glide/climb)
+  sont avalés (`return true`) — la stamina ne descend jamais ;
+- les **deltas positifs** (régénération naturelle, objets…) passent tels quels à
+  la méthode d'origine.
+
+L'endurance est remise à fond **une seule fois** à l'installation (via
+`setAttribute` — l'API du jeu, donc les notifications d'attribut et le HUD
+fonctionnent). On ne re-pinne **pas** à chaque drain : chaque `setAttribute`
+déclenche le pipeline complet de changement d'attribut du jeu et causerait un
+mini-freeze à chaque utilisation.
+
+### Pourquoi un hook par instance plutôt qu'un tick par frame
+
+Découverte de terrain : les chunks de ce pont s'exécutent dans l'environnement
+Lua **sandboxé** du jeu. Les *lectures* des globals existants passent au vrai
+`_G`, mais les *écritures* de globals (même `_G.x = …`) partent dans une table
+d'ombre et n'atteignent jamais le vrai `_G`. La première implémentation — une
+chunk d'installation définissant `__SpecterStaminaTick`, puis la pompe en
+`lua_getglobal` + `lua_pcall` par frame — ne voyait donc jamais la fonction
+(`getglobal` lit le vrai `_G`) : le toggle « ne faisait rien » en silence.
+
+Les écritures sur **champs d'objets réels** (l'instance `actorCombatAttribute`)
+persistent, elles : le hook est immune au sandbox. Avantage supplémentaire :
+avaler la dépense **à la source** n'entre pas en course avec le drain du jeu
+par frame (un refill avant l'update aurait été annulé par la dépense ensuite).
+
+### Implémentation
+
+- `set_infinite_stamina(bool)` (thread de rendu) : bascule l'atomique
+  `g_inf_stamina` et soumet une chunk **silencieuse** (installation ou
+  restauration) qui est consommée par la pompe.
+- L'installateur est **idempotent** (marqueur `aca.__SpecterHooked`) ; la pompe
+  le ré-émet silencieusement toutes les ~10 s tant que le toggle est actif, ce
+  qui re-hook automatiquement une entité/`actorCombatAttribute` neuve après un
+  changement de scène ou un relog.
+- Le chemin **silencieux** (`run_silent`/`submit_silent`) n'écrit ni dans
+  `out.txt`, ni dans le compteur `#seq=` : la maintenance n'entre jamais en
+  conflit avec une commande `tools/lua.sh` en vol. La vérification de
+  résistance du hook : `tools/lua.sh 'local e; for k,v in pairs(pg.global.actorMgr.uid2Ent) do e=v break end
+  print(getmetatable(e.actorCombatAttribute).changeStamina == e.actorCombatAttribute.changeStamina)'
+  ` (false = hook actif).
+- champ d'application **joueur uniquement** : `gmMode == Const.NO_COST_MODE`
+  reste désactivé (il couperait aussi les coûts de compétences et d'eau).

@@ -36,26 +36,45 @@ std::wstring pipe_path()
     return std::wstring(kDefaultPipe);
 }
 
-// Write raw bytes to the host pipe. If the pipe is gone, fall back to the file
-// sink for good (g_pipe becomes INVALID_HANDLE_VALUE).
+HANDLE open_pipe()
+{
+    std::wstring path = pipe_path();
+    return CreateFileW(path.c_str(),
+                       GENERIC_READ | GENERIC_WRITE,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL, OPEN_EXISTING, 0, NULL);
+}
+
+// Write raw bytes to the host pipe. If the pipe has no reader, the write fails
+// and the pipe is closed; the *next* call retries opening it, so restarting
+// specter-tap.sh re-attaches the logs without restarting the game. Only when a
+// reopen also fails does the message fall back to the file sink (which lives
+// in /tmp thanks to LOG_FILE, never in the game directory or the prefix).
 void write_all(const char* data, std::size_t len)
 {
-    if (g_pipe == INVALID_HANDLE_VALUE) {
-        il2cppi_log_write(std::string(data, len));
-        return;
-    }
-
     std::size_t offset = 0;
-    while (offset < len) {
-        DWORD written = 0;
-        if (!WriteFile(g_pipe, data + offset, static_cast<DWORD>(len - offset),
-                       &written, NULL) || written == 0) {
-            CloseHandle(g_pipe);
-            g_pipe = INVALID_HANDLE_VALUE;
-            il2cppi_log_write(std::string(data + offset, len - offset));
-            return;
+    for (;;) {
+        if (g_pipe == INVALID_HANDLE_VALUE) {
+            g_pipe = open_pipe();
+            if (g_pipe == INVALID_HANDLE_VALUE) {
+                il2cppi_log_write(std::string(data + offset, len - offset));
+                return;
+            }
         }
-        offset += written;
+
+        DWORD written = 0;
+        if (WriteFile(g_pipe, data + offset, static_cast<DWORD>(len - offset),
+                      &written, NULL) && written > 0) {
+            offset += written;
+            if (offset >= len) {
+                return;
+            }
+            continue;
+        }
+
+        // Reader gone: close and let the next iteration retry the open.
+        CloseHandle(g_pipe);
+        g_pipe = INVALID_HANDLE_VALUE;
     }
 }
 

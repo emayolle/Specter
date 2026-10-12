@@ -500,6 +500,25 @@ void build_ui()
             ImGui::SameLine();
             ImGui::TextDisabled("(une boucle infinie gele le jeu)");
 
+            bool inf = features::lua::infinite_stamina();
+            if (ImGui::Checkbox(
+                    "Stamina de deplacement infinie (sprint/dash/glide/climb)",
+                    &inf)) {
+                if (!features::lua::set_infinite_stamina(inf)) {
+                    g_lua_log += "! bridge not ready - can't toggle stamina\n";
+                }
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(
+                    "Intercepte la fonction de cout d'endurance "
+                    "(changeStamina) du joueur : les depenses de "
+                    "sprint/dash/glide/climb sont bloquees et l'endurance est "
+                    "remise a fond une fois. Se re-applique automatiquement "
+                    "apres un changement de scene / relog (~10 s).");
+            }
+
             ImGui::BeginChild("##lua_out", ImVec2(-1.0f, 200.0f), true);
             ImGui::TextUnformatted(g_lua_log.c_str());
             ImGui::EndChild();

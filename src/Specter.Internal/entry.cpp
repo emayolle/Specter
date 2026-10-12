@@ -26,7 +26,10 @@
 #include "specter.h"
 
 // Log file used by the generated helper `il2cppi_log_write` (see helpers.cpp).
-extern const LPCWSTR LOG_FILE = L"specter-log.txt";
+// Only used when the host pipe is gone (fallback). It must never land in the
+// game directory or the wine prefix: under Wine/Proton the Z: drive maps to
+// the Linux root, so this ends up at /tmp/specter-fallback.log on the host.
+extern const LPCWSTR LOG_FILE = L"Z:\\tmp\\specter-fallback.log";
 
 // Our own image base (the module is manually mapped, so it is not in the Ldr
 // list and cannot be found by GetModuleHandle). Declared per the usual idiom;
