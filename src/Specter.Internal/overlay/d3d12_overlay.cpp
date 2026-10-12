@@ -472,56 +472,64 @@ void build_ui()
     if (ImGui::Begin("Specter")) {
         ImGui::TextUnformatted(g_snapshot);
         ImGui::Separator();
-        ImGui::Checkbox("ImGui demo window", &g_demo);
-        ImGui::SameLine();
-        if (ImGui::Button("Fermer le menu (SUPPR)")) {
-            g_ui_enabled = false;
-        }
-        ImGui::SameLine();
-        ImGui::Text("FPS %.1f (%.2f ms)", io.Framerate,
-                    1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
 
-        ImGui::Separator();
-        if (ImGui::CollapsingHeader("Lua console",
-                                    ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("bridge: %s", features::lua::status());
-            ImGui::InputTextMultiline("##lua_src", g_lua_src,
-                                      sizeof(g_lua_src), ImVec2(-1.0f, 180.0f));
-            if (ImGui::Button("Executer")) {
-                const int n = static_cast<int>(std::strlen(g_lua_src));
-                if (!features::lua::submit(g_lua_src, n)) {
-                    g_lua_log += "! bridge not ready\n";
+        if (ImGui::BeginTabBar("##main_tabs")) {
+            if (ImGui::BeginTabItem("Lua Editor")) {
+                ImGui::Text("bridge: %s", features::lua::status());
+                ImGui::InputTextMultiline("##lua_src", g_lua_src,
+                                          sizeof(g_lua_src),
+                                          ImVec2(-1.0f, 180.0f));
+                if (ImGui::Button("Execute")) {
+                    const int n = static_cast<int>(std::strlen(g_lua_src));
+                    if (!features::lua::submit(g_lua_src, n)) {
+                        g_lua_log += "! bridge not ready\n";
+                    }
                 }
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Effacer la sortie")) {
-                g_lua_log.clear();
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("(une boucle infinie gele le jeu)");
-
-            bool inf = features::lua::infinite_stamina();
-            if (ImGui::Checkbox(
-                    "Stamina de deplacement infinie (sprint/dash/glide/climb)",
-                    &inf)) {
-                if (!features::lua::set_infinite_stamina(inf)) {
-                    g_lua_log += "! bridge not ready - can't toggle stamina\n";
+                ImGui::SameLine();
+                if (ImGui::Button("Clear output")) {
+                    g_lua_log.clear();
                 }
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(
-                    "Intercepte la fonction de cout d'endurance "
-                    "(changeStamina) du joueur : les depenses de "
-                    "sprint/dash/glide/climb sont bloquees et l'endurance est "
-                    "remise a fond une fois. Se re-applique automatiquement "
-                    "apres un changement de scene / relog (~10 s).");
+                ImGui::SameLine();
+                ImGui::TextDisabled("(an infinite loop freezes the game)");
+
+                ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);
+                ImGui::TextUnformatted(g_lua_log.c_str());
+                ImGui::EndChild();
+                ImGui::EndTabItem();
             }
 
-            ImGui::BeginChild("##lua_out", ImVec2(-1.0f, 200.0f), true);
-            ImGui::TextUnformatted(g_lua_log.c_str());
-            ImGui::EndChild();
+            if (ImGui::BeginTabItem("Miscellaneous")) {
+                bool inf = features::lua::infinite_stamina();
+                if (ImGui::Checkbox(
+                        "Infinite movement stamina (sprint/dash/glide/climb)",
+                        &inf)) {
+                    if (!features::lua::set_infinite_stamina(inf)) {
+                        g_lua_log += "! bridge not ready - can't toggle stamina\n";
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(?)");
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "Intercepts the player's stamina cost function "
+                        "(changeStamina): sprint/dash/glide/climb costs are "
+                        "blocked and stamina is refilled to full once at "
+                        "install. Re-applies automatically after a scene "
+                        "change or relog (~10 s).");
+                }
+
+                ImGui::Separator();
+                ImGui::Checkbox("ImGui demo window", &g_demo);
+                ImGui::Separator();
+                ImGui::Text("FPS %.1f (%.2f ms)", io.Framerate,
+                            1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
+                if (ImGui::Button("Close menu (DELETE)", ImVec2(-1.0f, 0.0f))) {
+                    g_ui_enabled = false;
+                }
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
         }
     }
     ImGui::End();
@@ -657,8 +665,8 @@ void on_present(IDXGISwapChain* sc)
     if (del && !prev_del && !want_text) {
         g_ui_enabled = !g_ui_enabled.load(std::memory_order_relaxed);
         log::info("overlay: menu %s (SUPPR)",
-                  g_ui_enabled.load(std::memory_order_relaxed) ? "ouvert"
-                                                               : "ferme");
+                  g_ui_enabled.load(std::memory_order_relaxed) ? "open"
+                                                               : "closed");
     }
     prev_del = del;
 
