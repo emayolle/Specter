@@ -39,6 +39,17 @@ bool submit(const char* code, int len);
 // ran without error. Single consumer (the render thread).
 bool take_result(char* out, int cap, bool* out_ok);
 
+// Dedicated teleport channel: queue `len` bytes of Lua to run on the game's
+// Lua thread with its output captured into a SEPARATE result buffer. The
+// console result (`take_result`), the log-pipe mirror order and the CLI
+// out.txt/seq are all untouched, so background position get/set traffic never
+// disturbs the console or tools/lua.sh.
+bool tp_submit(const char* code, int len);
+
+// Drain the newest teleport-channel result (render thread). Same contract as
+// take_result().
+bool tp_take_result(char* out, int cap, bool* out_ok);
+
 // One-line, human-readable bridge status for the UI.
 const char* status();
 

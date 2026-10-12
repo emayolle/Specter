@@ -32,6 +32,7 @@
 #include "overlay/d3d12_overlay.h"
 #include "overlay/game_input.h"
 #include "features/lua_console.h"
+#include "features/tp.h"
 #include "il2cpp-api.h"
 #include "log.h"
 
@@ -116,6 +117,12 @@ char g_lua_src[16384] =
     "-- below; errors are caught and reported.\n"
     "print('hello from Specter', _VERSION)";
 std::string g_lua_log;
+
+// ---- Teleport tab state (render thread only) -------------------------------
+
+bool g_tp_loaded = false;        // slot file loaded once, lazily
+int g_tp_refresh = 0;            // frame counter: throttle position polling
+char g_tp_name[32] = "spot";
 
 // Keyboard sink: the window subclass forwards swallowed key/char messages here
 // so ImGui's Win32 backend sees them (the console needs text input).
@@ -467,6 +474,19 @@ void build_ui()
         }
     }
 
+    // Drain the dedicated teleport channel and feed parsed position data.
+    if (!g_tp_loaded) {
+        g_tp_loaded = true;
+        features::tp::init();
+    }
+    {
+        char buf[256];
+        bool ok = false;
+        if (features::lua::tp_take_result(buf, sizeof(buf), &ok)) {
+            features::tp::handle_result(buf);
+        }
+    }
+
     ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(780.0f, 600.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Specter")) {
@@ -495,6 +515,73 @@ void build_ui()
                 ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);
                 ImGui::TextUnformatted(g_lua_log.c_str());
                 ImGui::EndChild();
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Teleport")) {
+                // Poll the player's position while the tab is visible (~0.75 s
+                // at 60 fps). The chunks run on the game's Lua thread.
+                if (++g_tp_refresh >= 45) {
+                    g_tp_refresh = 0;
+                    if (features::lua::ready()) {
+                        features::tp::request_position();
+                    }
+                }
+
+                float cx = 0.0f, cy = 0.0f, cz = 0.0f;
+                int csp = 0;
+                if (features::tp::have_position()) {
+                    features::tp::position(&cx, &cy, &cz, &csp);
+                    ImGui::Text("Position: (%.2f, %.2f, %.2f)  space %d", cx, cy,
+                                cz, csp);
+                } else {
+                    ImGui::TextDisabled(
+                        "position unknown - wait until you are in-world");
+                }
+
+                ImGui::SetNextItemWidth(180.0f);
+                ImGui::InputText("Name", g_tp_name, sizeof(g_tp_name));
+                ImGui::SameLine();
+                if (ImGui::Button("Save current position")) {
+                    if (!features::tp::save_current(g_tp_name)) {
+                        g_lua_log +=
+                            "! tp: nothing saved (need a live position or a "
+                            "non-empty name)\n";
+                    }
+                }
+
+                ImGui::Separator();
+                ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
+                if (features::tp::count() == 0) {
+                    ImGui::TextDisabled("no saved positions yet");
+                }
+                for (int i = 0; i < features::tp::count(); ++i) {
+                    char nm[36] = {};
+                    float sx = 0.0f, sy = 0.0f, sz = 0.0f;
+                    features::tp::get_slot(i, nm, sizeof(nm), &sx, &sy, &sz);
+                    ImGui::PushID(i);
+                    ImGui::TextUnformatted(nm);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(%.2f, %.2f, %.2f)", sx, sy, sz);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Teleport")) {
+                        if (!features::tp::teleport_to(i)) {
+                            g_lua_log += "! tp: bridge not ready\n";
+                        }
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Delete")) {
+                        features::tp::remove_at(i);
+                        --i;  // slots shifted left; re-check this index
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndChild();
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "Teleports use the player entity's own setPosition(); "
+                        "slots persist in /tmp/specter-tp.json.");
+                }
                 ImGui::EndTabItem();
             }
 

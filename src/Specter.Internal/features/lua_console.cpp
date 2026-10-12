@@ -87,6 +87,22 @@ int g_out_len = 0;
 bool g_out_okv = false;
 std::atomic<bool> g_out_new{false};
 
+// Dedicated teleport channel: pending chunks + their own captured result. Kept
+// apart from the console slot above so UI position polling never shows up in
+// the console log or the CLI channel. A small FIFO (rather than a single slot)
+// so a position probe can't clobber a just-clicked teleport before the pump
+// drains it.
+constexpr int kTpQueue = 8;
+char g_tp_code[kTpQueue][kMaxCode];
+int g_tp_code_len[kTpQueue] = {};
+int g_tp_head = 0;  // next read
+int g_tp_tail = 0;  // next write
+
+char g_tp_out[kMaxOut];
+int g_tp_out_len = 0;
+bool g_tp_out_okv = false;
+std::atomic<bool> g_tp_new{false};
+
 void ensure_lock()
 {
     if (!g_lock_ready) {
@@ -232,6 +248,29 @@ void store_result(bool ok, const char* s, int n)
     publish_out(ok, s, n);
 }
 
+// Teleport-channel sibling of store_result(): captures into the dedicated
+// buffer and mirrors to the log pipe only (no out.txt / seq bump).
+void store_tp_result(bool ok, const char* s, int n)
+{
+    if (n < 0) {
+        n = s ? static_cast<int>(std::strlen(s)) : 0;
+    }
+    if (n > kMaxOut - 1) {
+        n = kMaxOut - 1;
+    }
+    ensure_lock();
+    ::EnterCriticalSection(&g_lock);
+    if (n > 0 && s) {
+        std::memcpy(g_tp_out, s, static_cast<std::size_t>(n));
+    }
+    g_tp_out[n] = '\0';
+    g_tp_out_len = n;
+    g_tp_out_okv = ok;
+    ::LeaveCriticalSection(&g_lock);
+    g_tp_new.store(true, std::memory_order_release);
+    log_result(ok, s, n);
+}
+
 // ---- xlua resolution -------------------------------------------------------
 
 template <typename T>
@@ -288,7 +327,9 @@ constexpr char kSuffix[] =
     "then local t={}for i=1,#__r do t[i]=tostring(__r[i])end __o[#__o+1]="
     "table.concat(t,'\\t')end end;return table.concat(__o,'\\n'),__ok";
 
-void run_chunk(lua_State* L, const char* code, int len)
+using result_sink = void (*)(bool ok, const char* s, int n);
+
+void run_chunk_to(lua_State* L, const char* code, int len, result_sink sink)
 {
     static char src[kMaxCode + sizeof(kPrefix) + sizeof(kSuffix)];
     const int plen = static_cast<int>(sizeof(kPrefix) - 1);
@@ -302,14 +343,14 @@ void run_chunk(lua_State* L, const char* code, int len)
                      "@specter") != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
-        store_result(false, e ? e : "(lua load error)", static_cast<int>(n));
+        sink(false, e ? e : "(lua load error)", static_cast<int>(n));
         p_settop(L, top);
         return;
     }
     if (p_pcall(L, 0, 2, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
-        store_result(false, e ? e : "(lua runtime error)", static_cast<int>(n));
+        sink(false, e ? e : "(lua runtime error)", static_cast<int>(n));
         p_settop(L, top);
         return;
     }
@@ -317,8 +358,13 @@ void run_chunk(lua_State* L, const char* code, int len)
     std::size_t n = 0;
     const char* text = p_tolstring(L, -2, &n);
     const bool ok = p_toboolean(L, -1) != 0;
-    store_result(ok, text ? text : "", static_cast<int>(n));
+    sink(ok, text ? text : "", static_cast<int>(n));
     p_settop(L, top);
+}
+
+void run_chunk(lua_State* L, const char* code, int len)
+{
+    run_chunk_to(L, code, len, store_result);
 }
 
 // Execute a chunk without relaying any result (used by the stamina toggle and
@@ -491,6 +537,32 @@ void pump(void* self)
         }
     }
 
+    // Then the dedicated teleport channel (position get/set from the UI tab).
+    // Same-thread, result captured into its own buffer (no console/out.txt).
+    // Drain the whole FIFO so a probe and a teleport queued together both run.
+    static char tp_local[kMaxCode];
+    for (;;) {
+        int tp_len = 0;
+        bool tp_has = false;
+        ensure_lock();
+        ::EnterCriticalSection(&g_lock);
+        if (g_tp_head != g_tp_tail) {
+            tp_len = g_tp_code_len[g_tp_head];
+            if (tp_len > kMaxCode) {
+                tp_len = kMaxCode;
+            }
+            std::memcpy(tp_local, g_tp_code[g_tp_head],
+                        static_cast<std::size_t>(tp_len));
+            g_tp_head = (g_tp_head + 1) % kTpQueue;
+            tp_has = true;
+        }
+        ::LeaveCriticalSection(&g_lock);
+        if (!tp_has) {
+            break;
+        }
+        run_chunk_to(L, tp_local, tp_len, store_tp_result);
+    }
+
     // Then the CLI channel (tools/lua.sh), if a chunk is pending.
     poll_cli(L);
 
@@ -647,6 +719,57 @@ bool take_result(char* out, int cap, bool* out_ok)
     }
     ::LeaveCriticalSection(&g_lock);
     g_out_new.store(false, std::memory_order_release);
+    return true;
+}
+
+bool tp_submit(const char* code, int len)
+{
+    if (!g_hook_installed.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    if (!code || len <= 0) {
+        return false;
+    }
+    if (len > kMaxCode) {
+        len = kMaxCode;
+    }
+    ensure_lock();
+    ::EnterCriticalSection(&g_lock);
+    const int next = (g_tp_tail + 1) % kTpQueue;
+    if (next == g_tp_head) {
+        // Queue full (should not happen: probes are ~0.75 s apart). Dropping
+        // the oldest would lose a teleport, so drop this one instead.
+        ::LeaveCriticalSection(&g_lock);
+        return false;
+    }
+    std::memcpy(g_tp_code[g_tp_tail], code, static_cast<std::size_t>(len));
+    g_tp_code_len[g_tp_tail] = len;
+    g_tp_tail = next;
+    ::LeaveCriticalSection(&g_lock);
+    return true;
+}
+
+bool tp_take_result(char* out, int cap, bool* out_ok)
+{
+    if (!out || cap <= 0) {
+        return false;
+    }
+    if (!g_tp_new.load(std::memory_order_acquire)) {
+        return false;
+    }
+    ensure_lock();
+    ::EnterCriticalSection(&g_lock);
+    int n = g_tp_out_len;
+    if (n > cap - 1) {
+        n = cap - 1;
+    }
+    std::memcpy(out, g_tp_out, static_cast<std::size_t>(n));
+    out[n] = '\0';
+    if (out_ok) {
+        *out_ok = g_tp_out_okv;
+    }
+    ::LeaveCriticalSection(&g_lock);
+    g_tp_new.store(false, std::memory_order_release);
     return true;
 }
 

@@ -180,7 +180,8 @@ for spec in \
   "$SRC/overlay/d3dcompiler_shim.cpp:overlay-d3dcompiler_shim" \
   "$SRC/overlay/detour.cpp:overlay-detour" \
   "$SRC/overlay/game_input.cpp:overlay-game_input" \
-  "$SRC/features/lua_console.cpp:features-lua_console"; do
+  "$SRC/features/lua_console.cpp:features-lua_console" \
+  "$SRC/features/tp.cpp:features-tp"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
   build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
   OUR_OBJS+=("$obj")
