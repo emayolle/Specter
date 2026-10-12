@@ -164,13 +164,25 @@ void leave_menu()
     } else {
         real_clip_cursor(nullptr);
     }
-    // The game keeps its hardware cursor hidden by setting it to NULL; we must
-    // hand that state back exactly (a stray IDC_ARROW here would stay visible —
-    // the game never re-hides it because the gate swallowed its SetCursor calls
-    // while the menu was open).
+
+    // The game keeps its hardware cursor hidden by setting it to NULL; hand
+    // the OS back exactly that state. The gate swallowed the game's
+    // ShowCursor(FALSE) calls while the menu was open (each returned 1 without
+    // touching the real display counter), so that counter is too positive for
+    // the game's own show/hide pairs: on its native "show cursor" shortcut
+    // (ALT) it does ShowCursor(TRUE) then ShowCursor(FALSE) on release, and
+    // the FALSE lands on 0 = *shown* instead of negative = hidden — a cursor
+    // stuck on screen even though the camera works. Force the counter into its
+    // canonical hidden range (negative) so future TRUE/FALSE pairs balance out
+    // from a known base.
     real_set_cursor(nullptr);
+    int c = real_show_cursor(0);  // read, no change
+    for (int i = 0; i < 64 && c >= 0; ++i) {
+        real_show_cursor(FALSE);
+        c = real_show_cursor(0);
+    }
     g_cursor_saved = false;
-    log::info("input: menu closed - cursor state restored");
+    log::info("input: menu closed - cursor state restored (show_count=%d)", c);
 }
 
 // ---- window subclass -----------------------------------------------------
