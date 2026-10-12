@@ -24,11 +24,11 @@ bool start()
     //   - hooks use the offsets in generated/sdk/appdata/il2cpp-functions.h
     //
     // STEALTH (see docs/ARCHITECTURE.md, "Injection, threads et discrétion"):
-    //   start() runs on the injector's hidden thread. Any *persistent worker*
-    //   (loop, hook dispatcher) must NOT be spawned with CreateThread here --
-    //   that yields a guest-visible thread whose start address lands in
-    //   manually-mapped memory. Workers are created hidden from the host side
-    //   (hostch), not from inside the DLL.
+    //   start() runs on the hidden (is_system) worker thread that DllMain
+    //   created with nt::spawn_hidden. Starting *further* persistent workers
+    //   (loops, hook dispatchers) must also go through nt::spawn_hidden --
+    //   never CreateThread, which yields a guest-visible thread whose start
+    //   address lands in manually-mapped memory.
 
     return true;
 }

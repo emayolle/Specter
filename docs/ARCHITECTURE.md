@@ -60,7 +60,7 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 
 | Fichier | Rôle | Nature |
 |---|---|---|
-| `entry.cpp` | possède `DllMain` + `LOG_FILE`, appelle `specter::start()` inline | adaptateur (point d'entrée, sans logique) |
+| `entry.cpp` | possède `DllMain` + `LOG_FILE`, lance le worker caché via `nt::spawn_hidden()` | adaptateur (point d'entrée, sans logique) |
 | `specter.{h,cpp}` | l'interface du produit | module profond |
 | `runtime.{h,cpp}` | localise `GameAssembly.dll`, résout l'API IL2CPP | seam interne |
 | `nt.{h,cpp}` | pont NT/hostch : `spawn_hidden()` → `HostchSpawnThread` | adaptateur (fork) |
@@ -151,15 +151,18 @@ pointe dans la mémoire manual-mappée — le signal d'anti-cheat typique « *th
 dont l'adresse de départ n'appartient à aucun module connu* ». Il annulerait la
 discrétion que l'injecteur procure.
 
-Conséquence concrète : notre `DllMain` (`entry.cpp`) exécute `specter::start()`
-**inline**, sur le thread caché de l'injecteur, et **ne crée aucun thread** —
-c'est pourquoi le `framework/dllmain.cpp` généré (qui fait un `CreateThread`)
-n'est pas compilé. C'est suffisant pour le périmètre actuel (logs courts,
-compatibles avec le loader lock).
+Conséquence concrète : notre `DllMain` (`entry.cpp`) ne fait qu'**une chose** —
+lancer la mise en route sur un thread caché via `nt::spawn_hidden()`, puis rendre
+la main. Le bring-up (`init_il2cpp()` + `specter::start()`, donc le **log
+d'init**) s'exécute sur ce worker `is_system`, pas sur le thread de l'injecteur.
+C'est pourquoi le `framework/dllmain.cpp` généré (qui fait un `CreateThread`)
+n'est pas compilé.
 
-### Workers persistants : `nt::spawn_hidden()`
+### `nt::spawn_hidden()` — le seul moyen de créer un thread
 
-Plutôt que de solliciter l'hôte à chaque worker, on a **étendu notre fork**.
+`DllMain` s'en sert déjà pour le worker d'init, et tout worker persistant futur
+(boucle, dispatcher de hooks) doit passer par là. Plutôt que de solliciter
+l'hôte à chaque thread, on a **étendu notre fork**.
 `wine-hostch/patches/hostch-spawnthread.patch` ajoute une entrée **dédiée et non
 exportée** `HostchSpawnThread` dans `ntdll.dll` : elle crée un thread `is_system`.
 Notre DLL la résout par **RVA** — bakée par le build dans `hostch-rva.h` via

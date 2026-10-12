@@ -1,21 +1,18 @@
 // Specter.Internal — injected DLL entry point.
 //
-// We own DllMain instead of consuming the generated framework/dllmain.cpp, so
-// the injection entry does exactly one thing and, crucially, does NOT spawn a
-// thread:
+// We own DllMain instead of consuming the generated framework/dllmain.cpp.
 //
 //   - wine-hostch starts a *hidden* canonical Wine thread (server-side
-//     is_system) and invokes our DllMain on it;
+//     is_system) and calls our PE entry (DllMainCRTStartup) on it with
+//     (hinstDLL = base, DLL_PROCESS_ATTACH, NULL);
 //   - a plain CreateThread here would create a *guest-visible* thread whose
 //     start address lands in manually-mapped (zero-Ldr) memory -> a classic
 //     anti-cheat signal, undoing the injector's stealth.
 //
-// Current scope is logging only, which is short and loader-lock-safe, so it
-// runs inline on that hidden thread. No logic lives here on purpose.
-//
-// FUTURE WORKERS (loops, hooks): do NOT start them with CreateThread here.
-// A persistent worker must be created hidden (server-side is_system) from the
-// host side via the hostch channel. See docs/ARCHITECTURE.md,
+// So DllMain does the minimum: it hands the bring-up to a *hidden* worker
+// thread created through our own fork entry (nt::spawn_hidden ->
+// HostchSpawnThread, is_system server-side). That is the sanctioned way to
+// create a thread from the DLL. See docs/ARCHITECTURE.md,
 // "Injection, threads et discrétion".
 
 #include "pch-il2cpp.h"
@@ -24,10 +21,40 @@
 #include <Windows.h>
 
 #include "il2cpp-init.h"  // init_il2cpp() — generated scaffold bindings
+#include "nt.h"           // specter::nt::spawn_hidden
 #include "specter.h"
 
 // Log file used by the generated helper `il2cppi_log_write` (see helpers.cpp).
 extern const LPCWSTR LOG_FILE = L"specter-log.txt";
+
+// Our own image base (the module is manually mapped, so it is not in the Ldr
+// list and cannot be found by GetModuleHandle). Declared per the usual idiom;
+// winnt.h may already declare it, in which case this is an identical redecl.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
+// CRT per-thread initialiser. Not declared in the public CRT headers (it is
+// guarded by _CRTBLD there), so the manual-map idiom is to declare it. The
+// symbol lives in the CRT startup object that is statically linked into every
+// module (vcruntime.lib under /MD, libcmt under /MT).
+extern "C" int __cdecl _CRT_INIT(void* hDllHandle, unsigned long dwReason, void* lpreserved);
+
+namespace {
+
+// Bring the runtime up on our hidden worker thread.
+//
+// The thread is created with NtCreateThreadEx (not _beginthreadex), so it is
+// entered outside the loader and receives no CRT thread-attach: set the
+// per-thread CRT state up first (see nt.h).
+DWORD WINAPI worker_main(LPVOID)
+{
+    _CRT_INIT(reinterpret_cast<HMODULE>(&__ImageBase), DLL_THREAD_ATTACH, nullptr);
+
+    init_il2cpp();
+    specter::start();
+    return 0;
+}
+
+}  // namespace
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 {
@@ -36,9 +63,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
     switch (reason) {
     case DLL_PROCESS_ATTACH:
-        // Runs on the injector's hidden thread: keep it inline, spawn nothing.
-        init_il2cpp();
-        specter::start();
+        // Start the work on a hidden (is_system) worker thread. If the fork
+        // entry is unavailable (unpatched ntdll / RVA not baked), fall back to
+        // running inline on the injector's hidden thread.
+        if (!specter::nt::spawn_hidden(worker_main, nullptr)) {
+            worker_main(nullptr);
+        }
         break;
     case DLL_PROCESS_DETACH:
         specter::stop();

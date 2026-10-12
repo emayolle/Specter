@@ -8,8 +8,9 @@
 
 namespace specter {
 
-// Bring Specter up. Called once from DllMain, on the injector's hidden thread
-// (see entry.cpp). Returns true if the runtime is ready. Idempotent.
+// Bring Specter up. Called once by the hidden worker thread that DllMain
+// starts through nt::spawn_hidden (see entry.cpp). Returns true if the runtime
+// is ready. Idempotent.
 bool start();
 
 // Tear down and detach (best effort). Called on process detach.

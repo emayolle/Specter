@@ -95,7 +95,8 @@ hostch.py map --pe generated/bin/Release/Specter.Internal.dll --dllmain --hide-s
 **visible** et son adresse de départ tomberait dans la mémoire manual-mappée —
 signal d'anti-cheat classique. Le `framework/dllmain.cpp` généré (qui fait un
 `CreateThread`) n'est donc **pas compilé** : on fournit notre propre `DllMain`
-dans `entry.cpp`, qui s'exécute inline.
+dans `entry.cpp`, qui ne fait que lancer la mise en route sur un thread caché
+(`nt::spawn_hidden()`) et rendre la main.
 
 Pour un worker persistant (boucle, hooks), on utilise `nt::spawn_hidden()`
 (`src/Specter.Internal/nt.cpp`) : il appelle l'entrée dédiée non exportée
