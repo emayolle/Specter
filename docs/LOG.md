@@ -50,6 +50,27 @@ le tap doit montrer, apres `runtime: GameAssembly.dll mapped` :
 En cas d'echec : verifier la resolution (`ready()`), ne **pas** lire les champs
 d'`Il2CppClass` en dur, et suivre la procedure d'ajout de `il2cpp-api.h`.
 
+Valide en jeu (meme jour, tap `tools/specter-up.sh`) :
+
+    [specter] api: resolved 20 VM functions from GameAssembly.dll exports
+    [specter] runtime: GameAssembly.dll mapped
+    [specter] self_check: root domain 0000000066A33FC0
+    [specter] self_check: string_new -> len=18 first=U+0073
+    [specter] self_check: 65 assemblies (first: FunPlus.WorldX.Scripts.dll, FunPlus.WorldX.XRender.Runtime.dll, XGUI.Runtime.dll)
+    [specter] self_check: class=FunPlus.WorldX.AppFacade methods=151 fields=89 image=FunPlus.WorldX.Scripts.dll
+    [specter] self_check:   method[0]=get_luaManager
+    [specter] self_check:   method[1]=set_luaManager
+    [specter] self_check:   method[2]=get_socketManager
+    [specter] attached
+
+La chaine complete est prouvee : resolution 20/20 par exports, allocation de
+string managée depuis le worker cache (heap GC, sans crash ni reaction NEP),
+enumeration des 65 assemblies du root domain, et introspection d'une vraie
+classe du jeu (AppFacade, 151 methodes / 89 champs) via la TypeInfo statique —
+donc `init_il2cpp()` + tables `base+rva` du dump sont operantes : les ~196k
+method pointers d'`il2cpp-functions.h` sont appelables. Cap d'enumeration des
+assemblies releve a 256 (l'iterateur se termine de lui-meme).
+
 ---
 
 ## 2026-10-12 — Premiere injection reelle en jeu (Aniimo, appid 4126040)

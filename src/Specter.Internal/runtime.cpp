@@ -89,8 +89,8 @@ void self_check()
             first_names[count] = image_name_of(image);
         }
         ++count;
-        if (count > 64) {  // stay defensive
-            log::info("self_check: assembly enumeration capped at 64");
+        if (count > 256) {  // stay defensive (the iterator self-terminates)
+            log::info("self_check: assembly enumeration capped at 256");
             break;
         }
     }
