@@ -62,7 +62,7 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 | `entry.cpp` | définit `Run()` + `LOG_FILE`, délègue à `specter::start()` | adaptateur (fin, sans logique) |
 | `specter.{h,cpp}` | l'interface du produit | module profond |
 | `runtime.{h,cpp}` | localise `GameAssembly.dll`, résout l'API IL2CPP | seam interne |
-| `log.{h,cpp}` | journalisation | adaptateur sur le helper du SDK |
+| `log.{h,cpp}` | journalisation : pipe hôte, repli fichier | seam interne (2 adaptateurs) |
 
 ### Pourquoi `runtime` est un vrai seam (et pas de l'indirection)
 
@@ -79,6 +79,49 @@ savoir laquelle est active. Les offsets **par méthode** de
 `generated/sdk/appdata/il2cpp-functions.h` sont, eux, relatifs à
 `module_base()` et ne nécessitent aucune résolution : ils sont donc utilisés
 directement, sans passer par un seam inutile.
+
+---
+
+## Logs : deux adaptateurs derrière un même seam
+
+Le module `log` expose toujours la même interface minuscule (`info` / `error`)
+mais choisit son **adaptateur** au démarrage (`log::init()`) :
+
+| Adaptateur | Où vont les octets | Trace côté Windows |
+|---|---|---|
+| **pipe hôte** | FIFO créée côté Linux, atteinte via le disque `Z:` de Wine | aucun fichier dans le préfixe — juste un *handle* |
+| **fichier** | `il2cppi_log_write` du scaffold (repli) | un fichier `specter-log.txt` |
+
+Deux adaptateurs réels justifient donc le seam (et non de l'indirection) : on
+peut basculer pipe/fichier sans toucher aux appelants.
+
+### Pourquoi un pipe via `Z:`
+
+Sous Wine/Proton, le disque `Z:` pointe vers la racine Linux. La DLL ouvre donc
+une simple FIFO — côté Windows `Z:\tmp\specter.pipe`, côté hôte
+`/tmp/specter.pipe` — et y écrit son flux. C'est **vérifié empiriquement** sur
+cette machine (Wine + binaire MinGW) :
+
+- l'ouverture en `GENERIC_READ | GENERIC_WRITE` **ne bloque pas** l'attente d'un
+  lecteur (contrairement à un `open(O_WRONLY)` Unix) ;
+- un **handle persistant** ouvert une fois au démarrage livre toutes les lignes
+  dans l'ordre ;
+- aucune écriture disque n'est faite dans le préfixe du jeu.
+
+Détails d'implémentation importants :
+
+- le pipe est résolu par `SPECTER_PIPE` (variable d'environnement Windows),
+  sinon `Z:\tmp\specter.pipe` ;
+- si la FIFO n'existe pas / n'est pas ouvrable, on **retombe** sur le fichier ;
+- l'écriture est sérialisée par une section critique (logs multi-thread) ;
+- `init()` est appelé en tête de `specter::start()` — donc avant tout log.
+
+Côté hôte, `tools/specter-tap.sh` crée la FIFO et affiche le flux
+(`cat`, ou `tee` vers un fichier). Il doit tourner **avant** le chargement de la
+DLL (sinon la FIFO n'existe pas et la DLL reste sur le repli fichier).
+
+> Alternative non retenue : socket TCP loopback — plus visible côté réseau, et
+> ce n'est pas un « pipe ».
 
 ---
 
@@ -117,6 +160,7 @@ l'indirection). Le dossier apparaît avec la première fonctionnalité.
 tools/                     pipeline RE (langage hôte : Python + bash)  ── module
   metadata_decrypt.py        déchiffre la metadata NEProtect2
   dump.sh                    interface : « régénère generated/ »
+  specter-tap.sh             interface : « affiche les logs de la DLL »
 
 generated/                 entrée — produite par dump.sh, jamais éditée
   sdk/appdata/               SDK C++ (types + offsets de méthodes)

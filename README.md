@@ -37,13 +37,14 @@ Specter/
 ├── tools/                       # pipeline RE (Python + bash) — versionné
 │   ├── metadata_decrypt.py        déchiffreur NEProtect2
 │   ├── dump.sh                    pipeline complet (déchiffre + dump)
+│   ├── specter-tap.sh             affiche les logs de la DLL (pipe vers Linux)
 │   └── Il2CppInspector            binaire linux-x64 (non versionné, ~80 Mo)
 ├── src/                         # LE PRODUIT — versionné
 │   └── Specter.Internal/          la DLL interne (module profond)
 │       ├── entry.cpp              Run() + LOG_FILE (adaptateur vers le scaffold)
 │       ├── specter.{h,cpp}        interface : start() / stop()
 │       ├── runtime.{h,cpp}        seam IL2CPP (localise + résout l'API)
-│       ├── log.{h,cpp}            journalisation
+│       ├── log.{h,cpp}            journalisation (pipe hôte / fichier)
 │       └── Specter.sln / .vcxproj projet Visual Studio (x64)
 ├── generated/                   # reproduit par tools/dump.sh — NON versionné
 │   ├── sdk/appdata/               SDK C++ (types, offsets de méthodes, TypeInfo)
@@ -80,6 +81,29 @@ Produit `generated/sdk/appdata/` (`il2cpp-types.h` 114 Mo,
 Écris ton code dans `src/Specter.Internal/` : le point d'entrée est
 `specter::start()` (`specter.cpp`). Toutes les méthodes du jeu sont accessibles
 par offset image via `generated/sdk/appdata/il2cpp-functions.h`.
+
+## Logs (pipe vers Linux)
+
+Les logs de la DLL sortent par un **pipe** vers l'hôte Linux, sans écrire de
+fichier dans le préfixe du jeu. Sous Wine/Proton le disque `Z:` pointe vers la
+racine Linux, donc la DLL écrit dans une FIFO :
+
+| | |
+|---|---|
+| Côté Windows (DLL) | `Z:\tmp\specter.pipe` |
+| Côté Linux (hôte) | `/tmp/specter.pipe` |
+
+Lance l'écouteur **avant** de charger la DLL :
+
+```bash
+tools/specter-tap.sh                 # affiche les logs sur stdout
+tools/specter-tap.sh specter.log     # affiche ET enregistre
+```
+
+Si la FIFO est absente, `log::init()` retombe automatiquement sur un fichier
+(`il2cppi_log_write`). Sur le chemin `pipe` aucune trace disque n'est laissée
+dans le préfixe — seulement un handle. Chemin du pipe surchargeable via la
+variable Windows `SPECTER_PIPE`.
 
 ## Explorer
 

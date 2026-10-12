@@ -10,6 +10,8 @@ namespace specter {
 
 bool start()
 {
+    log::init();
+
     if (!runtime::initialize()) {
         log::error("start failed: GameAssembly.dll is not mapped");
         return false;
