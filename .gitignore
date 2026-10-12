@@ -8,3 +8,4 @@
 # Divers
 *.raw
 /specter.log
+/tools/*.token

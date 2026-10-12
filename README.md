@@ -114,6 +114,23 @@ thread **caché** (`is_system`), via [`wine-hostch`](../wine-hostch) :
 hostch.py map --pe generated/bin/Release/Specter.Internal.dll --dllmain --hide-system
 ```
 
+### Scripts prêts à l'emploi
+
+| Script | Rôle |
+|---|---|
+| `tools/specter-up.sh` | **Séquence complète en une commande** : démarre le tap, attend `Aniimo.exe`, injecte, puis suit les logs jusqu'à Ctrl-C. C'est le script quotidien. |
+| `tools/specter-inject.sh` | Injecte seulement (le jeu tourne déjà + le tap écoute). |
+| `tools/specter-tap.sh` | Écouteur seul (FIFO `/tmp/specter.pipe`). |
+
+```bash
+tools/specter-up.sh        # ouvre ensuite le jeu via Steam
+```
+
+Le token hostch est lu dans l'ordre : `$SPECTER_TOKEN`, `$WINE_HOSTCH_TOKEN`,
+puis `~/.config/specter/hostch.token` (1re ligne, `chmod 600`, hors repo).
+Des variables permettent d'ajuster : `SPECTER_LOG`, `SPECTER_WAIT` (s),
+`SPECTER_TOKEN_FILE`, `WINE_HOSTCH_REPO`.
+
 **Règle : ne jamais appeler `CreateThread` depuis la DLL.** Un tel thread serait
 **visible** et son adresse de départ tomberait dans la mémoire manual-mappée —
 signal d'anti-cheat classique. Le `framework/dllmain.cpp` généré (qui fait un
@@ -146,6 +163,8 @@ Lance l'écouteur **avant** de charger la DLL :
 tools/specter-tap.sh                 # affiche les logs sur stdout
 tools/specter-tap.sh specter.log     # affiche ET enregistre
 ```
+
+(ou `tools/specter-up.sh`, qui l'enchaîne avec l'injection automatiquement.)
 
 Si la FIFO est absente, `log::init()` retombe automatiquement sur un fichier
 (`il2cppi_log_write`). Sur le chemin `pipe` aucune trace disque n'est laissée
