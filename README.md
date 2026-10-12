@@ -73,10 +73,33 @@ Produit `generated/sdk/appdata/` (`il2cpp-types.h` 114 Mo,
 
 ## Compiler la DLL interne
 
+Deux chemins, **même sortie** : `generated/bin/Release/Specter.Internal.dll`
+(Release | x64, CRT **statique** `/MT`).
+
+### A. Windows / Visual Studio (MSVC)
+
 1. `tools/dump.sh` (crée `generated/`, indispensable avant de compiler) ;
 2. ouvrir `src/Specter.Internal/Specter.sln` dans **Visual Studio**, viser
    **Release | x64**, compiler ;
 3. sortie : `generated/bin/Release/Specter.Internal.dll`.
+
+### B. Linux, sans Windows (clang-cl + xwin)
+
+Cross-compile avec l'**ABI MSVC** : `clang-cl` + les en-têtes/bibliothèques du
+CRT MSVC et du SDK Windows récupérés une fois par
+[`xwin`](https://github.com/Jake-Shadle/xwin).
+
+```bash
+# une seule fois : CRT + SDK Windows (~640 Mo) dans ~/.xwin
+xwin --accept-license --arch x86_64 splat --output ~/.xwin
+
+# à chaque build
+tools/dump.sh          # si generated/ est absent
+tools/build-dll.sh     # -> generated/bin/Release/Specter.Internal.dll
+```
+
+Le script reproduit le projet MSVC (mêmes defines, PCH `pch-il2cpp.h`) et lie en
+`/MT`. Imports attendus du binaire : `KERNEL32.dll`, `USER32.dll` uniquement.
 
 Écris ton code dans `src/Specter.Internal/` : le point d'entrée est
 `specter::start()` (`specter.cpp`). Toutes les méthodes du jeu sont accessibles

@@ -17,8 +17,9 @@ namespace log {
 // Select the sink. Call once, before the first info()/error().
 void init();
 
-void info(const char* message);
-void error(const char* message);
+// printf-style. A newline is appended by the sink itself.
+void info(const char* fmt, ...);
+void error(const char* fmt, ...);
 
 }  // namespace log
 }  // namespace specter

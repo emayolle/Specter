@@ -9,6 +9,9 @@
 #include "log.h"
 
 #include <string>
+#include <cstdarg>
+#include <cstdio>
+#include <cstddef>
 
 namespace specter {
 namespace log {
@@ -70,6 +73,15 @@ void emit(const char* level, const char* message)
     if (g_lock_ready) LeaveCriticalSection(&g_lock);
 }
 
+// Format a printf-style message into a fixed buffer (truncating if needed).
+void format_into(char* out, std::size_t cap, const char* fmt, va_list ap)
+{
+    out[0] = '\0';
+    if (cap < 2) return;
+    int n = vsnprintf(out, cap, fmt, ap);
+    if (n < 0) out[0] = '\0';
+}
+
 }  // namespace
 
 void init()
@@ -95,8 +107,25 @@ void init()
     }
 }
 
-void info(const char* message) { emit("", message); }
-void error(const char* message) { emit("[error]", message); }
+void info(const char* fmt, ...)
+{
+    char buf[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    format_into(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    emit("", buf);
+}
+
+void error(const char* fmt, ...)
+{
+    char buf[2048];
+    va_list ap;
+    va_start(ap, fmt);
+    format_into(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    emit("[error]", buf);
+}
 
 }  // namespace log
 }  // namespace specter
