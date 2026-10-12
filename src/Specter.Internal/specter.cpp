@@ -5,6 +5,8 @@
 #include "specter.h"
 #include "log.h"
 #include "runtime.h"
+#include "nt.h"
+#include "overlay/dxgi_hook.h"
 
 namespace specter {
 
@@ -19,6 +21,13 @@ bool start()
 
     // First feature: prove the resolved VM API from inside the process.
     runtime::self_check();
+
+    // D3D12 overlay: hook IDXGISwapChain::Present and render ImGui. Runs on
+    // its own hidden thread so it never depends on the loader thread and never
+    // uses CreateThread.
+    if (!nt::spawn_hidden(overlay::overlay_worker, nullptr)) {
+        log::error("start: overlay worker not spawned - no overlay");
+    }
 
     log::info("attached");
 

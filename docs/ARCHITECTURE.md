@@ -67,6 +67,9 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 | `nt.{h,cpp}` | pont NT/hostch : `spawn_hidden()` → `HostchSpawnThread` | adaptateur (fork) |
 | `hostch-rva.h` | RVA bakée du point d'entrée `HostchSpawnThread` | généré par le build |
 | `log.{h,cpp}` | journalisation : pipe hôte, repli fichier | seam interne (2 adaptateurs) |
+| `overlay/detour.{h,cpp}` | détour inline x64 (relais `mov rax,imm64; jmp rax` + trampoline) | seam interne |
+| `overlay/dxgi_hook.{h,cpp}` | swapchain sonde → hooks `Present`/`Present1`/`ResizeBuffers` | seam interne |
+| `overlay/d3d12_overlay.{h,cpp}` | pont ImGui ↔ D3D12 : rendu de l'UI dans le `Present` du jeu | seam interne |
 
 ### Pourquoi `runtime` est un vrai seam (et pas de l'indirection)
 
@@ -247,6 +250,34 @@ trip de string managée, énumération des assemblies, introspection de classe.
 
 ---
 
+## Overlay D3D12 (ImGui)
+
+Le jeu rend en **D3D12** (vkd3d-proton) à travers `dxgi.dll`. Le sous-système
+`overlay/` pose un overlay ImGui sans toucher au renderer du jeu :
+
+1. `detour` installe un relais de 12 octets (`mov rax,imm64; jmp rax`) et refuse
+   tout prologue qu'il ne sait pas déplacer (saut relatif, opérande RIP-relatif) —
+   en cas de refus **rien n'est patché**.
+2. `dxgi_hook` crée une **swapchain sonde** (device + queue + fenêtre cachée à
+   nous), lit l'adresse de code de `Present` (vt[8]), `Present1` (vt[22]) et
+   `ResizeBuffers` (vt[13]) — toutes les swapchains d'un module partagent le même
+   code — puis détoure ces adresses. Une garde de ré-entrance garantit **un seul**
+   rendu par frame (DXVK peut router `Present1` vers `Present`).
+3. `d3d12_overlay` s'initialise paresseusement, au premier `Present`, sur le
+   **device du jeu** mais avec **notre** queue et nos heaps de descripteurs : il
+   bascule le backbuffer `PRESENT → RENDER_TARGET`, dessine, rebascule, exécute,
+   puis laisse le `Present` original présenter la frame.
+
+Discrétion : hooks en mémoire dans `dxgi.dll` (jamais de fichier écrit — voir
+`io.IniFilename = nullptr`), fenêtre sonde cachée, aucun `CreateThread` (le
+worker vient de `nt::spawn_hidden`). La touche **SUPPR** ouvre/ferme le menu.
+
+Le seul contrat partagé est `overlay/d3d12_overlay.h` (3 fonctions) ;
+`detour` et `dxgi_hook` sont des détails d'implémentation cachés derrière
+`dxgi_install()`.
+
+---
+
 ## Où vont les fonctionnalités
 
 Une **fonctionnalité** = un module sous
@@ -284,9 +315,25 @@ docs/                      ce document + notes
 ## Compiler
 
 1. `tools/dump.sh` (crée `generated/` — nécessaire avant toute compilation) ;
-2. ouvrir `src/Specter.Internal/Specter.sln` (Visual Studio, **x64**),
-   configurer `Release|x64`, compiler ;
+2. soit ouvrir `src/Specter.Internal/Specter.sln` (Visual Studio, **x64**),
+   configurer `Release|x64`, compiler ; soit, sur Linux, `tools/build-dll.sh` ;
 3. sortie : `generated/bin/Release/Specter.Internal.dll`.
+
+### `tools/build-dll.sh` (cross-build Linux)
+
+Compile avec `clang-cl` + le CRT/MSVC et le SDK Windows récupérés par `xwin`,
+sans Visual Studio. Le build est **incrémental** et éclate le code stable en
+bibliothèques statiques mises en cache :
+
+| Cache | Contenu | Reconstruction |
+|---|---|---|
+| `generated/build/specter_sdk.lib` | SDK généré (`helpers`, `il2cpp-init`, PCH) | seulement si le SDK change |
+| `generated/build/specter_imgui.lib` | ImGui + backends | seulement si `third_party/imgui` change |
+| `generated/build/obj/*.obj` | un objet par TU | si la source, un header suivi ou le PCH est plus récent |
+
+Travailler sous `src/Specter.Internal/` ne reconstruit donc **ni** le SDK généré
+**ni** ImGui : seuls les TUs modifiés sont recompilés, puis reliés aux deux
+`.lib`. `tools/build-dll.sh --clean` vide le cache.
 
 L'injection de la DLL et les hooks relèvent de l'expérimentation locale
 uniquement (process possédé, hors ligne).
