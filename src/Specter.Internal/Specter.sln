@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30204.135
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Specter.Internal", "Specter.Internal.vcxproj", "{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Debug|x64.ActiveCfg = Debug|x64
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Debug|x64.Build.0 = Debug|x64
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Debug|x86.ActiveCfg = Debug|Win32
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Debug|x86.Build.0 = Debug|Win32
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Release|x64.ActiveCfg = Release|x64
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Release|x64.Build.0 = Release|x64
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Release|x86.ActiveCfg = Release|Win32
+		{7f3c2a10-9b4d-4e21-8a67-1c2d3e4f5a60}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3d5e7a92-1f4b-4c8a-9e2d-6b7c8d9e0f13}
+	EndGlobalSection
+EndGlobal

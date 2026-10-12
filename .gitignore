@@ -1,23 +1,9 @@
-# Artefacts volumineux / générés
-/tmp/
-*.raw
+# --- Genere : tout ce que reproduit tools/dump.sh ---
+/generated/*
+!/generated/README.md
 
-# Sorties Il2CppInspector (régénérables via tools/dump.sh)
-/dump/metadata.json
-/dump/dump.cs
-/dump/il2cpp.py
-/dll/
-/cpp/appdata/
-/cpp/*.vcxproj
-/cpp/*.vcxproj.filters
-/cpp/IL2CppDLL.sln
-
-# Binaire outil (~80 Mo)
+# Binaire de l'outil (~80 Mo, non versionne)
 /tools/Il2CppInspector
 
-# Metadata déchiffrée
-/input/global-metadata.decrypted.dat
-
-# Symlinks vers l'installation du jeu (recréés par tools/dump.sh, non portables)
-/input/GameAssembly.dll
-/input/global-metadata.encrypted.dat
+# Divers
+*.raw

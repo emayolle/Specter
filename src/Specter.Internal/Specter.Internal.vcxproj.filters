@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{9e8fae28-4866-4323-a865-f37d89151cb0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="generated">
+      <UniqueIdentifier>{010ae743-42e8-4577-9455-4c5e044c8b92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sdk">
+      <UniqueIdentifier>{1bc8d910-2e6a-4147-bfb2-4e51c393987d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="entry.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="specter.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="runtime.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="log.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\sdk\framework\dllmain.cpp">
+      <Filter>generated</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\sdk\framework\helpers.cpp">
+      <Filter>generated</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\sdk\framework\il2cpp-init.cpp">
+      <Filter>generated</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\sdk\framework\pch-il2cpp.cpp">
+      <Filter>generated</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="main.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="specter.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="runtime.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="log.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\framework\helpers.h">
+      <Filter>generated</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\framework\il2cpp-appdata.h">
+      <Filter>generated</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\framework\il2cpp-init.h">
+      <Filter>generated</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\framework\pch-il2cpp.h">
+      <Filter>generated</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\appdata\il2cpp-api-functions.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\appdata\il2cpp-api-functions-ptr.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\appdata\il2cpp-functions.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\appdata\il2cpp-metadata-version.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\appdata\il2cpp-types-ptr.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\sdk\appdata\il2cpp-types.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
