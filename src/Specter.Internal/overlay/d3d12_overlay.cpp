@@ -27,15 +27,24 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "overlay/d3d12_overlay.h"
 #include "overlay/game_input.h"
+#include "features/lua_console.h"
 #include "il2cpp-api.h"
 #include "log.h"
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
+
+// imgui_impl_win32.h deliberately hides this in a '#if 0' (to avoid forcing
+// <windows.h> on includers); we already have <windows.h>, so declare it here.
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd,
+                                                             UINT msg,
+                                                             WPARAM wParam,
+                                                             LPARAM lParam);
 
 namespace specter::overlay {
 namespace d3d12_overlay {
@@ -98,6 +107,24 @@ D3D12_CPU_DESCRIPTOR_HANDLE g_rtv_handles[kRtvHeapSize] = {};
 bool g_resize_dirty = true;
 bool g_demo = false;
 char g_snapshot[512] = {};
+
+// ---- Lua console state (touch()d only on the render thread) ----------------
+
+char g_lua_src[16384] =
+    "-- Specter Lua console - runs in the game's own lua_State, on the game's\n"
+    "-- Lua thread. `print(...)` output and the chunk's return values appear\n"
+    "-- below; errors are caught and reported.\n"
+    "print('hello from Specter', _VERSION)";
+std::string g_lua_log;
+
+// Keyboard sink: the window subclass forwards swallowed key/char messages here
+// so ImGui's Win32 backend sees them (the console needs text input).
+bool keyboard_sink(void* hwnd, unsigned msg, uintptr_t wparam, intptr_t lparam)
+{
+    return ImGui_ImplWin32_WndProcHandler(static_cast<HWND>(hwnd), msg,
+                                          static_cast<WPARAM>(wparam),
+                                          static_cast<LPARAM>(lparam)) != 0;
+}
 
 void log_once(const char* what)
 {
@@ -373,6 +400,10 @@ InitResult init_once(IDXGISwapChain* sc)
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(g_hwnd ? g_hwnd : g_probe_hwnd);
 
+    // Once the context exists, route keyboard messages the subclass swallows to
+    // ImGui, so the Lua console can receive typed text.
+    game_input::set_keyboard_sink(&keyboard_sink);
+
     ImGui_ImplDX12_InitInfo info = {};
     info.Device = g_dev;
     info.CommandQueue = g_queue;  // the game's queue, not ours
@@ -420,14 +451,59 @@ void feed_input()
 void build_ui()
 {
     ImGuiIO& io = ImGui::GetIO();
+
+    // Drain whatever the Lua thread produced since the last frame.
+    {
+        char buf[8192];
+        bool ok = false;
+        if (features::lua::take_result(buf, sizeof(buf), &ok)) {
+            g_lua_log += ok ? "> " : "! ";
+            g_lua_log += buf;
+            g_lua_log += '\n';
+            constexpr std::size_t kKeep = 60000;
+            if (g_lua_log.size() > kKeep) {
+                g_lua_log.erase(0, g_lua_log.size() - kKeep / 2);
+            }
+        }
+    }
+
     ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(780.0f, 600.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Specter")) {
         ImGui::TextUnformatted(g_snapshot);
         ImGui::Separator();
         ImGui::Checkbox("ImGui demo window", &g_demo);
-        ImGui::TextUnformatted("menu: SUPPR pour ouvrir/fermer");
+        ImGui::SameLine();
+        if (ImGui::Button("Fermer le menu (SUPPR)")) {
+            g_ui_enabled = false;
+        }
+        ImGui::SameLine();
         ImGui::Text("FPS %.1f (%.2f ms)", io.Framerate,
                     1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
+
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader("Lua console",
+                                    ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("bridge: %s", features::lua::status());
+            ImGui::InputTextMultiline("##lua_src", g_lua_src,
+                                      sizeof(g_lua_src), ImVec2(-1.0f, 180.0f));
+            if (ImGui::Button("Executer")) {
+                const int n = static_cast<int>(std::strlen(g_lua_src));
+                if (!features::lua::submit(g_lua_src, n)) {
+                    g_lua_log += "! bridge not ready\n";
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Effacer la sortie")) {
+                g_lua_log.clear();
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(une boucle infinie gele le jeu)");
+
+            ImGui::BeginChild("##lua_out", ImVec2(-1.0f, 200.0f), true);
+            ImGui::TextUnformatted(g_lua_log.c_str());
+            ImGui::EndChild();
+        }
     }
     ImGui::End();
 
@@ -552,10 +628,14 @@ void on_present(IDXGISwapChain* sc)
         return;
     }
 
-    // Toggle is independent of state: SUPPR opens/closes the menu.
+    // Toggle is independent of state: SUPPR opens/closes the menu. While a text
+    // field has focus (the Lua console) SUPPR is left to ImGui — there it is
+    // "delete forward" — so the menu is then closed with the button instead.
     static bool prev_del = false;
     const bool del = is_vk_down(VK_DELETE);
-    if (del && !prev_del) {
+    const bool want_text =
+        ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantTextInput;
+    if (del && !prev_del && !want_text) {
         g_ui_enabled = !g_ui_enabled.load(std::memory_order_relaxed);
         log::info("overlay: menu %s (SUPPR)",
                   g_ui_enabled.load(std::memory_order_relaxed) ? "ouvert"

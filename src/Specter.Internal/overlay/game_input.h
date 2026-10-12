@@ -24,8 +24,22 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace specter::overlay {
 namespace game_input {
+
+// Callback invoked (on the game's message thread) for every keyboard message
+// the subclass swallows while the menu is open, so ImGui can still receive
+// text input. Signatures use plain integers to keep Windows.h out of this
+// header. The gate is temporarily lifted around the call so the callee sees
+// the *real* key/modifier state (the Win32 ImGui backend reads GetKeyState).
+using keyboard_sink = bool (*)(void* hwnd, unsigned msg, uintptr_t wparam,
+                               intptr_t lparam);
+
+// Install (or clear, with nullptr) the keyboard sink. Called once the ImGui
+// context exists.
+void set_keyboard_sink(keyboard_sink fn);
 
 // Resolve user32 and detour the input/cursor exports. Call ONCE, when the menu
 // pipeline is initialised. `hwnd` is currently unused (kept for a future window

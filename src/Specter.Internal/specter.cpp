@@ -3,6 +3,7 @@
 #include "pch-il2cpp.h"
 
 #include "specter.h"
+#include "features/lua_console.h"
 #include "log.h"
 #include "runtime.h"
 #include "nt.h"
@@ -21,6 +22,12 @@ bool start()
 
     // First feature: prove the resolved VM API from inside the process.
     runtime::self_check();
+
+    // Lua console bridge: detour LuaManager.CommonUpdate so queued chunks run
+    // on the game's own Lua thread (see features/lua_console.*).
+    if (!features::lua::install()) {
+        log::error("start: Lua bridge unavailable - the console will not run");
+    }
 
     // D3D12 overlay: hook IDXGISwapChain::Present and render ImGui. Runs on
     // its own hidden thread so it never depends on the loader thread and never

@@ -31,6 +31,8 @@ namespace game_input {
 namespace {
 
 std::atomic<bool> g_open{false};
+std::atomic<bool> g_ungate{false};  // true only around a keyboard_sink call
+std::atomic<keyboard_sink> g_sink{nullptr};
 bool g_armed = false;
 bool g_gave_up = false;
 
@@ -78,7 +80,8 @@ UINT WINAPI hk_get_raw_input_buffer(PRAWINPUT data, PUINT size, UINT hdr)
 
 SHORT WINAPI hk_get_async_key_state(int vk)
 {
-    if (g_open.load(std::memory_order_relaxed)) {
+    if (g_open.load(std::memory_order_relaxed) &&
+        !g_ungate.load(std::memory_order_relaxed)) {
         return 0;
     }
     return real_get_async_key_state(vk);
@@ -86,7 +89,8 @@ SHORT WINAPI hk_get_async_key_state(int vk)
 
 SHORT WINAPI hk_get_key_state(int vk)
 {
-    if (g_open.load(std::memory_order_relaxed)) {
+    if (g_open.load(std::memory_order_relaxed) &&
+        !g_ungate.load(std::memory_order_relaxed)) {
         return 0;
     }
     return real_get_key_state(vk);
@@ -177,9 +181,40 @@ void leave_menu()
 WNDPROC g_orig_wndproc = nullptr;
 HWND g_wnd = nullptr;
 
+bool is_keyboard_msg(UINT msg)
+{
+    switch (msg) {
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_CHAR:
+        case WM_SYSCHAR:
+        case WM_DEADCHAR:
+        case WM_UNICHAR:
+            return true;
+        default:
+            return false;
+    }
+}
+
 LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
 {
     if (g_open.load(std::memory_order_relaxed)) {
+        // Keyboard: feed ImGui (the console needs text input) then swallow, so
+        // the game never sees the keystroke. The gate is lifted for the callee
+        // so the Win32 ImGui backend reads the real modifier state.
+        if (is_keyboard_msg(msg)) {
+            keyboard_sink sink = g_sink.load(std::memory_order_relaxed);
+            if (sink) {
+                g_ungate.store(true, std::memory_order_relaxed);
+                sink(h, msg, static_cast<uintptr_t>(w),
+                     static_cast<intptr_t>(l));
+                g_ungate.store(false, std::memory_order_relaxed);
+            }
+            return 0;
+        }
+
         switch (msg) {
             case WM_SETCURSOR:
                 ::SetCursor(nullptr);
@@ -199,13 +234,6 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
             case WM_XBUTTONDBLCLK:
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL:
-            case WM_KEYDOWN:
-            case WM_KEYUP:
-            case WM_SYSKEYDOWN:
-            case WM_SYSKEYUP:
-            case WM_CHAR:
-            case WM_SYSCHAR:
-            case WM_DEADCHAR:
             case WM_INPUT:
                 return 0;  // the game sees no input while the menu is open
             default:
@@ -311,6 +339,11 @@ bool install(void* hwnd)
                    hooked, total);
     }
     return true;
+}
+
+void set_keyboard_sink(keyboard_sink fn)
+{
+    g_sink.store(fn, std::memory_order_relaxed);
 }
 
 void set_menu_open(bool open)

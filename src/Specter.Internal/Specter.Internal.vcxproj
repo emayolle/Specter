@@ -51,6 +51,7 @@
     <ClCompile Include="overlay\d3dcompiler_shim.cpp" />
     <ClCompile Include="overlay\detour.cpp" />
     <ClCompile Include="overlay\game_input.cpp" />
+    <ClCompile Include="features\lua_console.cpp" />
   </ItemGroup>
 
   <!-- Vendored Dear ImGui cores + D3D12/Win32 backends (no Specter PCH). -->
@@ -100,6 +101,7 @@
     <ClInclude Include="overlay\detour.h" />
     <ClInclude Include="overlay\detour_ld_table.h" />
     <ClInclude Include="overlay\game_input.h" />
+    <ClInclude Include="features\lua_console.h" />
   </ItemGroup>
 
   <PropertyGroup Label="Globals">
