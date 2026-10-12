@@ -67,9 +67,8 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 | `nt.{h,cpp}` | pont NT/hostch : `spawn_hidden()` → `HostchSpawnThread` | adaptateur (fork) |
 | `hostch-rva.h` | RVA bakée du point d'entrée `HostchSpawnThread` | généré par le build |
 | `log.{h,cpp}` | journalisation : pipe hôte, repli fichier | seam interne (2 adaptateurs) |
-| `overlay/detour.{h,cpp}` | détour inline x64 (relais `mov rax,imm64; jmp rax` + trampoline) | seam interne |
-| `overlay/dxgi_hook.{h,cpp}` | swapchain sonde → hooks `Present`/`Present1`/`ResizeBuffers` | seam interne |
-| `overlay/d3d12_overlay.{h,cpp}` | pont ImGui ↔ D3D12 : rendu de l'UI dans le `Present` du jeu | seam interne |
+| `overlay/dxgi_hook.{h,cpp}` | objets sonde → patch des vtables COM `Present`/`Present1`/`ResizeBuffers`/`ExecuteCommandLists` | seam interne |
+| `overlay/d3d12_overlay.{h,cpp}` | pont ImGui ↔ D3D12 : rendu de l'UI sur la queue du jeu, dans le `Present` | seam interne |
 
 ### Pourquoi `runtime` est un vrai seam (et pas de l'indirection)
 
@@ -255,22 +254,36 @@ trip de string managée, énumération des assemblies, introspection de classe.
 Le jeu rend en **D3D12** (vkd3d-proton) à travers `dxgi.dll`. Le sous-système
 `overlay/` pose un overlay ImGui sans toucher au renderer du jeu :
 
-1. `detour` installe un relais de 12 octets (`mov rax,imm64; jmp rax`) et refuse
-   tout prologue qu'il ne sait pas déplacer (saut relatif, opérande RIP-relatif) —
-   en cas de refus **rien n'est patché**.
-2. `dxgi_hook` crée une **swapchain sonde** (device + queue + fenêtre cachée à
-   nous), lit l'adresse de code de `Present` (vt[8]), `Present1` (vt[22]) et
-   `ResizeBuffers` (vt[13]) — toutes les swapchains d'un module partagent le même
-   code — puis détoure ces adresses. Une garde de ré-entrance garantit **un seul**
-   rendu par frame (DXVK peut router `Present1` vers `Present`).
-3. `d3d12_overlay` s'initialise paresseusement, au premier `Present`, sur le
-   **device du jeu** mais avec **notre** queue et nos heaps de descripteurs : il
-   bascule le backbuffer `PRESENT → RENDER_TARGET`, dessine, rebascule, exécute,
-   puis laisse le `Present` original présenter la frame.
+1. `dxgi_hook` crée des objets **sonde** (device + queue + swapchain + fenêtre
+   cachée à nous) et lit les **vtables COM partagées** de `DxgiSwapChain` et
+   `ID3D12CommandQueue`. Une classe n'a qu'**une** vtable (en `.rdata`), donc
+   remplacer une entrée intercepte aussi les objets du jeu : `Present` (vt[8]),
+   `Present1` (vt[22]), `ResizeBuffers` (vt[13]) et `ExecuteCommandLists`
+   (queue vt[10]). Le pointeur d'origine sauvegardé est l'« original » ; une
+   garde de ré-entrance garantit **un seul** rendu par frame.
+   *Pourquoi la vtable et pas un détour inline* : un trampoline doit recopier
+   des **instructions entières** ; le prologue DXVK de `Present`
+   (`mov rcx,[rcx+10]` / `mov rax,[rcx]` / `mov rax,[rax+40]` / `mov r10d,edx`)
+   coupe `mov r10d,edx` à 12 octets et corrompt le trampoline (registres/args
+   bidons → `Present` renvoie une erreur et le jeu se fige). La vtable ne
+   demande aucune relocalisation.
+2. Le hook `ExecuteCommandLists` apprend **la queue du jeu** (celle dont le
+   device est celui de la swapchain). `d3d12_overlay` s'initialise paresseusement,
+   au premier `Present`, sur le **device du jeu** et **cette queue** : il bascule
+   le backbuffer `PRESENT → RENDER_TARGET`, dessine, rebascule, exécute, puis
+   laisse le `Present` original présenter la frame. Utiliser la queue du jeu est
+   nécessaire : vkd3d-proton enfile le vrai `vkQueuePresentKHR` sur la queue de
+   la swapchain et blitte depuis le backbuffer en supposant un ordre sur cette
+   **même** queue (rendre sur une queue privée est une hazard cross-queue).
+3. `ResizeBuffers` libère nos références aux anciens backbuffers **avant**
+   l'appel original : DXGI refuse de redimensionner tant qu'un backbuffer est
+   encore référencé (sinon le `ResizeBuffers` du jeu échoue).
 
-Discrétion : hooks en mémoire dans `dxgi.dll` (jamais de fichier écrit — voir
-`io.IniFilename = nullptr`), fenêtre sonde cachée, aucun `CreateThread` (le
-worker vient de `nt::spawn_hidden`). La touche **SUPPR** ouvre/ferme le menu.
+Discrétion : patchs en vtable (mémoire `.rdata` de `dxgi.dll`/`d3d12core.dll`),
+jamais de fichier écrit (`io.IniFilename = nullptr`), fenêtre sonde cachée,
+aucun `CreateThread` (le worker vient de `nt::spawn_hidden`). Les attentes de
+fence sont **bornées** : le thread de rendu ne peut jamais geler. La touche
+**SUPPR** ouvre/ferme le menu.
 
 `overlay/d3dcompiler_shim.cpp` : le backend ImGui DX12 compile ses shaders via
 `D3DCompile`, et `d3dcompiler.lib` créerait un **import au chargement** sur
@@ -281,9 +294,8 @@ résout la vraie implémentation à la première utilisation (chargement paresse
 `d3dcompiler_XX.dll`). La table d'imports du module ne contient plus que des
 modules déjà résidents dans le guest.
 
-Le seul contrat partagé est `overlay/d3d12_overlay.h` (3 fonctions) ;
-`detour` et `dxgi_hook` sont des détails d'implémentation cachés derrière
-`dxgi_install()`.
+Le seul contrat partagé est `overlay/d3d12_overlay.h` (4 fonctions) ;
+`dxgi_hook` est un détail d'implémentation caché derrière `dxgi_install()`.
 
 ---
 

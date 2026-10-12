@@ -1,4 +1,23 @@
-// Specter.Internal — DXGI swapchain hook (implementation).
+// Specter.Internal — DXGI/D3D12 vtable hook (implementation).
+//
+// The game renders through D3D12 (vkd3d-proton under Wine). Swapchains and
+// command queues are COM objects whose methods live in one shared, immutable
+// vtable array per class (in .rdata of dxgi.dll / d3d12core.dll). We probe the
+// real classes with throwaway objects, read the class vtable, then swap the
+// slots we care about for our proxies — the saved pointer is the "original".
+//
+// Why vtable patching instead of inline detours: an inline trampoline has to
+// relocate the target's first whole instructions. DXVK's Present prologue is
+//     mov rcx,[rcx+10] / mov rax,[rcx] / mov rax,[rax+40] / mov r10d,edx
+// whose instruction boundaries do not line up with a fixed patch length, so a
+// naive 12-byte copy splits `mov r10d,edx` and corrupts the trampoline. Vtable
+// patching needs no relocation and covers every instance of the class.
+//
+// We also hook `ID3D12CommandQueue::ExecuteCommandLists` to learn the game's
+// own command queue. vkd3d-proton enqueues the actual vkQueuePresentKHR on the
+// swapchain's own queue (see libs/vkd3d/swapchain.c) and blits from the app's
+// back buffer assuming same-queue ordering; rendering the overlay on a foreign
+// queue is a cross-queue hazard. Using the game's queue keeps us correct.
 
 #include "pch-il2cpp.h"
 
@@ -8,7 +27,6 @@
 #include <dxgi1_4.h>
 
 #include "overlay/dxgi_hook.h"
-#include "overlay/detour.h"
 #include "overlay/d3d12_overlay.h"
 #include "log.h"
 
@@ -24,27 +42,50 @@ using D3D12CreateDeviceFn =
     HRESULT(WINAPI*)(IUnknown*, D3D_FEATURE_LEVEL, REFIID, void**);
 using CreateDXGIFactory2Fn = HRESULT(WINAPI*)(UINT, REFIID, void**);
 
-Detour g_present;
-Detour g_present1;
-Detour g_resize;
+// COM vtable slot indices (IUnknown layout included).
+constexpr int kSlotPresent = 8;               // IDXGISwapChain::Present
+constexpr int kSlotResizeBuffers = 13;        // IDXGISwapChain::ResizeBuffers
+constexpr int kSlotPresent1 = 22;             // IDXGISwapChain1::Present1
+constexpr int kSlotResizeBuffers1 = 30;       // IDXGISwapChain3::ResizeBuffers1
+constexpr int kSlotExecuteCommandLists = 10;  // ID3D12CommandQueue
 
-using PresentFn = HRESULT(WINAPI*)(IDXGISwapChain*, UINT, UINT);
-using Present1Fn = HRESULT(WINAPI*)(IDXGISwapChain1*, UINT, UINT,
-                                    const DXGI_PRESENT_PARAMETERS*);
-using ResizeFn = HRESULT(WINAPI*)(IDXGISwapChain*, UINT, UINT, UINT,
-                                  const DXGI_FORMAT*);
+using PresentFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
+using Present1Fn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain1*, UINT, UINT,
+                                               const DXGI_PRESENT_PARAMETERS*);
+using ResizeFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT, UINT,
+                                             const DXGI_FORMAT*);
+using Resize1Fn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain3*, UINT, UINT, UINT,
+                                              DXGI_FORMAT, UINT, const UINT*,
+                                              IUnknown* const*);
+using ExecuteFn = void(STDMETHODCALLTYPE*)(ID3D12CommandQueue*, UINT,
+                                           ID3D12CommandList* const*);
 
 PresentFn g_o_present = nullptr;
 Present1Fn g_o_present1 = nullptr;
 ResizeFn g_o_resize = nullptr;
+Resize1Fn g_o_resize1 = nullptr;
+ExecuteFn g_o_execute = nullptr;
 
-// Unity may present through Present (vt[8]) or Present1 (vt[22]); DXVK's
-// Present1 can route back through the virtual Present. The guard makes sure
-// the overlay is rendered exactly once per frame no matter which path the
-// game takes. Re-entrancy here is synchronous, on the render thread, so a
-// plain flag is enough (and thread_local is unsafe in a manually-mapped
-// module, where the loader never sets up TLS).
+// Unity presents through Present (vt[8]) or Present1 (vt[22]); Present1 may
+// route back through the virtual Present. The guard renders exactly once per
+// frame regardless. Re-entrancy here is synchronous, on the render thread, so a
+// plain flag is enough (thread_local is unsafe in a manually-mapped module,
+// where the loader never sets up TLS).
 bool g_in_present = false;
+
+bool patch_slot(void** vt, int idx, void* fn)
+{
+    DWORD oldProtect = 0;
+    void** slot = &vt[idx];
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_EXECUTE_READWRITE,
+                        &oldProtect)) {
+        return false;
+    }
+    *slot = fn;
+    DWORD tmp = 0;
+    VirtualProtect(slot, sizeof(void*), oldProtect, &tmp);
+    return true;
+}
 
 void render_once(IDXGISwapChain* sc)
 {
@@ -56,24 +97,49 @@ void render_once(IDXGISwapChain* sc)
     g_in_present = false;
 }
 
-HRESULT WINAPI present_proxy(IDXGISwapChain* sc, UINT sync, UINT flags)
+HRESULT STDMETHODCALLTYPE present_proxy(IDXGISwapChain* sc, UINT sync,
+                                        UINT flags)
 {
     render_once(sc);
     return g_o_present ? g_o_present(sc, sync, flags) : E_FAIL;
 }
 
-HRESULT WINAPI present1_proxy(IDXGISwapChain1* sc, UINT sync, UINT flags,
-                              const DXGI_PRESENT_PARAMETERS* params)
+HRESULT STDMETHODCALLTYPE present1_proxy(IDXGISwapChain1* sc, UINT sync,
+                                         UINT flags,
+                                         const DXGI_PRESENT_PARAMETERS* params)
 {
-    render_once(sc);
+    render_once(reinterpret_cast<IDXGISwapChain*>(sc));
     return g_o_present1 ? g_o_present1(sc, sync, flags, params) : E_FAIL;
 }
 
-HRESULT WINAPI resize_proxy(IDXGISwapChain* sc, UINT width, UINT height,
-                            UINT flags, const DXGI_FORMAT* fmt)
+HRESULT STDMETHODCALLTYPE resize_proxy(IDXGISwapChain* sc, UINT width,
+                                       UINT height, UINT flags,
+                                       const DXGI_FORMAT* fmt)
 {
     d3d12_overlay::on_resize(sc);
     return g_o_resize ? g_o_resize(sc, width, height, flags, fmt) : E_FAIL;
+}
+
+HRESULT STDMETHODCALLTYPE resize1_proxy(IDXGISwapChain3* sc, UINT count,
+                                        UINT width, UINT height,
+                                        DXGI_FORMAT fmt, UINT flags,
+                                        const UINT* node_mask,
+                                        IUnknown* const* present_queue)
+{
+    d3d12_overlay::on_resize(reinterpret_cast<IDXGISwapChain*>(sc));
+    return g_o_resize1
+               ? g_o_resize1(sc, count, width, height, fmt, flags, node_mask,
+                             present_queue)
+               : E_FAIL;
+}
+
+void STDMETHODCALLTYPE execute_proxy(ID3D12CommandQueue* queue, UINT count,
+                                     ID3D12CommandList* const* lists)
+{
+    d3d12_overlay::on_command_queue(queue);
+    if (g_o_execute) {
+        g_o_execute(queue, count, lists);
+    }
 }
 
 // Hidden window that backs the probe swapchain. Kept alive for the session:
@@ -184,52 +250,58 @@ bool dxgi_install()
         return false;
     }
 
-    // Every swapchain of this module shares the vtable code.
-    void** vt = *reinterpret_cast<void***>(probe);
-    const uintptr_t present = reinterpret_cast<uintptr_t>(vt[8]);    // Present
-    const uintptr_t resize = reinterpret_cast<uintptr_t>(vt[13]);    // ResizeBuffers
-    const uintptr_t present1 = reinterpret_cast<uintptr_t>(vt[22]);  // Present1
+    // Every instance of a class shares the vtable, so the probe tells us the
+    // exact slots the game's own objects dispatch through.
+    void** sc_vt = *reinterpret_cast<void***>(probe);
+    void** q_vt = *reinterpret_cast<void***>(queue);
 
-    // Present first, so a resize can never race an unhooked Present.
-    if (!detour_install(&g_present, present,
-                        reinterpret_cast<uintptr_t>(present_proxy))) {
-        log::error("overlay: Present detour refused");
-        probe->Release();
-        factory->Release();
-        DestroyWindow(hwnd);
-        queue->Release();
-        dev->Release();
-        return false;
-    }
-    g_o_present = reinterpret_cast<PresentFn>(g_present.trampoline);
-
-    // Present1 is best effort: Present already covers most paths.
-    if (!detour_install(&g_present1, present1,
-                        reinterpret_cast<uintptr_t>(present1_proxy))) {
-        log::info("overlay: Present1 detour refused (Present stays)");
-    } else {
-        g_o_present1 = reinterpret_cast<Present1Fn>(g_present1.trampoline);
+    g_o_execute = reinterpret_cast<ExecuteFn>(q_vt[kSlotExecuteCommandLists]);
+    if (!patch_slot(q_vt, kSlotExecuteCommandLists,
+                    reinterpret_cast<void*>(execute_proxy))) {
+        log::error("overlay: ExecuteCommandLists vtable patch failed");
     }
 
-    if (!detour_install(&g_resize, resize,
-                        reinterpret_cast<uintptr_t>(resize_proxy))) {
-        log::info("overlay: ResizeBuffers detour refused (Present stays)");
-    } else {
-        g_o_resize = reinterpret_cast<ResizeFn>(g_resize.trampoline);
+    g_o_present = reinterpret_cast<PresentFn>(sc_vt[kSlotPresent]);
+    g_o_present1 = reinterpret_cast<Present1Fn>(sc_vt[kSlotPresent1]);
+    g_o_resize = reinterpret_cast<ResizeFn>(sc_vt[kSlotResizeBuffers]);
+    g_o_resize1 = reinterpret_cast<Resize1Fn>(sc_vt[kSlotResizeBuffers1]);
+
+    if (!patch_slot(sc_vt, kSlotPresent,
+                    reinterpret_cast<void*>(present_proxy))) {
+        log::error("overlay: Present vtable patch failed");
+        g_o_present = nullptr;
+    }
+    // Present1/ResizeBuffers are best effort: Present already covers most
+    // paths, and the resize hooks just free our back-buffer references early.
+    if (!patch_slot(sc_vt, kSlotPresent1,
+                    reinterpret_cast<void*>(present1_proxy))) {
+        log::info("overlay: Present1 vtable patch failed (Present stays)");
+        g_o_present1 = nullptr;
+    }
+    if (!patch_slot(sc_vt, kSlotResizeBuffers,
+                    reinterpret_cast<void*>(resize_proxy))) {
+        log::info("overlay: ResizeBuffers vtable patch failed");
+        g_o_resize = nullptr;
+    }
+    if (!patch_slot(sc_vt, kSlotResizeBuffers1,
+                    reinterpret_cast<void*>(resize1_proxy))) {
+        log::info("overlay: ResizeBuffers1 vtable patch failed");
+        g_o_resize1 = nullptr;
     }
 
     d3d12_overlay::set_probe_window(hwnd);
 
-    // Detours are on shared code; the probe objects themselves are no longer
-    // needed.
+    // The probe objects themselves are no longer needed; the patches live on
+    // the shared class vtable.
     probe->Release();
     factory->Release();
     queue->Release();
     dev->Release();
 
-    log::info("overlay: swapchain hooks live (Present=%p Present1=%p "
-              "ResizeBuffers=%p)",
-              (void*)present, (void*)present1, (void*)resize);
+    log::info("overlay: swapchain vtable hooked (Present=%p Present1=%p "
+              "ResizeBuffers=%p ResizeBuffers1=%p Execute=%p)",
+              (void*)g_o_present, (void*)g_o_present1, (void*)g_o_resize,
+              (void*)g_o_resize1, (void*)g_o_execute);
     return true;
 }
 

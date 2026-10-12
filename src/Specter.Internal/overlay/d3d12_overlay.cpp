@@ -3,8 +3,15 @@
 // Frame flow (see third_party/imgui/examples/example_win32_directx12):
 //   ImGui_ImplDX12_NewFrame -> ImGui_ImplWin32_NewFrame -> ImGui::NewFrame
 //   -> ImGui::Render -> record our command list (barrier, RT, draw data)
-//   -> execute on OUR queue -> signal fence. The Present detour wrapper then
-//   calls the original Present, which presents the frame with the overlay.
+//   -> execute on the GAME's command queue -> signal our fence. The Present
+//   hook wrapper then calls the original Present, which presents the frame
+//   with the overlay.
+//
+// We deliberately submit on the game's own command queue (learned from the
+// ExecuteCommandLists hook). vkd3d-proton enqueues the real present callbacks
+// on the swapchain's queue and blits from the app back buffer assuming same
+// queue ordering; a private queue would be a cross-queue hazard and can make
+// present fail.
 //
 // Input is fed manually (GetAsyncKeyState) because the game window does not
 // dispatch to us; VK_DELETE toggles the menu. No window class hooks, no file
@@ -36,13 +43,15 @@ namespace {
 constexpr UINT kSrvHeapSize = 128;  // power of two: the bump allocator wraps
 constexpr UINT kRtvHeapSize = 8;
 constexpr UINT kFlight = 3;
+constexpr DWORD kFenceTimeoutMs = 2000;  // never block the render thread for good
 
 enum class State { Idle, Ready, Failed };
+enum class InitResult { Ok, Defer, Fail };
 
 std::atomic<bool> g_ui_enabled{true};
 State g_state = State::Idle;
-int g_init_tries = 0;
 bool g_err_logged = false;
+bool g_queue_wait_logged = false;
 
 HWND g_probe_hwnd = nullptr;
 HWND g_hwnd = nullptr;
@@ -62,6 +71,13 @@ UINT g_rtv_stride = 0;
 std::size_t g_srv_cpu = 0;
 std::size_t g_srv_gpu = 0;
 UINT g_srv_used = 0;
+
+// Command queues seen submitting work (ExecuteCommandLists). The swapchain's
+// queue is the one whose device matches the swapchain's device. Bounded and
+// lock-free: a duplicate is harmless and cross-thread adds are rare.
+constexpr int kMaxQueues = 8;
+std::atomic<ID3D12CommandQueue*> g_queues[kMaxQueues] = {};
+std::atomic<int> g_queue_count{0};
 
 struct Frame
 {
@@ -145,6 +161,47 @@ void create_rtvs()
     }
 }
 
+// Wait until everything we have submitted so far has completed. Bounded: on
+// timeout we log once and carry on rather than freezing the render thread.
+void flush_queue()
+{
+    if (!g_queue || !g_fence || !g_fence_event) {
+        return;
+    }
+    const UINT64 v = ++g_fence_value;
+    if (FAILED(g_queue->Signal(g_fence, v))) {
+        return;
+    }
+    if (g_fence->GetCompletedValue() >= v) {
+        return;
+    }
+    g_fence->SetEventOnCompletion(v, g_fence_event);
+    if (WaitForSingleObject(g_fence_event, kFenceTimeoutMs) != WAIT_OBJECT_0) {
+        log_once("GPU fence wait timed out (queue stalled?)");
+    }
+}
+
+// The queue whose device is the swapchain's device.
+ID3D12CommandQueue* pick_queue(ID3D12Device* dev)
+{
+    const int n = g_queue_count.load(std::memory_order_acquire);
+    for (int i = 0; i < n; ++i) {
+        ID3D12CommandQueue* q = g_queues[i].load(std::memory_order_relaxed);
+        if (!q) {
+            continue;
+        }
+        ID3D12Device* d = nullptr;
+        if (SUCCEEDED(q->GetDevice(__uuidof(ID3D12Device), (void**)&d)) && d) {
+            const bool match = (d == dev);
+            d->Release();
+            if (match) {
+                return q;
+            }
+        }
+    }
+    return nullptr;
+}
+
 void srv_alloc(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* cpu,
                D3D12_GPU_DESCRIPTOR_HANDLE* gpu)
 {
@@ -207,31 +264,37 @@ void build_snapshot()
                   fields);
 }
 
-bool init_once(IDXGISwapChain* sc)
+InitResult init_once(IDXGISwapChain* sc)
 {
-    // Game device + swapchain3.
-    if (FAILED(sc->GetDevice(__uuidof(ID3D12Device), (void**)&g_dev)) ||
-        !g_dev) {
-        return false;
-    }
-    if (FAILED(sc->QueryInterface(__uuidof(IDXGISwapChain3),
-                                 (void**)&g_sc3))) {
-        g_sc3 = nullptr;
-    }
-    fetch_desc(sc);
-
-    // Our own command queue on the game's device.
-    {
-        D3D12_COMMAND_QUEUE_DESC qd = {};
-        qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-        qd.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        qd.NodeMask = 1;
-        if (FAILED(g_dev->CreateCommandQueue(&qd, __uuidof(ID3D12CommandQueue),
-                                             (void**)&g_queue)) ||
-            !g_queue) {
-            return false;
+    // Game device + swapchain3 (cached across deferred attempts).
+    if (!g_dev) {
+        if (FAILED(sc->GetDevice(__uuidof(ID3D12Device), (void**)&g_dev)) ||
+            !g_dev) {
+            return InitResult::Fail;
         }
     }
+    if (!g_sc3 &&
+        FAILED(sc->QueryInterface(__uuidof(IDXGISwapChain3), (void**)&g_sc3))) {
+        g_sc3 = nullptr;
+    }
+
+    // We must render on the game's own queue. If we have not seen it submit
+    // yet, defer instead of counting a failure.
+    if (!g_queue) {
+        g_queue = pick_queue(g_dev);
+        if (!g_queue) {
+            if (!g_queue_wait_logged) {
+                g_queue_wait_logged = true;
+                log::info("overlay: waiting for the game's command queue "
+                          "(device=%p candidates=%d)",
+                          (void*)g_dev, g_queue_count.load());
+            }
+            return InitResult::Defer;
+        }
+        g_queue->AddRef();
+    }
+
+    fetch_desc(sc);
 
     // Shader-visible SRV heap (fonts/textures) with a wrapping bump allocator.
     {
@@ -239,11 +302,10 @@ bool init_once(IDXGISwapChain* sc)
         hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         hd.NumDescriptors = kSrvHeapSize;
         hd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-        hd.NodeMask = 1;
         if (FAILED(g_dev->CreateDescriptorHeap(
                 &hd, __uuidof(ID3D12DescriptorHeap), (void**)&g_srv)) ||
             !g_srv) {
-            return false;
+            return InitResult::Fail;
         }
         g_srv_stride = g_dev->GetDescriptorHandleIncrementSize(
             D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -257,11 +319,10 @@ bool init_once(IDXGISwapChain* sc)
         hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         hd.NumDescriptors = kRtvHeapSize;
         hd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        hd.NodeMask = 1;
         if (FAILED(g_dev->CreateDescriptorHeap(
                 &hd, __uuidof(ID3D12DescriptorHeap), (void**)&g_rtv)) ||
             !g_rtv) {
-            return false;
+            return InitResult::Fail;
         }
         g_rtv_stride = g_dev->GetDescriptorHandleIncrementSize(
             D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -272,24 +333,24 @@ bool init_once(IDXGISwapChain* sc)
                 D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
                 (void**)&f.alloc)) ||
             !f.alloc) {
-            return false;
+            return InitResult::Fail;
         }
     }
     if (FAILED(g_dev->CreateCommandList(
             0, D3D12_COMMAND_LIST_TYPE_DIRECT, g_frames[0].alloc, nullptr,
             __uuidof(ID3D12GraphicsCommandList), (void**)&g_cmd)) ||
         !g_cmd) {
-        return false;
+        return InitResult::Fail;
     }
     g_cmd->Close();
     if (FAILED(g_dev->CreateFence(0, D3D12_FENCE_FLAG_NONE,
                                   __uuidof(ID3D12Fence), (void**)&g_fence)) ||
         !g_fence) {
-        return false;
+        return InitResult::Fail;
     }
     g_fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_fence_event) {
-        return false;
+        return InitResult::Fail;
     }
 
     create_rtvs();
@@ -306,7 +367,7 @@ bool init_once(IDXGISwapChain* sc)
 
     ImGui_ImplDX12_InitInfo info = {};
     info.Device = g_dev;
-    info.CommandQueue = g_queue;
+    info.CommandQueue = g_queue;  // the game's queue, not ours
     info.NumFramesInFlight = static_cast<int>(
         g_buffer_count < kFlight ? g_buffer_count : kFlight);
     info.RTVFormat = g_format;
@@ -315,13 +376,14 @@ bool init_once(IDXGISwapChain* sc)
     info.SrvDescriptorAllocFn = srv_alloc;
     info.SrvDescriptorFreeFn = srv_free;
     if (!ImGui_ImplDX12_Init(&info)) {
-        return false;
+        return InitResult::Fail;
     }
 
-    log::info("overlay: D3D12 ImGui ready (buffers=%u fmt=%d %ux%u hwnd=%p)",
+    log::info("overlay: D3D12 ImGui ready (buffers=%u fmt=%d %ux%u hwnd=%p "
+              "queue=%p)",
               g_buffer_count, static_cast<int>(g_format), g_width, g_height,
-              (void*)g_hwnd);
-    return true;
+              (void*)g_hwnd, (void*)g_queue);
+    return InitResult::Ok;
 }
 
 bool is_vk_down(int vk)
@@ -369,7 +431,12 @@ void render_frame()
     Frame& f = g_frames[g_frame_index % kFlight];
     if (f.fence && g_fence->GetCompletedValue() < f.fence) {
         g_fence->SetEventOnCompletion(f.fence, g_fence_event);
-        WaitForSingleObject(g_fence_event, INFINITE);
+        if (WaitForSingleObject(g_fence_event, kFenceTimeoutMs) !=
+            WAIT_OBJECT_0) {
+            // Never block the render thread for good; skip this frame.
+            log_once("GPU fence wait timed out during render");
+            return;
+        }
     }
     if (FAILED(f.alloc->Reset())) {
         return;
@@ -438,9 +505,34 @@ void set_probe_window(void* hwnd)
     }
 }
 
+void on_command_queue(ID3D12CommandQueue* queue)
+{
+    if (!queue) {
+        return;
+    }
+    const int n = g_queue_count.load(std::memory_order_acquire);
+    for (int i = 0; i < n; ++i) {
+        if (g_queues[i].load(std::memory_order_relaxed) == queue) {
+            return;
+        }
+    }
+    if (n < kMaxQueues) {
+        g_queues[n].store(queue, std::memory_order_relaxed);
+        g_queue_count.store(n + 1, std::memory_order_release);
+        queue->AddRef();
+    }
+}
+
 void on_resize(IDXGISwapChain* sc)
 {
     (void)sc;
+    // DXGI refuses to resize a swapchain while any of its back buffers are
+    // referenced. Wait for our own in-flight work, then drop our references
+    // before the original ResizeBuffers runs. RTVs are rebuilt next present.
+    if (g_state == State::Ready) {
+        flush_queue();
+        release_buffers();
+    }
     g_resize_dirty = true;
 }
 
@@ -466,17 +558,17 @@ void on_present(IDXGISwapChain* sc)
     }
 
     if (g_state == State::Idle) {
-        if (++g_init_tries > 3) {
-            g_state = State::Failed;
-            log_once("D3D12 init failed after 3 attempts");
-            return;
-        }
         try {
-            if (init_once(sc)) {
+            const InitResult r = init_once(sc);
+            if (r == InitResult::Ok) {
                 g_state = State::Ready;
                 log::info("overlay: frame pipeline armed");
-            } else {
-                log_once("D3D12 init failed (will retry)");
+            } else if (r == InitResult::Fail) {
+                // A deferral (waiting for the game's queue) is expected and
+                // retried indefinitely; a hard failure is terminal so we never
+                // re-run partial initialisation.
+                g_state = State::Failed;
+                log_once("D3D12 init failed");
             }
         } catch (...) {
             g_state = State::Failed;
@@ -498,6 +590,10 @@ void on_present(IDXGISwapChain* sc)
         feed_input();
         ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        // The Win32 backend sizes the display from the window's client area;
+        // pin it to the swapchain so the UI always maps 1:1 to what we draw.
+        ImGui::GetIO().DisplaySize = ImVec2(static_cast<float>(g_width),
+                                             static_cast<float>(g_height));
         ImGui::NewFrame();
         build_ui();
         ImGui::Render();

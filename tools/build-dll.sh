@@ -175,7 +175,6 @@ for spec in \
   "$SRC/il2cpp-api.cpp:il2cpp-api" \
   "$SRC/nt.cpp:nt" \
   "$SRC/log.cpp:log" \
-  "$SRC/overlay/detour.cpp:overlay-detour" \
   "$SRC/overlay/dxgi_hook.cpp:overlay-dxgi_hook" \
   "$SRC/overlay/d3d12_overlay.cpp:overlay-d3d12_overlay" \
   "$SRC/overlay/d3dcompiler_shim.cpp:overlay-d3dcompiler_shim"; do
