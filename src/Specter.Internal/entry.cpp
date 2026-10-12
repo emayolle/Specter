@@ -21,6 +21,7 @@
 #include <Windows.h>
 
 #include "il2cpp-init.h"  // init_il2cpp() — generated scaffold bindings
+#include "log.h"          // specter::log::init / error
 #include "nt.h"           // specter::nt::spawn_hidden
 #include "specter.h"
 
@@ -63,10 +64,17 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
     switch (reason) {
     case DLL_PROCESS_ATTACH:
+        // Bring the log sink up first, so that a failed spawn is visible on
+        // the pipe (not only in the fallback file log).
+        specter::log::init();
+
         // Start the work on a hidden (is_system) worker thread. If the fork
-        // entry is unavailable (unpatched ntdll / RVA not baked), fall back to
-        // running inline on the injector's hidden thread.
+        // entry is unavailable (unpatched ntdll / RVA not baked), log it and
+        // fall back to running inline on the injector's hidden thread.
         if (!specter::nt::spawn_hidden(worker_main, nullptr)) {
+            specter::log::error(
+                "spawn_hidden failed (HostchSpawnThread unresolved) - "
+                "running init inline on the injector thread");
             worker_main(nullptr);
         }
         break;

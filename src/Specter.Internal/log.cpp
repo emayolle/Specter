@@ -74,10 +74,15 @@ void emit(const char* level, const char* message)
 
 void init()
 {
-    if (!g_lock_ready) {
-        InitializeCriticalSection(&g_lock);
-        g_lock_ready = true;
+    // Idempotent: the entry point initialises logging *before* spawning the
+    // worker, so that a spawn failure is visible on the pipe. specter::start()
+    // calls it again on the worker as a no-op.
+    if (g_lock_ready) {
+        return;
     }
+
+    InitializeCriticalSection(&g_lock);
+    g_lock_ready = true;
 
     std::wstring path = pipe_path();
     g_pipe = CreateFileW(path.c_str(),
