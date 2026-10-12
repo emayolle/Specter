@@ -177,7 +177,9 @@ for spec in \
   "$SRC/log.cpp:log" \
   "$SRC/overlay/dxgi_hook.cpp:overlay-dxgi_hook" \
   "$SRC/overlay/d3d12_overlay.cpp:overlay-d3d12_overlay" \
-  "$SRC/overlay/d3dcompiler_shim.cpp:overlay-d3dcompiler_shim"; do
+  "$SRC/overlay/d3dcompiler_shim.cpp:overlay-d3dcompiler_shim" \
+  "$SRC/overlay/detour.cpp:overlay-detour" \
+  "$SRC/overlay/game_input.cpp:overlay-game_input"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
   build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
   OUR_OBJS+=("$obj")

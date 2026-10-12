@@ -29,6 +29,7 @@
 #include <cstring>
 
 #include "overlay/d3d12_overlay.h"
+#include "overlay/game_input.h"
 #include "il2cpp-api.h"
 #include "log.h"
 
@@ -296,6 +297,9 @@ InitResult init_once(IDXGISwapChain* sc)
 
     fetch_desc(sc);
 
+    // Arm the input gate + cursor control as soon as we know the game window.
+    game_input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
+
     // Shader-visible SRV heap (fonts/textures) with a wrapping bump allocator.
     {
         D3D12_DESCRIPTOR_HEAP_DESC hd = {};
@@ -362,6 +366,10 @@ InitResult init_once(IDXGISwapChain* sc)
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;   // never write imgui.ini into the game prefix
     io.LogFilename = nullptr;
+    // The game hides the OS cursor; draw ImGui's own so the user can see what
+    // they are pointing at. The OS cursor is forced hidden while the menu is up
+    // (see overlay/game_input.*).
+    io.MouseDrawCursor = true;
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(g_hwnd ? g_hwnd : g_probe_hwnd);
 
@@ -388,7 +396,9 @@ InitResult init_once(IDXGISwapChain* sc)
 
 bool is_vk_down(int vk)
 {
-    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+    // Real key state even while the menu gate is active (our own toggle and
+    // ImGui input must not be blocked by our own hooks).
+    return (game_input::real_async_key_state(vk) & 0x8000) != 0;
 }
 
 void feed_input()
@@ -553,6 +563,12 @@ void on_present(IDXGISwapChain* sc)
     }
     prev_del = del;
 
+    // Match the input gate + OS cursor to the menu state (block the game and
+    // free the cursor while the menu is open). Only meaningful once the render
+    // pipeline is live.
+    game_input::set_menu_open(g_ui_enabled.load(std::memory_order_relaxed) &&
+                              g_state == State::Ready);
+
     if (!g_ui_enabled.load(std::memory_order_relaxed)) {
         return;
     }
@@ -578,6 +594,16 @@ void on_present(IDXGISwapChain* sc)
     }
     if (g_state != State::Ready) {
         return;
+    }
+
+    // The input gate is armed by game_input::install() inside init_once(); if it
+    // failed there (e.g. a prologue our decoder cannot handle) keep retrying
+    // (throttled) in case the situation changes.
+    if (!game_input::armed()) {
+        static int retry = 0;
+        if ((retry++ % 120) == 0) {
+            game_input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
+        }
     }
 
     if (g_resize_dirty) {

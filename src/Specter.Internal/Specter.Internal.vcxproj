@@ -49,6 +49,8 @@
     <ClCompile Include="overlay\dxgi_hook.cpp" />
     <ClCompile Include="overlay\d3d12_overlay.cpp" />
     <ClCompile Include="overlay\d3dcompiler_shim.cpp" />
+    <ClCompile Include="overlay\detour.cpp" />
+    <ClCompile Include="overlay\game_input.cpp" />
   </ItemGroup>
 
   <!-- Vendored Dear ImGui cores + D3D12/Win32 backends (no Specter PCH). -->
@@ -95,6 +97,9 @@
     <ClInclude Include="log.h" />
     <ClInclude Include="overlay\dxgi_hook.h" />
     <ClInclude Include="overlay\d3d12_overlay.h" />
+    <ClInclude Include="overlay\detour.h" />
+    <ClInclude Include="overlay\detour_ld_table.h" />
+    <ClInclude Include="overlay\game_input.h" />
   </ItemGroup>
 
   <PropertyGroup Label="Globals">
