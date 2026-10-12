@@ -41,7 +41,7 @@ Specter/
 │   └── Il2CppInspector            binaire linux-x64 (non versionné, ~80 Mo)
 ├── src/                         # LE PRODUIT — versionné
 │   └── Specter.Internal/          la DLL interne (module profond)
-│       ├── entry.cpp              Run() + LOG_FILE (adaptateur vers le scaffold)
+│       ├── entry.cpp              DllMain + LOG_FILE (point d'entrée ; aucun thread)
 │       ├── specter.{h,cpp}        interface : start() / stop()
 │       ├── runtime.{h,cpp}        seam IL2CPP (localise + résout l'API)
 │       ├── log.{h,cpp}            journalisation (pipe hôte / fichier)
@@ -81,6 +81,23 @@ Produit `generated/sdk/appdata/` (`il2cpp-types.h` 114 Mo,
 Écris ton code dans `src/Specter.Internal/` : le point d'entrée est
 `specter::start()` (`specter.cpp`). Toutes les méthodes du jeu sont accessibles
 par offset image via `generated/sdk/appdata/il2cpp-functions.h`.
+
+## Injecter (wine-hostch)
+
+Le DLL est **manual-mappé** (zéro PEB/Ldr) et son `DllMain` s'exécute sur un
+thread **caché** (`is_system`), via [`wine-hostch`](../wine-hostch) :
+
+```
+hostch.py map --pe generated/bin/Release/Specter.Internal.dll --dllmain --hide-system
+```
+
+**Règle : ne jamais appeler `CreateThread` depuis la DLL.** Un tel thread serait
+**visible** et son adresse de départ tomberait dans la mémoire manual-mappée —
+signal d'anti-cheat classique. Le `framework/dllmain.cpp` généré (qui fait un
+`CreateThread`) n'est donc **pas compilé** : on fournit notre propre `DllMain`
+dans `entry.cpp`, qui s'exécute inline. Les futurs workers persistants (boucles,
+hooks) seront créés **côté hôte** via `hostch.py ct … --hide-system`. Détails :
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), « Injection, threads et discrétion ».
 
 ## Logs (pipe vers Linux)
 

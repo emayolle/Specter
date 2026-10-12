@@ -24,9 +24,6 @@
     <ClCompile Include="log.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\generated\sdk\framework\dllmain.cpp">
-      <Filter>generated</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\generated\sdk\framework\helpers.cpp">
       <Filter>generated</Filter>
     </ClCompile>
@@ -38,9 +35,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="main.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="specter.h">
       <Filter>src</Filter>
     </ClInclude>

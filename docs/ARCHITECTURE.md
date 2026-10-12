@@ -27,10 +27,12 @@ une régénération. La règle est mécanique : si c'est sous `generated/`, on n
 touche pas ; si c'est sous `src/`, c'est à nous.
 
 `generated/sdk/framework/` (le scaffold d'injection produit par l'outil) est
-consommé **tel quel** : c'est le point d'extension prévu par Il2CppInspector, et
-il attend exactement deux symboles de notre côté — `Run()` et `LOG_FILE`
-(fournis par `src/Specter.Internal/entry.cpp`). On ne duplique donc pas le
-scaffold : on remplit le slot `user/` qu'il réserve, avec notre propre module.
+consommé presque **tel quel** : `il2cpp-init`, `helpers` et `pch` sont utilisés
+sans modification. **Une seule pièce est reprise à notre compte** : le
+`dllmain.cpp` généré n'est **pas compilé** — nous fournissons notre propre
+`DllMain` (`src/Specter.Internal/entry.cpp`) pour maîtriser le comportement
+d'entrée (voir « Injection, threads et discrétion »). On ne modifie donc rien
+sous `generated/` : on cesse simplement de dépendre de son point d'entrée.
 
 ---
 
@@ -58,8 +60,7 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 
 | Fichier | Rôle | Nature |
 |---|---|---|
-| `main.h` | déclare `Run()` (nom exigé par `framework/dllmain.cpp`) | seam avec le scaffold |
-| `entry.cpp` | définit `Run()` + `LOG_FILE`, délègue à `specter::start()` | adaptateur (fin, sans logique) |
+| `entry.cpp` | possède `DllMain` + `LOG_FILE`, appelle `specter::start()` inline | adaptateur (point d'entrée, sans logique) |
 | `specter.{h,cpp}` | l'interface du produit | module profond |
 | `runtime.{h,cpp}` | localise `GameAssembly.dll`, résout l'API IL2CPP | seam interne |
 | `log.{h,cpp}` | journalisation : pipe hôte, repli fichier | seam interne (2 adaptateurs) |
@@ -125,6 +126,51 @@ DLL (sinon la FIFO n'existe pas et la DLL reste sur le repli fichier).
 
 ---
 
+## Injection, threads et discrétion
+
+L'injection se fait avec **wine-hostch** :
+
+```
+hostch.py map --pe Specter.Internal.dll --dllmain --hide-system
+```
+
+- le PE est **manual-mappé** : zéro PEB/Ldr, le DLL n'apparaît dans **aucune**
+  liste de modules ;
+- le thread qui exécute `DllMain` est un thread Wine **canonique**, créé par le
+  `NtCreateThreadEx` **du guest** (pas de ptrace), et marqué `is_system` **côté
+  serveur** → **invisible** de toute énumération de threads côté jeu.
+
+D'où une règle d'architecture :
+
+> **Ne jamais appeler `CreateThread` depuis la DLL.**
+
+Un `CreateThread` produirait un thread **visible** dont l'adresse de départ
+pointe dans la mémoire manual-mappée — le signal d'anti-cheat typique « *thread
+dont l'adresse de départ n'appartient à aucun module connu* ». Il annulerait la
+discrétion que l'injecteur procure.
+
+Conséquence concrète : notre `DllMain` (`entry.cpp`) exécute `specter::start()`
+**inline**, sur le thread caché de l'injecteur, et **ne crée aucun thread** —
+c'est pourquoi le `framework/dllmain.cpp` généré (qui fait un `CreateThread`)
+n'est pas compilé. C'est suffisant pour le périmètre actuel (logs courts,
+compatibles avec le loader lock).
+
+### Workers persistants (à venir)
+
+Dès qu'une fonctionnalité demandera une **boucle** ou un **dispatcher de hooks**
+persistant, le worker devra être créé **côté hôte via hostch** :
+
+```
+hostch.py ct <base+RVA entrée worker> --hide-system
+```
+
+et **non** depuis la DLL. C'est le seul moyen de garder le thread `is_system`.
+(`base` est renvoyé par `map` ; l'entrée worker est exposée par notre payload.)
+Tant que la première fonctionnalité n'existe pas, on n'introduit **aucun** module
+`worker` — et il ne devra jamais encapsuler un simple `CreateThread`.
+
+---
+
 ## Contrainte structurante : aucun `il2cpp_*` exporté
 
 `GameAssembly.dll` exporte 390 fonctions, **zéro** en `il2cpp_*` (retirées par
@@ -164,7 +210,7 @@ tools/                     pipeline RE (langage hôte : Python + bash)  ── m
 
 generated/                 entrée — produite par dump.sh, jamais éditée
   sdk/appdata/               SDK C++ (types + offsets de méthodes)
-  sdk/framework/             scaffold d'injection (dllmain, init, helpers, pch)
+  sdk/framework/             scaffold d'injection (init, helpers, pch ; dllmain non compilé)
   dump/                      dump.cs, il2cpp.py, metadata.json
   shims/                     assemblies .NET
   input/                     liens vers le jeu + metadata déchiffrée
