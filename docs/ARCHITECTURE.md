@@ -62,7 +62,8 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 |---|---|---|
 | `entry.cpp` | possède `DllMain` + `LOG_FILE`, lance le worker caché via `nt::spawn_hidden()` | adaptateur (point d'entrée, sans logique) |
 | `specter.{h,cpp}` | l'interface du produit | module profond |
-| `runtime.{h,cpp}` | localise `GameAssembly.dll`, résout l'API IL2CPP | seam interne |
+| `runtime.{h,cpp}` | localise `GameAssembly.dll`, orchestre l'init + `self_check()` | seam interne |
+| `il2cpp-api.{h,cpp}` | résout l'API du VM : noms `mono_*` vérifiés corps à corps | seam interne |
 | `nt.{h,cpp}` | pont NT/hostch : `spawn_hidden()` → `HostchSpawnThread` | adaptateur (fork) |
 | `hostch-rva.h` | RVA bakée du point d'entrée `HostchSpawnThread` | généré par le build |
 | `log.{h,cpp}` | journalisation : pipe hôte, repli fichier | seam interne (2 adaptateurs) |
@@ -72,10 +73,12 @@ réapparaîtrait dans chaque point d'entrée. Le module gagne donc sa place.
 Un seam se justifie quand **au moins deux adaptateurs** existent de part et
 d'autre. Ici, « comment obtenir l'API IL2CPP » varie réellement :
 
-1. **scan de motifs** (signature/motif scanning dans `GameAssembly.dll`) — la
-   seule voie pour les `il2cpp_*` non exportés ;
-2. **table d'offsets statique** dérivée du SDK ;
-3. (à terme) un **faux** en test, où l'API est fournie en mémoire.
+1. **résolution par exports** (`mono_*` vérifiés corps à corps via
+   `GetProcAddress`) — la voie actuelle, voir `il2cpp-api.{h,cpp}` ;
+2. **scan de motifs** (signature/motif scanning dans `GameAssembly.dll`) — la
+   voie de repli pour une fonction du VM qui ne serait pas exportée ;
+3. **table d'offsets statique** dérivée du SDK ;
+4. (à terme) un **faux** en test, où l'API est fournie en mémoire.
 
 Le reste du code appelle `runtime::initialize()` / `runtime::module_base()` sans
 savoir laquelle est active. Les offsets **par méthode** de
@@ -190,19 +193,57 @@ CRT par-thread (`_CRT_INIT((HMODULE)&__ImageBase, DLL_THREAD_ATTACH, nullptr)`).
 
 ---
 
-## Contrainte structurante : aucun `il2cpp_*` exporté
+## Contrainte structurante : pas d'`il2cpp_*` exporté
 
-`GameAssembly.dll` exporte 390 fonctions, **zéro** en `il2cpp_*` (retirées par
-NetEase Protect 2). Conséquences directes sur l'architecture :
+`GameAssembly.dll` exporte 390 fonctions, **zéro** en `il2cpp_*` (renommées par
+NetEase Protect 2). Ce que c'est vraiment, une fois la table d'export lue :
+
+- `118` noms `mono_*` — la couche de compat Mono du VM (une partie de l'API) ;
+- `245` noms obfusqués `i…` — le reste de l'API il2cpp, renommé ;
+- le reste (~27) : Brotli et divers symboles tiers ;
+- les **noms de symboles** `il2cpp_*` ont été retirés du binaire (0 hit en
+  strings), et les exports `mono_*` qui concernent l'API ne sont **pas** la
+  liste canonique : certains nomments sont **aliasés** arbitrairement.
+
+Conséquences sur l'architecture :
 
 - `generated/sdk/appdata/il2cpp-api-functions.h` est **vide** ;
-- le template d'origine qui appelle `il2cpp_thread_attach(il2cpp_domain_get())`
-  **ne compile pas** (symboles absents) — `entry.cpp` ne l'appelle donc pas ;
-- toute la résolution de l'API est **concentrée** dans `runtime`, précisément
-  pour que le reste du code n'ait jamais à s'en soucier.
+- aucune résolution par nom `il2cpp_*` (GetProcAddress / import) n'est possible ;
+- la résolution de l'API est **concentrée** dans `api/` (`il2cpp-api.{h,cpp}`)
+  + `runtime`, pour que le reste du code n'ait jamais à s'en soucier.
 
-C'est le principal travail à venir : implémenter le scan de motifs derrière
-`runtime::initialize()`.
+### Résolution de l'API : export `mono_*` vérifiés corps à corps
+
+Pas de scan de motifs : les fonctions du VM existent, elles sont simplement
+exportées autrement. On résout donc les noms `mono_*` par `GetProcAddress`, en
+ne retenant QUE des fonctions dont le **corps a été décompilé et vérifié** sur
+le vrai binaire (IDA, base `0x180000000`). Ce que la vérification a établi :
+
+- **Vrais accesseurs** (corps distincts, offsets cohérents avec les structs) :
+  `mono_string_length` lit `Il2CppString.length` @+16, `mono_string_chars`
+  renvoie @+20, `mono_image_get_name` lit `Il2CppImage.name` @+0,
+  `mono_image_get_assembly` @+16, `mono_method_get_name` @+24 (MethodInfo),
+  `mono_method_get_class` @+32 (MethodInfo.klass).
+- **Pièges — clusters d'alias vers des stubs inertes** : plusieurs noms
+  partagent le même corps, parfois **vide** (`mono_field_set_value`,
+  `mono_arch_*` → corps vide) ou **`return 0`** (`mono_array_length`,
+  `mono_jit_info_get_method`, …). **Ne jamais appeler** un nom du cluster sans
+  vérifier son corps.
+- **Piège — noms trompeurs** : `mono_class_get_flags` lit un `uint32` à +88
+  (layout runtime ≠ layout SDK) ; ne pas déduire la sémantique du nom seul.
+- **Refactor Unity 2023.2** : `Il2CppClass` a déplacé `name`/`namespace`/
+  `methods` dans un bloc opaque pointé à `class+80`. Le layout SDK généré ne
+  correspond **pas** au layout runtime pour cette structure : ne jamais
+  parcourir les champs d'`Il2CppClass` directement ici, passer par les
+  accesseurs `mono_*` vérifiés.
+
+Ajouter une fonction à l'API = 1) décompiler son corps, 2) confirmer que ce
+n'est ni un stub du cluster, ni un accesseur au mauvais offset, 3) l'ajouter à
+`il2cpp-api.h` (names + `Table`) et au `bind` de `il2cpp-api.cpp`.
+
+`runtime::initialize()` appelle `api::resolve()` ; `runtime::self_check()`
+(première fonctionnalité) prouve l'API depuis l'intérieur du process : round
+trip de string managée, énumération des assemblies, introspection de classe.
 
 ---
 

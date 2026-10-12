@@ -43,6 +43,7 @@
     <ClCompile Include="entry.cpp" />
     <ClCompile Include="specter.cpp" />
     <ClCompile Include="runtime.cpp" />
+    <ClCompile Include="il2cpp-api.cpp" />
     <ClCompile Include="nt.cpp" />
     <ClCompile Include="log.cpp" />
   </ItemGroup>
@@ -60,6 +61,7 @@
     <ClInclude Include="..\..\generated\sdk\framework\pch-il2cpp.h" />
     <ClInclude Include="specter.h" />
     <ClInclude Include="runtime.h" />
+    <ClInclude Include="il2cpp-api.h" />
     <ClInclude Include="nt.h" />
     <ClInclude Include="hostch-rva.h" />
     <ClInclude Include="log.h" />

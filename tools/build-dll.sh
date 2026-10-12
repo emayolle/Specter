@@ -64,6 +64,7 @@ for spec in \
   "$SRC/entry.cpp:entry" \
   "$SRC/specter.cpp:specter" \
   "$SRC/runtime.cpp:runtime" \
+  "$SRC/il2cpp-api.cpp:il2cpp-api" \
   "$SRC/nt.cpp:nt" \
   "$SRC/log.cpp:log"; do
   src="${spec%:*}"; name="${spec##*:}"

@@ -17,6 +17,9 @@ bool start()
         return false;
     }
 
+    // First feature: prove the resolved VM API from inside the process.
+    runtime::self_check();
+
     log::info("attached");
 
     // TODO: install hooks and register features.
