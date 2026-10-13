@@ -22,9 +22,9 @@ local CHEST_CONFIG = 10506  -- markConfigId "Coffre"
 local MAX_LIST   = 40       -- lignes imprimées au plus
 local INTERACT_TYPE = 1     -- interactionType du coffre (actif / ENT_FUNC)
 local TRY_SECONDS = 5       -- fenêtre pour trouver l'entité + son unité
-local WAIT_AFTER_TP = 0.2   -- s, à attendre APRÈS le TP avant d'interagir
-local CHAIN_OPENS = 3       -- nb de coffres à ouvrir par exécution (0 = tout)
-local BREATH = 0.6          -- s, pause entre deux ouvertures
+local WAIT_AFTER_TP = 0.8  -- s, à attendre APRÈS le TP avant d'interagir
+local CHAIN_OPENS = 10       -- nb de coffres à ouvrir par exécution (0 = tout)
+local BREATH = 1.6          -- s, pause entre deux ouvertures
 local OPEN_ENABLED = true   -- false = TP seulement (vers le plus proche)
 
 -- Usage : tools/lua.sh -f scripts/chest-open.lua   (En jeu uniquement)
