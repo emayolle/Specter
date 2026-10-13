@@ -28,6 +28,7 @@ plupart des scripts ont leurs réglages dans des constantes en tête de fichier)
 | `marks-dump.lua` | positions d'une famille (coffres, cristaux, floraisons, ambre, éco…) |
 | `chests.lua` | les coffres : marques monde + entités vivantes, corrélées |
 | `chest-tp.lua` | coffres **non ouverts** (liste) **+ TP lerp vers le plus proche** |
+| `chest-open.lua` | coffre **non ouvert** le plus proche : TP lerp **puis ouverture automatique** (interaction) |
 | `entities-classes.lua` | **combien de chaque type** (entités vivantes par classe) |
 | `entities-near.lua` | qu'y a-t-il autour de moi (rayon réglable) |
 | `entity-dump.lua` | tous les champs d'une entité (joueur / plus proche / par classe) |
@@ -58,7 +59,9 @@ TOTAL=<n> / TOTAL_MARKS=<n> / TOTAL_LIVE=<n>
 | marques de scène | `require('Common.Utils.SceneUtils').getSceneMarkPointData(sceneId)` |
 | champs d'une marque | `markConfigId`, `markType`, `markPosition` `{x,y,z}`, `largeAreaId`, `infoTitle` |
 | nom localisé | `require('Utils.ClientTextUtils').getLocalizationText(textId)` |
-| **coffres non ouverts** | l'état n'est *pas* dans les marques (toutes `activeState=2`) : les ids des marques disponibles sont dans `pg.game.map.markUnlocker.unlockChunkMap` (par chunk, autour du joueur). Vérifié : 749 marques Coffre en 3000, 40 déverrouillées, et tous les `ClientChest` vivants y sont. |
+| **coffres non ouverts** | l'état n'est *pas* dans les marques (toutes `activeState=2`) : les ids des marques disponibles sont dans `pg.game.map.markUnlocker.unlockChunkMap` (par chunk, autour du joueur). Vérifié : 749 marques Coffre en 3000, 40 déverrouillées, et tous les `ClientChest` vivants y sont. ⚠️ ce registre n'est **pas** purgé en temps réel après ouverture — l'entité vivante absente est le signal fiable. |
+| **ouvrir un coffre** | interaction = chemin de la touche F : unité d'interaction du coffre dans `pg.game.interaction.unitMap[1]` (type 1, `actionPrototypeId` = 59, `globalId` = l'`id` de l'entité), puis `pg.game.interaction:doUnitInteractive(unit)`. Le serveur valide → le coffre s'ouvre (l'entité disparaît, la récompense tombe). Précondition lisible : `unit:canInteractive(pg.me)`. Vérifié : cochée par script TP→open, l'entité cible disparaît. |
+| config interaction | `Data.interact_data[59]` : `type=1`, `interactiveDist=2`, `startAnim=Kick`, `actionTime=1.2`, `actCooldown=5` |
 
 ### `markConfigId` connus (scènes 3000 / 3003, valeurs live)
 
