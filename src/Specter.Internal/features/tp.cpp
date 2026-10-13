@@ -93,7 +93,6 @@ struct Floraison
 };
 
 std::vector<Floraison> g_flora;
-bool g_flora_pending = false;
 // Accumulates "F ..." lines of the result currently being parsed; committed to
 // g_flora when the terminating marker arrives.
 std::vector<Floraison> g_flora_tmp;
@@ -110,8 +109,13 @@ struct Waypoint
 };
 
 std::vector<Waypoint> g_wp;
-bool g_wp_pending = false;
+// Accumulates "W ..." lines of the result currently being parsed; committed to
+// g_wp when the terminating marker arrives.
 std::vector<Waypoint> g_wp_tmp;
+
+// One scan produces both lists (the TP channel keeps a single result buffer),
+// so a single "busy" flag drives the UI spinner.
+bool g_marks_pending = false;
 
 void write_slots()
 {
@@ -475,56 +479,17 @@ bool send_setpos(float x, float y, float z)
     return features::lua::tp_submit(code, n);
 }
 
-// Builds and queues the Floraison scan. It asks SceneUtils for the mark data of
-// the open-world scenes and prints one "F <zone> <x> <y> <z>" line per Leyline
-// Flower mark (markType 26), then "FLORA_DONE". handle_result() parses it. The
-// scan is bounded to a handful of scenes, so it returns within a frame.
-bool send_flora_probe()
+// Builds and queues one scan for both fast-travel lists. It walks the
+// open-world scenes once, printing a "F <zone> <x> <y> <z>" line per Leyline
+// Flower (markType 26) and a "W <zone> <x> <y> <z> <name>" line per
+// Teleportation Array crystal (markConfigId 10406), then "MARKS_DONE".
+// handle_result() parses it. Doing both in one chunk matters: the TP channel
+// keeps a single result buffer, so two queued probes would clobber each other.
+// The scan is bounded to a handful of scenes, so it returns within a frame.
+bool send_marks_probe()
 {
     std::string code;
-    code.reserve(1024);
-    code +=
-        "local SU=require('Common.Utils.SceneUtils')\n"
-        "local e=pg.me\n"
-        "local set={}\n"
-        "local function add(s) if s and s>100 then set[s]=true end end\n"
-        "if e and e.sceneId then add(e.sceneId) end\n"
-        "local m=pg.game and pg.game.map\n"
-        "if m then add(m.sceneId) add(m.mainSceneId) end\n";
-    for (int sid : kWorldScenes) {
-        code += "add(";
-        code += std::to_string(sid);
-        code += ")\n";
-    }
-    code +=
-        "local seen={}\n"
-        "for sid in pairs(set) do\n"
-        "  local ok,pts=pcall(SU.getSceneMarkPointData,sid)\n"
-        "  if ok and type(pts)=='table' then\n"
-        "    for id,p in pairs(pts) do\n"
-        "      if p.markType==26 then\n"
-        "        local mp=p.markPosition\n"
-        "        if mp and not seen[id] then\n"
-        "          seen[id]=true\n"
-        "          print(string.format('F %d %.2f %.2f %.2f',"
-        "p.largeAreaId or 0,mp[1],mp[2],mp[3]))\n"
-        "        end\n"
-        "      end\n"
-        "    end\n"
-        "  end\n"
-        "end\n"
-        "print('FLORA_DONE')\n";
-    return features::lua::tp_submit(code.c_str(), static_cast<int>(code.size()));
-}
-
-// Same scheme for the crystals: prints "W <zone> <x> <y> <z> <name>" per
-// Teleportation Array mark (markConfigId 10406), then "WP_DONE". The name is
-// resolved through the client text table and printed last (it may contain
-// spaces).
-bool send_wp_probe()
-{
-    std::string code;
-    code.reserve(1400);
+    code.reserve(1800);
     code +=
         "local SU=require('Common.Utils.SceneUtils')\n"
         "local CTU=require('Utils.ClientTextUtils')\n"
@@ -545,13 +510,19 @@ bool send_wp_probe()
         "  local ok,pts=pcall(SU.getSceneMarkPointData,sid)\n"
         "  if ok and type(pts)=='table' then\n"
         "    for id,p in pairs(pts) do\n"
-        "      if p.markConfigId==";
+        "      if seen[id] then\n"
+        "      elseif p.markType==26 then\n"
+        "        seen[id]=true\n"
+        "        local mp=p.markPosition\n"
+        "        if mp then print(string.format('F %d %.2f %.2f %.2f',"
+        "p.largeAreaId or 0,mp[1],mp[2],mp[3])) end\n"
+        "      elseif p.markConfigId==";
     code += std::to_string(kWpMarkConfig);
     code +=
         " then\n"
+        "        seen[id]=true\n"
         "        local mp=p.markPosition\n"
-        "        if mp and not seen[id] then\n"
-        "          seen[id]=true\n"
+        "        if mp then\n"
         "          local nm=''\n"
         "          if p.infoTitle then\n"
         "            local o,t=pcall(CTU.getLocalizationText,p.infoTitle)\n"
@@ -565,7 +536,7 @@ bool send_wp_probe()
         "    end\n"
         "  end\n"
         "end\n"
-        "print('WP_DONE')\n";
+        "print('MARKS_DONE')\n";
     return features::lua::tp_submit(code.c_str(), static_cast<int>(code.size()));
 }
 
@@ -682,10 +653,9 @@ void handle_result(const char* text)
         return;
     }
     // One result may hold several lines: a position ("P x y z space"), a
-    // Floraison scan ("F <zone> <x> <y> <z>" lines ending in "FLORA_DONE"), a
-    // waypoint scan ("W <zone> <x> <y> <z> <name>" lines ending in "WP_DONE"),
-    // or an error. Handle each line on its own so the probes can share the
-    // buffer.
+    // fast-travel scan (a run of "F <zone> <x> <y> <z>" and
+    // "W <zone> <x> <y> <z> <name>" lines ending in "MARKS_DONE"), or an error.
+    // Handle each line on its own so the probes can share the buffer.
     const char* p = text;
     while (*p) {
         const char* eol = std::strchr(p, '\n');
@@ -729,31 +699,31 @@ void handle_result(const char* text)
                 w.name[nl] = '\0';
                 g_wp_tmp.push_back(w);
             }
-        } else if (std::strncmp(p, "FLORA_DONE", 10) == 0) {
+        } else if (std::strncmp(p, "MARKS_DONE", 10) == 0) {
+            // The scan only reports what it found, so keep the cached list if
+            // one of the two came back empty (e.g. the player is in a scene
+            // without marks yet): never wipe good data with a partial answer.
             if (!g_flora_tmp.empty()) {
                 sort_flora(g_flora_tmp);
                 g_flora = g_flora_tmp;
                 write_floraisons();
-                log::info("tp: %d Floraison(s) fetched from the game",
-                          static_cast<int>(g_flora.size()));
             }
-            g_flora_tmp.clear();
-            g_flora_pending = false;
-        } else if (std::strncmp(p, "WP_DONE", 7) == 0) {
             if (!g_wp_tmp.empty()) {
                 sort_waypoints(g_wp_tmp);
                 g_wp = g_wp_tmp;
                 write_waypoints();
-                log::info("tp: %d waypoint(s) fetched from the game",
-                          static_cast<int>(g_wp.size()));
             }
+            log::info(
+                "tp: fetched %d Floraison(s) and %d waypoint(s) from the game",
+                static_cast<int>(g_flora.size()),
+                static_cast<int>(g_wp.size()));
+            g_flora_tmp.clear();
             g_wp_tmp.clear();
-            g_wp_pending = false;
+            g_marks_pending = false;
         } else if (std::strncmp(p, "ERROR", 5) == 0) {
             g_flora_tmp.clear();
             g_wp_tmp.clear();
-            g_flora_pending = false;
-            g_wp_pending = false;
+            g_marks_pending = false;
         } else {
             float x = 0.0f, y = 0.0f, z = 0.0f;
             int sp = 1;
@@ -859,19 +829,20 @@ void get_slot(int idx, char* name, int cap, float* x, float* y, float* z)
     }
 }
 
-void request_floraisons()
+void request_marks()
 {
     g_flora_tmp.clear();
-    if (send_flora_probe()) {
-        g_flora_pending = true;
+    g_wp_tmp.clear();
+    if (send_marks_probe()) {
+        g_marks_pending = true;
     } else {
-        log::error("tp: can't request Floraisons (bridge not ready)");
+        log::error("tp: can't request the fast-travel lists (bridge not ready)");
     }
 }
 
-bool floraisons_pending()
+bool marks_pending()
 {
-    return g_flora_pending;
+    return g_marks_pending;
 }
 
 int floraison_count()
@@ -912,21 +883,6 @@ bool teleport_to_floraison(int idx)
               static_cast<double>(f.x), static_cast<double>(f.y),
               static_cast<double>(f.z));
     return true;
-}
-
-void request_waypoints()
-{
-    g_wp_tmp.clear();
-    if (send_wp_probe()) {
-        g_wp_pending = true;
-    } else {
-        log::error("tp: can't request waypoints (bridge not ready)");
-    }
-}
-
-bool waypoints_pending()
-{
-    return g_wp_pending;
 }
 
 int waypoint_count()

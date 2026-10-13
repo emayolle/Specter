@@ -122,8 +122,7 @@ std::string g_lua_log;
 
 bool g_tp_loaded = false;        // slot file loaded once, lazily
 int g_tp_refresh = 0;            // frame counter: throttle position polling
-bool g_tp_flora_auto = false;    // tried the one-shot Floraison auto-fetch
-bool g_wp_auto = false;          // tried the one-shot waypoint auto-fetch
+bool g_wp_auto = false;  // tried the one-shot fast-travel auto-fetch
 char g_tp_name[32] = "spot";
 
 // Keyboard sink: the window subclass forwards swallowed key/char messages here
@@ -594,59 +593,6 @@ void build_ui()
                     features::tp::lerp_step() * eff_speed, cap);
 
                 ImGui::Separator();
-                // One-shot: if no Floraison list is known (e.g. /tmp was wiped
-                // by a reboot), fetch it once the tab is opened.
-                if (!g_tp_flora_auto && features::tp::floraison_count() == 0 &&
-                    features::lua::ready()) {
-                    g_tp_flora_auto = true;
-                    features::tp::request_floraisons();
-                }
-                if (ImGui::CollapsingHeader("Floraisons (Leyline Flowers)")) {
-                    if (features::tp::floraisons_pending()) {
-                        ImGui::TextDisabled("scanning the game...");
-                    } else {
-                        ImGui::TextDisabled("%d zone(s)",
-                                            features::tp::floraison_count());
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Refresh from game")) {
-                        if (features::lua::ready()) {
-                            features::tp::request_floraisons();
-                        } else {
-                            g_lua_log += "! tp: bridge not ready\n";
-                        }
-                    }
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip(
-                            "Re-reads every zone's Leyline Flower (Floraison) "
-                            "position from the game's scene data. The list is "
-                            "cached in /tmp/specter-floraisons.json.");
-                    }
-                    ImGui::BeginChild("##tp_flora", ImVec2(-1.0f, 150.0f), true);
-                    if (features::tp::floraison_count() == 0) {
-                        ImGui::TextDisabled(
-                            "no Floraison yet - press Refresh once in-world");
-                    }
-                    for (int i = 0; i < features::tp::floraison_count(); ++i) {
-                        int zone = 0;
-                        float fx = 0.0f, fy = 0.0f, fz = 0.0f;
-                        features::tp::get_floraison(i, &zone, &fx, &fy, &fz);
-                        ImGui::PushID(100000 + i);
-                        ImGui::Text("Zone %d", zone);
-                        ImGui::SameLine();
-                        ImGui::TextDisabled("(%.1f, %.1f, %.1f)", fx, fy, fz);
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton("Teleport")) {
-                            if (!features::tp::teleport_to_floraison(i)) {
-                                g_lua_log += "! tp: bridge not ready\n";
-                            }
-                        }
-                        ImGui::PopID();
-                    }
-                    ImGui::EndChild();
-                }
-
-                ImGui::Separator();
                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
                 if (features::tp::count() == 0) {
                     ImGui::TextDisabled("no saved positions yet");
@@ -683,62 +629,124 @@ void build_ui()
             }
 
             if (ImGui::BeginTabItem("Waypoints")) {
-                // One-shot fetch if the cached list is missing (e.g. /tmp was
-                // wiped by a reboot).
-                if (!g_wp_auto && features::tp::waypoint_count() == 0 &&
+                const int nflora = features::tp::floraison_count();
+                const int nwp = features::tp::waypoint_count();
+                // One-shot fetch if a cached list is missing (e.g. /tmp was
+                // wiped by a reboot). Both lists come from the same scan.
+                if (!g_wp_auto && (nflora == 0 || nwp == 0) &&
                     features::lua::ready()) {
                     g_wp_auto = true;
-                    features::tp::request_waypoints();
+                    features::tp::request_marks();
                 }
-                if (features::tp::waypoints_pending()) {
+
+                // Merge the Floraisons and the crystals, grouped by zone.
+                int zones[128];
+                int nz = 0;
+                auto add_zone = [&](int z) {
+                    for (int k = 0; k < nz; ++k) {
+                        if (zones[k] == z) {
+                            return;
+                        }
+                    }
+                    if (nz < static_cast<int>(sizeof(zones) /
+                                              sizeof(zones[0]))) {
+                        zones[nz++] = z;
+                    }
+                };
+                for (int i = 0; i < nflora; ++i) {
+                    int z = 0;
+                    features::tp::get_floraison(i, &z, nullptr, nullptr,
+                                                nullptr);
+                    add_zone(z);
+                }
+                for (int i = 0; i < nwp; ++i) {
+                    int z = 0;
+                    features::tp::get_waypoint(i, &z, nullptr, 0, nullptr,
+                                               nullptr, nullptr);
+                    add_zone(z);
+                }
+                for (int i = 1; i < nz; ++i) {  // insertion sort, ascending
+                    const int k = zones[i];
+                    int j = i;
+                    while (j > 0 && zones[j - 1] > k) {
+                        zones[j] = zones[j - 1];
+                        --j;
+                    }
+                    zones[j] = k;
+                }
+
+                if (features::tp::marks_pending()) {
                     ImGui::TextDisabled("scanning the game...");
                 } else {
-                    ImGui::TextDisabled("%d waypoint(s)",
-                                        features::tp::waypoint_count());
+                    ImGui::TextDisabled(
+                        "%d zone(s): %d Floraison(s), %d waypoint(s)", nz,
+                        nflora, nwp);
                 }
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Refresh from game")) {
                     if (features::lua::ready()) {
-                        features::tp::request_waypoints();
+                        features::tp::request_marks();
                     } else {
                         g_lua_log += "! tp: bridge not ready\n";
                     }
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(
-                        "Re-reads every Teleportation Array crystal (the ones "
-                        "that reveal the map) from the game's scene data. The "
-                        "list is cached in /tmp/specter-waypoints.json.");
+                        "Re-reads every zone's Leyline Flower (Floraison) and "
+                        "every Teleportation Array crystal from the game's "
+                        "scene data. Cached in /tmp/specter-floraisons.json "
+                        "and /tmp/specter-waypoints.json.");
                 }
                 ImGui::Separator();
                 ImGui::BeginChild("##wp_list", ImVec2(-1.0f, -1.0f), true);
-                if (features::tp::waypoint_count() == 0) {
+                if (nz == 0) {
                     ImGui::TextDisabled(
-                        "no waypoint yet - press Refresh once in-world");
+                        "nothing yet - press Refresh once in-world");
                 }
-                int last_zone = -1;
-                for (int i = 0; i < features::tp::waypoint_count(); ++i) {
-                    int zone = 0;
-                    char nm[64] = {};
-                    float wx = 0.0f, wy = 0.0f, wz = 0.0f;
-                    features::tp::get_waypoint(i, &zone, nm, sizeof(nm), &wx,
-                                               &wy, &wz);
-                    ImGui::PushID(200000 + i);
-                    if (zone != last_zone) {
-                        last_zone = zone;
-                        ImGui::Separator();
-                        ImGui::TextDisabled("Zone %d", zone);
-                    }
-                    ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(%.1f, %.1f, %.1f)", wx, wy, wz);
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Teleport")) {
-                        if (!features::tp::teleport_to_waypoint(i)) {
-                            g_lua_log += "! tp: bridge not ready\n";
+                for (int zi = 0; zi < nz; ++zi) {
+                    const int zone = zones[zi];
+                    ImGui::Separator();
+                    ImGui::TextDisabled("Zone %d", zone);
+                    for (int i = 0; i < nflora; ++i) {
+                        int z = 0;
+                        float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+                        features::tp::get_floraison(i, &z, &fx, &fy, &fz);
+                        if (z != zone) {
+                            continue;
                         }
+                        ImGui::PushID(100000 + i);
+                        ImGui::TextUnformatted("Floraison");
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(%.1f, %.1f, %.1f)", fx, fy, fz);
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Teleport")) {
+                            if (!features::tp::teleport_to_floraison(i)) {
+                                g_lua_log += "! tp: bridge not ready\n";
+                            }
+                        }
+                        ImGui::PopID();
                     }
-                    ImGui::PopID();
+                    for (int i = 0; i < nwp; ++i) {
+                        int z = 0;
+                        char nm[64] = {};
+                        float wx = 0.0f, wy = 0.0f, wz = 0.0f;
+                        features::tp::get_waypoint(i, &z, nm, sizeof(nm), &wx,
+                                                   &wy, &wz);
+                        if (z != zone) {
+                            continue;
+                        }
+                        ImGui::PushID(200000 + i);
+                        ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(%.1f, %.1f, %.1f)", wx, wy, wz);
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Teleport")) {
+                            if (!features::tp::teleport_to_waypoint(i)) {
+                                g_lua_log += "! tp: bridge not ready\n";
+                            }
+                        }
+                        ImGui::PopID();
+                    }
                 }
                 ImGui::EndChild();
                 ImGui::EndTabItem();

@@ -53,22 +53,34 @@ int count();
 // Copy the i-th slot out (name is sanitized; coords are the saved ones).
 void get_slot(int idx, char* name, int cap, float* x, float* y, float* z);
 
-// --- Floraisons (Leyline Flowers) -------------------------------------------
+// --- Fast-travel marks (Floraisons + crystals) ------------------------------
 //
-// Every zone (a "large area") has one Leyline Flower, drawn on the map as a
-// "Floraison" (the Nourish / Enrichissement fast-travel flower). The game tags
-// them in its per-scene mark data as markType 26, and their world position is
-// the mark's markPosition. Reading them has to happen in the game's Lua, so it
-// goes through the same TP channel: request_floraisons() asks the game for the
-// list and handle_result() parses the answer. The list is also loaded from
-// /tmp/specter-floraisons.json at init().
+// Two families of map marks are exposed as one-click teleport targets:
+//
+//  * Floraisons (Leyline Flowers): every zone (a "large area") has one, drawn
+//    as the Nourish / Enrichissement fast-travel flower. Tagged in the game's
+//    per-scene mark data as markType 26.
+//  * Waypoints (Teleportation Array crystals): the in-world crystals that
+//    reveal the map and act as fast-travel points. Not a distinct markType
+//    (they share markType 0 with other marks) but carry markConfigId 10406
+//    (infoImage $UI_Img_Map_Preview_TeleportationArray.png, POIIcon
+//    $UI_Icon_POI_Explore_Transmit.png) and a localized infoTitle. Several can
+//    share a zone.
+//
+// Both come from the game's Lua, so the read goes through the same TP channel:
+// request_marks() scans the open-world scenes once and handle_result() parses
+// the answer. The two lists are also loaded at init(), from
+// /tmp/specter-floraisons.json and /tmp/specter-waypoints.json.
 
-// Queue a chunk that lists the Floraisons of the open-world scenes. The answer
-// arrives asynchronously as "F <zone> <x> <y> <z>" lines.
-void request_floraisons();
+// Queue a chunk that lists both families in one scan. The answer arrives
+// asynchronously as "F <zone> <x> <y> <z>" lines (Floraisons) and
+// "W <zone> <x> <y> <z> <name>" lines (crystals), terminated by "MARKS_DONE".
+// One scan on purpose: the TP channel keeps a single result buffer, so two
+// queued probes would clobber each other.
+void request_marks();
 
 // True while a scan has been requested but not answered yet.
-bool floraisons_pending();
+bool marks_pending();
 
 int floraison_count();
 // Copy the i-th Floraison (zone id + coords; any out pointer may be null).
@@ -76,19 +88,6 @@ void get_floraison(int idx, int* zone, float* x, float* y, float* z);
 // One-click teleport to the i-th Floraison. False if the bridge is down.
 bool teleport_to_floraison(int idx);
 
-// --- Waypoints (Teleportation Array crystals) -------------------------------
-//
-// The in-world "crystals" that reveal the map and act as fast-travel points.
-// They are not a distinct markType (they share markType 0 with other marks) but
-// carry markConfigId 10406 (infoImage $UI_Img_Map_Preview_TeleportationArray.png,
-// POIIcon $UI_Icon_POI_Explore_Transmit.png) and a localized infoTitle. Several
-// crystals can share a zone. Fetched the same way as the Floraisons, on the TP
-// channel, and cached in /tmp/specter-waypoints.json.
-
-// Queue a chunk that lists the crystals. The answer arrives asynchronously as
-// "W <zone> <x> <y> <z> <name>" lines.
-void request_waypoints();
-bool waypoints_pending();
 int waypoint_count();
 // Copy the i-th waypoint (zone id, localized name, coords; out pointers may be
 // null; name is truncated to cap including the terminator).

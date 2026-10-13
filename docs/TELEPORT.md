@@ -90,7 +90,17 @@ séparé par des espaces. Le fichier est relu au démarrage de l'overlay, donc l
 positions survivent à un changement de scène, un relog **et** un redémarrage du
 jeu (la DLL est ré-injectée à chaque lancement).
 
-## Floraisons (fleurs de veine)
+## Points de TP : onglet Waypoints (Floraisons + cristaux)
+
+L'onglet **Waypoints** du menu (SUPPR) regroupe toutes les cibles de TP nommées
+du monde, **classées par zone** :
+
+- les **Floraisons** (*Leyline Flower*), une par zone ;
+- les **cristaux** (« Teleportation Array »), plusieurs par zone.
+
+Chaque ligne a un bouton **Teleport** qui réutilise le lerp décrit plus haut.
+
+### Floraisons (fleurs de veine)
 
 Chaque **zone** (grande aire) possède une « Floraison » — la *Leyline Flower*,
 fleur de veine qui sert de point d'information / téléport régional (icône
@@ -98,87 +108,77 @@ fleur de veine qui sert de point d'information / téléport régional (icône
 l'**Enrichissement**). Une fois bourgeonnée elle attire un groupe d'Aniimo et
 fait grossir le « fruit de veine » en son centre.
 
-L'onglet **Teleport** contient une section **Floraisons (Leyline Flowers)** qui
-les liste (zone + coordonnées) avec un bouton **Teleport** par zone, réutilisant
-le lerp de TP ci-dessus.
-
 Source de vérité : les *mark points* de scène du jeu,
 `SceneUtils.getSceneMarkPointData(sceneId)` ; les Floraisons y portent
 `markType == 26` et exposent `markPosition` = `{x, y, z}` ainsi que
-`largeAreaId` = la zone. C'est un chunk du canal TP qui les lit :
+`largeAreaId` = la zone. Elles sortent sous la forme :
+
+```
+F <zone> <x> <y> <z>
+```
+
+### Cristaux (Teleportation Array)
+
+Les **cristaux** sont les points qui révèlent la carte et servent de TP,
+plusieurs par zone. Ils ne forment pas un `markType` à part — ils partagent
+`markType 0` avec d'autres marques — mais portent `markConfigId == 10406`
+(`infoImage $UI_Img_Map_Preview_TeleportationArray.png`,
+`POIIcon $UI_Icon_POI_Explore_Transmit.png`) et un `infoTitle` localisé. Le nom
+(dernier champ, il peut contenir des espaces) est résolu via
+`Utils.ClientTextUtils.getLocalizationText(infoTitle)` :
+
+```
+W <zone> <x> <y> <z> <nom>
+```
+
+### Le scan
+
+Les deux familles viennent d'**un seul chunk** du canal TP : il balaie chaque
+scène une fois, imprime les lignes `F …` puis `W …`, et termine par
+`MARKS_DONE` :
 
 ```lua
 local SU=require('Common.Utils.SceneUtils')
+local CTU=require('Utils.ClientTextUtils')
 for sid in pairs(set) do
   local ok,pts=pcall(SU.getSceneMarkPointData,sid)
   if ok and type(pts)=='table' then
     for id,p in pairs(pts) do
-      if p.markType==26 then
+      if seen[id] then
+      elseif p.markType==26 then
         local mp=p.markPosition
-        if mp then print(string.format('F %d %.2f %.2f %.2f',p.largeAreaId,mp[1],mp[2],mp[3])) end
+        if mp then print(string.format('F %d %.2f %.2f %.2f',p.largeAreaId or 0,mp[1],mp[2],mp[3])) end
+      elseif p.markConfigId==10406 then
+        local mp=p.markPosition
+        local o,t=pcall(CTU.getLocalizationText,p.infoTitle)
+        print(string.format('W %d %.2f %.2f %.2f %s',p.largeAreaId or 0,mp[1],mp[2],mp[3],o and t or ''))
       end
     end
   end
 end
-print('FLORA_DONE')
+print('MARKS_DONE')
 ```
 
-`set` regroupe la scène courante, la scène principale, et `3000`, `3003` (les
-scènes de monde ouvert connues). Balayer **toutes** les scènes est proscrit :
-`getSceneMarkPointData` coûte ~0,7 ms même pour une scène inexistante, soit
-~14 s sur toute la plage — le scan est donc borné à ces quelques scènes (≈ ms).
-État du jeu actuel : **14 Floraisons** dans le monde ouvert (scène `3000`, zones
-`20200`–`21500`) + **1** en scène `3003` (zone `21600`).
+Un **seul** chunk volontairement : le canal TP ne garde qu'un buffer de résultat,
+deux scans demandés coup sur coup s'écraseraient. `set` regroupe la scène
+courante, la scène principale, et `3000`, `3003` (les scènes de monde ouvert
+connues). Balayer **toutes** les scènes est proscrit : `getSceneMarkPointData`
+coûte ~0,7 ms même pour une scène inexistante, soit ~14 s sur toute la plage —
+le scan est donc borné à ces quelques scènes (≈ ms).
 
-La liste est persistée dans `/tmp/specter-floraisons.json`, une ligne par zone :
+État du jeu actuel : **15 Floraisons** (14 en scène `3000`, zones `20200`–`21500`
++ 1 en scène `3003`, zone `21600`) et **29 cristaux** (27 en scène `3000` +
+2 en scène `3003`), répartis sur 15 zones.
 
-```
-<zone> <x> <y> <z>
-```
+### Persistance
 
-Elle est relue au démarrage. Si le fichier manque (ex. `/tmp` vidé au reboot),
-le menu déclenche **une** récupération automatique à l'ouverture de l'onglet.
-Le bouton **Refresh from game** relit les positions à la demande et réécrit le
-fichier.
-
-## Waypoints (cristaux de téléportation)
-
-L'onglet **Waypoints** liste les **cristaux** du monde (« Teleportation Array ») :
-ce sont les points qui révèlent la carte et servent de point de TP, plusieurs
-par zone. Ils ne forment pas un `markType` à part — ils partagent `markType 0`
-avec d'autres marques — mais portent `markConfigId == 10406`
-(`infoImage $UI_Img_Map_Preview_TeleportationArray.png`,
-`POIIcon $UI_Icon_POI_Explore_Transmit.png`) et un `infoTitle` localisé.
-
-Le scan (mêmes scènes que les Floraisons) imprime une ligne
-`W <zone> <x> <y> <z> <nom>` par cristal, terminée par `WP_DONE`. Le nom
-(dernier champ, il peut contenir des espaces) est résolu via
-`Utils.ClientTextUtils.getLocalizationText(infoTitle)` :
-
-```lua
-local CTU=require('Utils.ClientTextUtils')
-...
-if p.markConfigId==10406 then
-  local mp=p.markPosition
-  local nm=''
-  if p.infoTitle then
-    local o,t=pcall(CTU.getLocalizationText,p.infoTitle)
-    if o and t then nm=tostring(t) end
-  end
-  print(string.format('W %d %.2f %.2f %.2f %s',p.largeAreaId or 0,mp[1],mp[2],mp[3],nm))
-end
-```
-
-État du jeu actuel : **27** cristaux en scène `3000` (zones `20200`–`21500`) +
-**2** en scène `3003` (zone `21600`), soit **29** au total. Liste persistée dans
-`/tmp/specter-waypoints.json`, une ligne par cristal :
-
-```
-<zone> <x> <y> <z> <nom>
-```
-
-Même logique que les Floraisons : relue au démarrage, récupérée une fois si le
-fichier manque, et **Refresh from game** pour relire à la demande.
+Les deux listes sont persistées séparément, une ligne par point : les Floraisons
+dans `/tmp/specter-floraisons.json` (`<zone> <x> <y> <z>`), les cristaux dans
+`/tmp/specter-waypoints.json` (`<zone> <x> <y> <z> <nom>`). Elles sont relues au
+démarrage ; si l'une manque (ex. `/tmp` vidé au reboot), le menu déclenche **une**
+récupération automatique à l'ouverture de l'onglet. Le bouton **Refresh from
+game** relit tout à la demande (un seul scan) et réécrit les deux fichiers. Un
+scan qui ne rapporte rien (scène sans marque) ne remplace pas la liste en cache.
 
 ## Limites connues
 
