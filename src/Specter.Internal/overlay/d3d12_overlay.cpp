@@ -123,6 +123,7 @@ std::string g_lua_log;
 bool g_tp_loaded = false;        // slot file loaded once, lazily
 int g_tp_refresh = 0;            // frame counter: throttle position polling
 bool g_tp_flora_auto = false;    // tried the one-shot Floraison auto-fetch
+bool g_wp_auto = false;          // tried the one-shot waypoint auto-fetch
 char g_tp_name[32] = "spot";
 
 // Keyboard sink: the window subclass forwards swallowed key/char messages here
@@ -678,6 +679,68 @@ void build_ui()
                         "server accepts the move; slots persist in "
                         "/tmp/specter-tp.json.");
                 }
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Waypoints")) {
+                // One-shot fetch if the cached list is missing (e.g. /tmp was
+                // wiped by a reboot).
+                if (!g_wp_auto && features::tp::waypoint_count() == 0 &&
+                    features::lua::ready()) {
+                    g_wp_auto = true;
+                    features::tp::request_waypoints();
+                }
+                if (features::tp::waypoints_pending()) {
+                    ImGui::TextDisabled("scanning the game...");
+                } else {
+                    ImGui::TextDisabled("%d waypoint(s)",
+                                        features::tp::waypoint_count());
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Refresh from game")) {
+                    if (features::lua::ready()) {
+                        features::tp::request_waypoints();
+                    } else {
+                        g_lua_log += "! tp: bridge not ready\n";
+                    }
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "Re-reads every Teleportation Array crystal (the ones "
+                        "that reveal the map) from the game's scene data. The "
+                        "list is cached in /tmp/specter-waypoints.json.");
+                }
+                ImGui::Separator();
+                ImGui::BeginChild("##wp_list", ImVec2(-1.0f, -1.0f), true);
+                if (features::tp::waypoint_count() == 0) {
+                    ImGui::TextDisabled(
+                        "no waypoint yet - press Refresh once in-world");
+                }
+                int last_zone = -1;
+                for (int i = 0; i < features::tp::waypoint_count(); ++i) {
+                    int zone = 0;
+                    char nm[64] = {};
+                    float wx = 0.0f, wy = 0.0f, wz = 0.0f;
+                    features::tp::get_waypoint(i, &zone, nm, sizeof(nm), &wx,
+                                               &wy, &wz);
+                    ImGui::PushID(200000 + i);
+                    if (zone != last_zone) {
+                        last_zone = zone;
+                        ImGui::Separator();
+                        ImGui::TextDisabled("Zone %d", zone);
+                    }
+                    ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(%.1f, %.1f, %.1f)", wx, wy, wz);
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Teleport")) {
+                        if (!features::tp::teleport_to_waypoint(i)) {
+                            g_lua_log += "! tp: bridge not ready\n";
+                        }
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndChild();
                 ImGui::EndTabItem();
             }
 

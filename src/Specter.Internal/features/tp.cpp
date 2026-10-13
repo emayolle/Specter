@@ -34,10 +34,22 @@ const wchar_t* kFloraFile = L"Z:\\tmp\\specter-floraisons.json";
 const wchar_t* kFloraFileTmp = L"Z:\\tmp\\specter-floraisons.json.tmp";
 constexpr int kMaxFlora = 256;
 
-// Open-world scenes known to hold Leyline Flower marks. The mark data of every
-// scene is queried from Lua on request; keeping the list short makes the scan
-// effectively instant (a wrong scene id is simply skipped).
-constexpr int kFloraScenes[] = {3000, 3003};
+// Open-world scenes searched for both Leyline Flower marks and Teleportation
+// Array crystals. Every scene's mark data is queried from Lua on request;
+// keeping the list short makes the scan effectively instant (a wrong scene id
+// is simply skipped).
+constexpr int kWorldScenes[] = {3000, 3003};
+
+// Waypoints (the "Teleportation Array" crystals) also live in their own file.
+const wchar_t* kWpFile = L"Z:\\tmp\\specter-waypoints.json";
+const wchar_t* kWpFileTmp = L"Z:\\tmp\\specter-waypoints.json.tmp";
+constexpr int kMaxWp = 512;
+constexpr int kMaxWpName = 64;
+// markConfigId of a crystal (infoImage $UI_Img_Map_Preview_TeleportationArray.png,
+// POIIcon $UI_Icon_POI_Explore_Transmit.png). Unlike the Floraisons these are
+// not a distinct markType: they share markType 0 with other map marks, so the
+// scan filters on the config id instead.
+constexpr int kWpMarkConfig = 10406;
 
 // Lerp tuning bounds (defaults are the fastest values found to hold live:
 // step 5.5 u at 120 steps/s ~= 660 u/s).
@@ -85,6 +97,21 @@ bool g_flora_pending = false;
 // Accumulates "F ..." lines of the result currently being parsed; committed to
 // g_flora when the terminating marker arrives.
 std::vector<Floraison> g_flora_tmp;
+
+// One "Teleportation Array" crystal: the zone it reveals plus its localized
+// name. Several crystals can share a zone.
+struct Waypoint
+{
+    int zone = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    char name[kMaxWpName] = {};
+};
+
+std::vector<Waypoint> g_wp;
+bool g_wp_pending = false;
+std::vector<Waypoint> g_wp_tmp;
 
 void write_slots()
 {
@@ -210,6 +237,119 @@ void load_floraisons()
         p = eol ? eol + 1 : p + std::strlen(p);
     }
     sort_flora(g_flora);
+}
+
+// Waypoints are written as "<zone> <x> <y> <z> <name>"; the name is always last
+// because it may contain spaces. Sorted by zone then x for a stable list.
+void sort_waypoints(std::vector<Waypoint>& v)
+{
+    for (std::size_t i = 1; i < v.size(); ++i) {
+        Waypoint k = v[i];
+        std::size_t j = i;
+        while (j > 0 && (v[j - 1].zone > k.zone ||
+                         (v[j - 1].zone == k.zone && v[j - 1].x > k.x))) {
+            v[j] = v[j - 1];
+            --j;
+        }
+        v[j] = k;
+    }
+    std::vector<Waypoint> out;
+    for (const Waypoint& w : v) {
+        bool dup = false;
+        for (const Waypoint& o : out) {
+            if (o.zone == w.zone && o.x == w.x && o.y == w.y && o.z == w.z) {
+                dup = true;
+                break;
+            }
+        }
+        if (!dup) {
+            out.push_back(w);
+        }
+    }
+    v.swap(out);
+}
+
+void write_waypoints()
+{
+    std::string out;
+    out.reserve(g_wp.size() * 96 + 16);
+    for (const Waypoint& w : g_wp) {
+        char line[256];
+        std::snprintf(line, sizeof(line), "%d %.6f %.6f %.6f %s\n", w.zone,
+                      static_cast<double>(w.x), static_cast<double>(w.y),
+                      static_cast<double>(w.z), w.name);
+        out += line;
+    }
+    HANDLE h = ::CreateFileW(kWpFileTmp, GENERIC_WRITE, 0, nullptr,
+                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        log::error("tp: can't write %ls", kWpFileTmp);
+        return;
+    }
+    DWORD wrote = 0;
+    ::WriteFile(h, out.data(), static_cast<DWORD>(out.size()), &wrote, nullptr);
+    ::CloseHandle(h);
+    ::MoveFileExW(kWpFileTmp, kWpFile, MOVEFILE_REPLACE_EXISTING);
+}
+
+void load_waypoints()
+{
+    g_wp.clear();
+    HANDLE h = ::CreateFileW(kWpFile, GENERIC_READ,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    static char buf[65536];
+    DWORD got = 0;
+    DWORD total = 0;
+    while (total < sizeof(buf) - 1 &&
+           ::ReadFile(h, buf + total,
+                      static_cast<DWORD>(sizeof(buf) - 1 - total), &got,
+                      nullptr) &&
+           got != 0) {
+        total += got;
+    }
+    ::CloseHandle(h);
+    buf[total] = '\0';
+    const char* p = buf;
+    while (p && *p) {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+            ++p;
+        }
+        if (!*p) {
+            break;
+        }
+        if (*p == '@' || *p == '#') {  // comment line
+            const char* eol = std::strchr(p, '\n');
+            p = eol ? eol + 1 : p + std::strlen(p);
+            continue;
+        }
+        int zone = 0;
+        int off = 0;
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+        if (std::sscanf(p, "%d %f %f %f %n", &zone, &x, &y, &z, &off) == 4 &&
+            g_wp.size() < kMaxWp) {
+            Waypoint w;
+            w.zone = zone;
+            w.x = x;
+            w.y = y;
+            w.z = z;
+            const char* nm = p + off;
+            std::size_t nl = 0;
+            while (nm[nl] && nm[nl] != '\r' && nm[nl] != '\n' &&
+                   nl + 1 < sizeof(w.name)) {
+                w.name[nl] = nm[nl];
+                ++nl;
+            }
+            w.name[nl] = '\0';
+            g_wp.push_back(w);
+        }
+        const char* eol = std::strchr(p, '\n');
+        p = eol ? eol + 1 : p + std::strlen(p);
+    }
+    sort_waypoints(g_wp);
 }
 
 // Slot names travel through a whitespace-separated file, so keep them to a
@@ -351,7 +491,7 @@ bool send_flora_probe()
         "if e and e.sceneId then add(e.sceneId) end\n"
         "local m=pg.game and pg.game.map\n"
         "if m then add(m.sceneId) add(m.mainSceneId) end\n";
-    for (int sid : kFloraScenes) {
+    for (int sid : kWorldScenes) {
         code += "add(";
         code += std::to_string(sid);
         code += ")\n";
@@ -374,6 +514,58 @@ bool send_flora_probe()
         "  end\n"
         "end\n"
         "print('FLORA_DONE')\n";
+    return features::lua::tp_submit(code.c_str(), static_cast<int>(code.size()));
+}
+
+// Same scheme for the crystals: prints "W <zone> <x> <y> <z> <name>" per
+// Teleportation Array mark (markConfigId 10406), then "WP_DONE". The name is
+// resolved through the client text table and printed last (it may contain
+// spaces).
+bool send_wp_probe()
+{
+    std::string code;
+    code.reserve(1400);
+    code +=
+        "local SU=require('Common.Utils.SceneUtils')\n"
+        "local CTU=require('Utils.ClientTextUtils')\n"
+        "local e=pg.me\n"
+        "local set={}\n"
+        "local function add(s) if s and s>100 then set[s]=true end end\n"
+        "if e and e.sceneId then add(e.sceneId) end\n"
+        "local m=pg.game and pg.game.map\n"
+        "if m then add(m.sceneId) add(m.mainSceneId) end\n";
+    for (int sid : kWorldScenes) {
+        code += "add(";
+        code += std::to_string(sid);
+        code += ")\n";
+    }
+    code +=
+        "local seen={}\n"
+        "for sid in pairs(set) do\n"
+        "  local ok,pts=pcall(SU.getSceneMarkPointData,sid)\n"
+        "  if ok and type(pts)=='table' then\n"
+        "    for id,p in pairs(pts) do\n"
+        "      if p.markConfigId==";
+    code += std::to_string(kWpMarkConfig);
+    code +=
+        " then\n"
+        "        local mp=p.markPosition\n"
+        "        if mp and not seen[id] then\n"
+        "          seen[id]=true\n"
+        "          local nm=''\n"
+        "          if p.infoTitle then\n"
+        "            local o,t=pcall(CTU.getLocalizationText,p.infoTitle)\n"
+        "            if o and t then nm=tostring(t) end\n"
+        "          end\n"
+        "          nm=nm:gsub('%s+',' ')\n"
+        "          print(string.format('W %d %.2f %.2f %.2f %s',"
+        "p.largeAreaId or 0,mp[1],mp[2],mp[3],nm))\n"
+        "        end\n"
+        "      end\n"
+        "    end\n"
+        "  end\n"
+        "end\n"
+        "print('WP_DONE')\n";
     return features::lua::tp_submit(code.c_str(), static_cast<int>(code.size()));
 }
 
@@ -452,6 +644,10 @@ void init()
     load_floraisons();
     log::info("tp: %d Floraison(s) loaded from /tmp/specter-floraisons.json",
               static_cast<int>(g_flora.size()));
+
+    load_waypoints();
+    log::info("tp: %d waypoint(s) loaded from /tmp/specter-waypoints.json",
+              static_cast<int>(g_wp.size()));
 }
 
 void request_position()
@@ -485,9 +681,11 @@ void handle_result(const char* text)
     if (!text || !*text) {
         return;
     }
-    // One result may hold several lines: a position ("P x y z space"), the
-    // Floraison scan ("F <zone> <x> <y> <z>" lines ending in "FLORA_DONE"), or
-    // an error. Handle each line on its own so both probes can share the buffer.
+    // One result may hold several lines: a position ("P x y z space"), a
+    // Floraison scan ("F <zone> <x> <y> <z>" lines ending in "FLORA_DONE"), a
+    // waypoint scan ("W <zone> <x> <y> <z> <name>" lines ending in "WP_DONE"),
+    // or an error. Handle each line on its own so the probes can share the
+    // buffer.
     const char* p = text;
     while (*p) {
         const char* eol = std::strchr(p, '\n');
@@ -509,6 +707,28 @@ void handle_result(const char* text)
                 f.z = z;
                 g_flora_tmp.push_back(f);
             }
+        } else if (len > 1 && p[0] == 'W' && (p[1] == ' ' || p[1] == '\t')) {
+            int zone = 0;
+            int off = 0;
+            float x = 0.0f, y = 0.0f, z = 0.0f;
+            if (std::sscanf(p + 1, "%d %f %f %f %n", &zone, &x, &y, &z,
+                            &off) == 4 &&
+                g_wp_tmp.size() < kMaxWp) {
+                Waypoint w;
+                w.zone = zone;
+                w.x = x;
+                w.y = y;
+                w.z = z;
+                const char* nm = p + 1 + off;
+                std::size_t nl = 0;
+                while (nm[nl] && nm[nl] != '\r' && nm[nl] != '\n' &&
+                       nl + 1 < sizeof(w.name)) {
+                    w.name[nl] = nm[nl];
+                    ++nl;
+                }
+                w.name[nl] = '\0';
+                g_wp_tmp.push_back(w);
+            }
         } else if (std::strncmp(p, "FLORA_DONE", 10) == 0) {
             if (!g_flora_tmp.empty()) {
                 sort_flora(g_flora_tmp);
@@ -519,9 +739,21 @@ void handle_result(const char* text)
             }
             g_flora_tmp.clear();
             g_flora_pending = false;
+        } else if (std::strncmp(p, "WP_DONE", 7) == 0) {
+            if (!g_wp_tmp.empty()) {
+                sort_waypoints(g_wp_tmp);
+                g_wp = g_wp_tmp;
+                write_waypoints();
+                log::info("tp: %d waypoint(s) fetched from the game",
+                          static_cast<int>(g_wp.size()));
+            }
+            g_wp_tmp.clear();
+            g_wp_pending = false;
         } else if (std::strncmp(p, "ERROR", 5) == 0) {
             g_flora_tmp.clear();
+            g_wp_tmp.clear();
             g_flora_pending = false;
+            g_wp_pending = false;
         } else {
             float x = 0.0f, y = 0.0f, z = 0.0f;
             int sp = 1;
@@ -679,6 +911,68 @@ bool teleport_to_floraison(int idx)
     log::info("tp: teleport to Floraison zone %d (%.2f, %.2f, %.2f)", f.zone,
               static_cast<double>(f.x), static_cast<double>(f.y),
               static_cast<double>(f.z));
+    return true;
+}
+
+void request_waypoints()
+{
+    g_wp_tmp.clear();
+    if (send_wp_probe()) {
+        g_wp_pending = true;
+    } else {
+        log::error("tp: can't request waypoints (bridge not ready)");
+    }
+}
+
+bool waypoints_pending()
+{
+    return g_wp_pending;
+}
+
+int waypoint_count()
+{
+    return static_cast<int>(g_wp.size());
+}
+
+void get_waypoint(int idx, int* zone, char* name, int cap, float* x, float* y,
+                  float* z)
+{
+    if (idx < 0 || idx >= static_cast<int>(g_wp.size())) {
+        if (name && cap > 0) {
+            name[0] = '\0';
+        }
+        return;
+    }
+    const Waypoint& w = g_wp[idx];
+    if (zone) {
+        *zone = w.zone;
+    }
+    if (name && cap > 0) {
+        std::snprintf(name, static_cast<std::size_t>(cap), "%s", w.name);
+    }
+    if (x) {
+        *x = w.x;
+    }
+    if (y) {
+        *y = w.y;
+    }
+    if (z) {
+        *z = w.z;
+    }
+}
+
+bool teleport_to_waypoint(int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(g_wp.size())) {
+        return false;
+    }
+    const Waypoint& w = g_wp[idx];
+    if (!send_setpos(w.x, w.y, w.z)) {
+        return false;
+    }
+    log::info("tp: teleport to waypoint '%s' zone %d (%.2f, %.2f, %.2f)",
+              w.name, w.zone, static_cast<double>(w.x),
+              static_cast<double>(w.y), static_cast<double>(w.z));
     return true;
 }
 

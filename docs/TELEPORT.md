@@ -141,6 +141,45 @@ le menu déclenche **une** récupération automatique à l'ouverture de l'onglet
 Le bouton **Refresh from game** relit les positions à la demande et réécrit le
 fichier.
 
+## Waypoints (cristaux de téléportation)
+
+L'onglet **Waypoints** liste les **cristaux** du monde (« Teleportation Array ») :
+ce sont les points qui révèlent la carte et servent de point de TP, plusieurs
+par zone. Ils ne forment pas un `markType` à part — ils partagent `markType 0`
+avec d'autres marques — mais portent `markConfigId == 10406`
+(`infoImage $UI_Img_Map_Preview_TeleportationArray.png`,
+`POIIcon $UI_Icon_POI_Explore_Transmit.png`) et un `infoTitle` localisé.
+
+Le scan (mêmes scènes que les Floraisons) imprime une ligne
+`W <zone> <x> <y> <z> <nom>` par cristal, terminée par `WP_DONE`. Le nom
+(dernier champ, il peut contenir des espaces) est résolu via
+`Utils.ClientTextUtils.getLocalizationText(infoTitle)` :
+
+```lua
+local CTU=require('Utils.ClientTextUtils')
+...
+if p.markConfigId==10406 then
+  local mp=p.markPosition
+  local nm=''
+  if p.infoTitle then
+    local o,t=pcall(CTU.getLocalizationText,p.infoTitle)
+    if o and t then nm=tostring(t) end
+  end
+  print(string.format('W %d %.2f %.2f %.2f %s',p.largeAreaId or 0,mp[1],mp[2],mp[3],nm))
+end
+```
+
+État du jeu actuel : **27** cristaux en scène `3000` (zones `20200`–`21500`) +
+**2** en scène `3003` (zone `21600`), soit **29** au total. Liste persistée dans
+`/tmp/specter-waypoints.json`, une ligne par cristal :
+
+```
+<zone> <x> <y> <z> <nom>
+```
+
+Même logique que les Floraisons : relue au démarrage, récupérée une fois si le
+fichier manque, et **Refresh from game** pour relire à la demande.
+
 ## Limites connues
 
 - Le TP est **côté client** (pas de RPC serveur). Le lerp fait accepter le

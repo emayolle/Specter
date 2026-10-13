@@ -76,6 +76,27 @@ void get_floraison(int idx, int* zone, float* x, float* y, float* z);
 // One-click teleport to the i-th Floraison. False if the bridge is down.
 bool teleport_to_floraison(int idx);
 
+// --- Waypoints (Teleportation Array crystals) -------------------------------
+//
+// The in-world "crystals" that reveal the map and act as fast-travel points.
+// They are not a distinct markType (they share markType 0 with other marks) but
+// carry markConfigId 10406 (infoImage $UI_Img_Map_Preview_TeleportationArray.png,
+// POIIcon $UI_Icon_POI_Explore_Transmit.png) and a localized infoTitle. Several
+// crystals can share a zone. Fetched the same way as the Floraisons, on the TP
+// channel, and cached in /tmp/specter-waypoints.json.
+
+// Queue a chunk that lists the crystals. The answer arrives asynchronously as
+// "W <zone> <x> <y> <z> <name>" lines.
+void request_waypoints();
+bool waypoints_pending();
+int waypoint_count();
+// Copy the i-th waypoint (zone id, localized name, coords; out pointers may be
+// null; name is truncated to cap including the terminator).
+void get_waypoint(int idx, int* zone, char* name, int cap, float* x, float* y,
+                  float* z);
+// One-click teleport to the i-th waypoint. False if the bridge is down.
+bool teleport_to_waypoint(int idx);
+
 // --- Lerp tuning (render thread) --------------------------------------------
 //
 // `step` is the distance (world units) moved per step; `speed` is how many
