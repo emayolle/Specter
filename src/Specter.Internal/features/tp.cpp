@@ -127,23 +127,62 @@ bool parse_position(const char* text, float* x, float* y, float* z, int* space)
 
 // Prints "P <x> <y> <z> <space>" when a player entity exists.
 constexpr char kPosProbe[] =
-    "local ent\n"
-    "for _k,_v in pairs(pg.global.actorMgr.uid2Ent) do ent=_v break end\n"
-    "if not ent then return end\n"
-    "local p=ent:getPosition()\n"
+    "local e=pg.me\n"
+    "if not e then for _k,_v in pairs(pg.global.actorMgr.uid2Ent) do e=_v break end end\n"
+    "if not e then return end\n"
+    "local p=e:getPosition()\n"
     "if p then print(string.format('P %.2f %.2f %.2f %d', p[1],p[2],p[3],"
     "p[4] or 0)) end\n";
 
+// Teleport by lerping. A single big setPosition is rejected by the
+// server-authoritative movement and rubber-bands the player back; instead we
+// walk the player toward the target in small per-tick steps (tuned live: ~2
+// units/step holds, a single 150-unit jump does not). The step loop lives in
+// the game's own timer and self-disables, and any previous move is cancelled
+// before a new one starts, so nothing keeps re-asserting an old position.
+constexpr double kLerpStep = 2.0;
+constexpr int kLerpMaxSteps = 20000;
+
 bool send_setpos(float x, float y, float z)
 {
-    char code[256];
+    char code[2048];
     const int n = std::snprintf(
         code, sizeof(code),
-        "local ent\n"
-        "for _k,_v in pairs(pg.global.actorMgr.uid2Ent) do ent=_v break end\n"
-        "if not ent then return end\n"
-        "ent:setPosition({%.3f,%.3f,%.3f})\n",
-        static_cast<double>(x), static_cast<double>(y), static_cast<double>(z));
+        "local e=pg.me\n"
+        "if not e then for _k,_v in pairs(pg.global.actorMgr.uid2Ent) do e=_v break end end\n"
+        "if not e or not e.getPosition then return end\n"
+        "local V=Vector3\n"
+        "local TM=require('Core.Timer.TimerManager')\n"
+        "local prev=e.__specter_tp\n"
+        "if prev and prev.tid then pcall(function() TM.removeTimer(prev.tid) end) end\n"
+        "if prev then prev.active=false end\n"
+        "local p=e:getPosition()\n"
+        "if not p then return end\n"
+        "local st={active=true,i=0,s=%.4f,"
+        "x0=p[1],y0=p[2],z0=p[3],x1=%.4f,y1=%.4f,z1=%.4f}\n"
+        "e.__specter_tp=st\n"
+        "local dx,dy,dz=st.x1-st.x0,st.y1-st.y0,st.z1-st.z0\n"
+        "local dist=(dx*dx+dy*dy+dz*dz)^0.5\n"
+        "local n=math.ceil(dist/st.s)\n"
+        "if n<1 then n=1 end\n"
+        "if n>%d then n=%d end\n"
+        "st.n=n\n"
+        "local s=st\n"
+        "local tid\n"
+        "tid=TM.addRepeatTimer(0.01,function()\n"
+        "  if not s.active then return end\n"
+        "  s.i=s.i+1\n"
+        "  local a=s.i/s.n\n"
+        "  if a>1 then a=1 end\n"
+        "  local v=V.ForceNew(s.x0+(s.x1-s.x0)*a,s.y0+(s.y1-s.y0)*a,"
+        "s.z0+(s.z1-s.z0)*a)\n"
+        "  if e.forceSetPos then e:forceSetPos(v,true) else e:setPosition(v) end\n"
+        "  if s.i>=s.n then s.active=false "
+        "pcall(function() TM.removeTimer(tid) end) end\n"
+        "end)\n"
+        "st.tid=tid\n",
+        kLerpStep, static_cast<double>(x), static_cast<double>(y),
+        static_cast<double>(z), kLerpMaxSteps, kLerpMaxSteps);
     if (n <= 0 || n >= static_cast<int>(sizeof(code))) {
         return false;
     }
