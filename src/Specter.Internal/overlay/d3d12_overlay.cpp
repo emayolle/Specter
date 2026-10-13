@@ -551,6 +551,43 @@ void build_ui()
                 }
 
                 ImGui::Separator();
+                ImGui::TextUnformatted("Lerp tuning");
+                ImGui::SameLine();
+                ImGui::TextDisabled(
+                    "(a teleport walks to the target in small steps)");
+                float stepv = features::tp::lerp_step();
+                ImGui::SetNextItemWidth(240.0f);
+                if (ImGui::SliderFloat("Step size (u)", &stepv, 0.25f, 20.0f,
+                                       "%.2f u/step")) {
+                    features::tp::set_lerp_step(stepv);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "Distance moved per small TP. Too big and the server "
+                        "rejects it (rubber-band).");
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    features::tp::persist();
+                }
+                float spdv = features::tp::lerp_speed();
+                ImGui::SetNextItemWidth(240.0f);
+                if (ImGui::SliderFloat("Speed (steps/s)", &spdv, 5.0f, 120.0f,
+                                       "%.0f steps/s")) {
+                    features::tp::set_lerp_speed(spdv);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(
+                        "How many steps are applied per second (capped by the "
+                        "game frame rate).");
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    features::tp::persist();
+                }
+                ImGui::TextDisabled("=> %.0f u/s  (step x speed)",
+                                    features::tp::lerp_step() *
+                                        features::tp::lerp_speed());
+
+                ImGui::Separator();
                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
                 if (features::tp::count() == 0) {
                     ImGui::TextDisabled("no saved positions yet");
@@ -579,8 +616,9 @@ void build_ui()
                 ImGui::EndChild();
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(
-                        "Teleports use the player entity's own setPosition(); "
-                        "slots persist in /tmp/specter-tp.json.");
+                        "Teleports lerp the player toward the target so the "
+                        "server accepts the move; slots persist in "
+                        "/tmp/specter-tp.json.");
                 }
                 ImGui::EndTabItem();
             }

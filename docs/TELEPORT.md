@@ -42,9 +42,17 @@ tid=TM.addRepeatTimer(0.01,function()
 end)
 ```
 
-Le pas (`kLerpStep`, 2 u) et la cadence (`0.01 s`, ~60-100 pas/s) donnent
-~120-200 u/s. La boucle est **auto-limitée** (flag `active`) et un nouveau TP
-annule le précédent : rien ne réassène une ancienne position.
+Le pas et la cadence sont **réglables depuis l'onglet Teleport** (sliders
+« Step size (u) » et « Speed (steps/s) ») et persistés avec les slots :
+
+- **Step size** = distance d'un petit TP. Trop grand → le serveur refuse
+  (rubber-band) ; défaut 2 u ;
+- **Speed** = nombre de pas par seconde (borné par la cadence d'image) ;
+  défaut 60 pas/s.
+
+La vitesse effective (affichée « => X u/s ») est `step × speed`. La boucle est
+**auto-limitée** (flag `active`) et un nouveau TP annule le précédent : rien ne
+réassène une ancienne position.
 
 ## Canal dédié (pourquoi pas la console)
 

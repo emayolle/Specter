@@ -28,6 +28,20 @@ constexpr std::size_t kNameCap = 32;
 const wchar_t* kFile = L"Z:\\tmp\\specter-tp.json";
 const wchar_t* kFileTmp = L"Z:\\tmp\\specter-tp.json.tmp";
 
+// Lerp tuning bounds (defaults match the values validated live).
+constexpr float kLerpStepDef = 2.0f;
+constexpr float kLerpStepMin = 0.25f;
+constexpr float kLerpStepMax = 20.0f;
+constexpr float kLerpSpeedDef = 60.0f;
+constexpr float kLerpSpeedMin = 5.0f;
+constexpr float kLerpSpeedMax = 120.0f;
+constexpr int kLerpMaxSteps = 20000;
+
+float clampf(float v, float lo, float hi)
+{
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
 struct Slot
 {
     char name[kNameCap] = {};
@@ -42,11 +56,18 @@ std::vector<Slot> g_slots;
 float g_cur[3] = {};
 int g_cur_space = 1;
 bool g_cur_valid = false;
+float g_lerp_step = kLerpStepDef;
+float g_lerp_speed = kLerpSpeedDef;
 
 void write_slots()
 {
     std::string out;
-    out.reserve(g_slots.size() * 48 + 1);
+    out.reserve(g_slots.size() * 48 + 32);
+    char cfg[64];
+    std::snprintf(cfg, sizeof(cfg), "@lerp %.4f %.4f\n",
+                  static_cast<double>(g_lerp_step),
+                  static_cast<double>(g_lerp_speed));
+    out += cfg;
     for (const Slot& s : g_slots) {
         char line[96];
         std::snprintf(line, sizeof(line), "%s %.6f %.6f %.6f %d\n", s.name,
@@ -136,15 +157,15 @@ constexpr char kPosProbe[] =
 
 // Teleport by lerping. A single big setPosition is rejected by the
 // server-authoritative movement and rubber-bands the player back; instead we
-// walk the player toward the target in small per-tick steps (tuned live: ~2
-// units/step holds, a single 150-unit jump does not). The step loop lives in
-// the game's own timer and self-disables, and any previous move is cancelled
-// before a new one starts, so nothing keeps re-asserting an old position.
-constexpr double kLerpStep = 2.0;
-constexpr int kLerpMaxSteps = 20000;
-
+// walk the player toward the target in small per-tick steps. The step size and
+// rate come from the user-tunable settings (g_lerp_step / g_lerp_speed). The
+// step loop lives in the game's own timer and self-disables, and any previous
+// move is cancelled before a new one starts, so nothing keeps re-asserting an
+// old position.
 bool send_setpos(float x, float y, float z)
 {
+    const double step = clampf(g_lerp_step, kLerpStepMin, kLerpStepMax);
+    const double interval = 1.0 / clampf(g_lerp_speed, kLerpSpeedMin, kLerpSpeedMax);
     char code[2048];
     const int n = std::snprintf(
         code, sizeof(code),
@@ -169,7 +190,7 @@ bool send_setpos(float x, float y, float z)
         "st.n=n\n"
         "local s=st\n"
         "local tid\n"
-        "tid=TM.addRepeatTimer(0.01,function()\n"
+        "tid=TM.addRepeatTimer(%.5f,function()\n"
         "  if not s.active then return end\n"
         "  s.i=s.i+1\n"
         "  local a=s.i/s.n\n"
@@ -181,8 +202,8 @@ bool send_setpos(float x, float y, float z)
         "pcall(function() TM.removeTimer(tid) end) end\n"
         "end)\n"
         "st.tid=tid\n",
-        kLerpStep, static_cast<double>(x), static_cast<double>(y),
-        static_cast<double>(z), kLerpMaxSteps, kLerpMaxSteps);
+        step, static_cast<double>(x), static_cast<double>(y),
+        static_cast<double>(z), kLerpMaxSteps, kLerpMaxSteps, interval);
     if (n <= 0 || n >= static_cast<int>(sizeof(code))) {
         return false;
     }
@@ -212,9 +233,21 @@ void init()
         buf[total] = '\0';
         const char* p = buf;
         while (p && *p) {
-            // One line: "<name> <x> <y> <z> [space]".
+            // One line: a "@lerp <step> <speed>" tuning header, or a slot
+            // "<name> <x> <y> <z> [space]".
             while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
                 ++p;
+            }
+            if (*p == '@') {
+                float st = 0.0f;
+                float sp = 0.0f;
+                if (std::sscanf(p, "@lerp %f %f", &st, &sp) == 2) {
+                    g_lerp_step = clampf(st, kLerpStepMin, kLerpStepMax);
+                    g_lerp_speed = clampf(sp, kLerpSpeedMin, kLerpSpeedMax);
+                }
+                const char* eol = std::strchr(p, '\n');
+                p = eol ? eol + 1 : p + std::strlen(p);
+                continue;
             }
             char name[kNameCap] = {};
             std::size_t nl = 0;
@@ -243,8 +276,11 @@ void init()
             p = eol ? eol + 1 : p + std::strlen(p);
         }
     }
-    log::info("tp: %d saved slot(s) loaded from /tmp/specter-tp.json",
-              static_cast<int>(g_slots.size()));
+    log::info("tp: %d saved slot(s) loaded from /tmp/specter-tp.json "
+              "(lerp step %.2f u, speed %.0f/s)",
+              static_cast<int>(g_slots.size()),
+              static_cast<double>(g_lerp_step),
+              static_cast<double>(g_lerp_speed));
 }
 
 void request_position()
@@ -379,6 +415,31 @@ void get_slot(int idx, char* name, int cap, float* x, float* y, float* z)
     if (z) {
         *z = s.z;
     }
+}
+
+float lerp_step()
+{
+    return g_lerp_step;
+}
+
+void set_lerp_step(float units)
+{
+    g_lerp_step = clampf(units, kLerpStepMin, kLerpStepMax);
+}
+
+float lerp_speed()
+{
+    return g_lerp_speed;
+}
+
+void set_lerp_speed(float steps_per_second)
+{
+    g_lerp_speed = clampf(steps_per_second, kLerpSpeedMin, kLerpSpeedMax);
+}
+
+void persist()
+{
+    write_slots();
 }
 
 }  // namespace tp

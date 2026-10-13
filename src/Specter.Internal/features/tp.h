@@ -9,7 +9,11 @@
 //
 // The lever is the player entity's own API:
 //   * `ent:getPosition()` -> {x, y, z, space}
-//   * `ent:setPosition({x, y, z})` -> moves the character (validated in-game)
+//   * `ent:forceSetPos({x, y, z}, true)` -> moves the character (validated in-game)
+//
+// A single jump is reverted by the server (rubber-band), so a teleport lerps:
+// it walks to the target in small per-tick steps whose size and rate are
+// user-tunable (see the sliders in the Teleport tab).
 //
 // All functions here are render-thread only.
 
@@ -48,6 +52,21 @@ int count();
 
 // Copy the i-th slot out (name is sanitized; coords are the saved ones).
 void get_slot(int idx, char* name, int cap, float* x, float* y, float* z);
+
+// --- Lerp tuning (render thread) --------------------------------------------
+//
+// `step` is the distance (world units) moved per step; `speed` is how many
+// steps are applied per second. Effective movement = step * speed units/s.
+// Both are clamped to safe ranges and persisted alongside the slots.
+
+float lerp_step();
+void set_lerp_step(float units);
+
+float lerp_speed();
+void set_lerp_speed(float steps_per_second);
+
+// Write slots + tuning to the persistence file now.
+void persist();
 
 }  // namespace tp
 }  // namespace specter::features
