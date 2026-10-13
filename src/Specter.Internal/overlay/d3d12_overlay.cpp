@@ -583,9 +583,13 @@ void build_ui()
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     features::tp::persist();
                 }
-                ImGui::TextDisabled("=> %.0f u/s  (step x speed)",
-                                    features::tp::lerp_step() *
-                                        features::tp::lerp_speed());
+                const float fps = ImGui::GetIO().Framerate;
+                const float cap = fps > 1.0f ? fps : 60.0f;
+                const float sps = features::tp::lerp_speed();
+                const float eff_speed = sps < cap ? sps : cap;
+                ImGui::TextDisabled(
+                    "=> ~%.0f u/s  (step x min(speed, %.0f fps))",
+                    features::tp::lerp_step() * eff_speed, cap);
 
                 ImGui::Separator();
                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);

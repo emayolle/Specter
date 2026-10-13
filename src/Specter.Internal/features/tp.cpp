@@ -28,11 +28,12 @@ constexpr std::size_t kNameCap = 32;
 const wchar_t* kFile = L"Z:\\tmp\\specter-tp.json";
 const wchar_t* kFileTmp = L"Z:\\tmp\\specter-tp.json.tmp";
 
-// Lerp tuning bounds (defaults match the values validated live).
-constexpr float kLerpStepDef = 2.0f;
+// Lerp tuning bounds (defaults are the fastest values found to hold live:
+// step 5.5 u at 120 steps/s ~= 660 u/s).
+constexpr float kLerpStepDef = 5.5f;
 constexpr float kLerpStepMin = 0.25f;
 constexpr float kLerpStepMax = 20.0f;
-constexpr float kLerpSpeedDef = 60.0f;
+constexpr float kLerpSpeedDef = 120.0f;
 constexpr float kLerpSpeedMin = 5.0f;
 constexpr float kLerpSpeedMax = 120.0f;
 constexpr int kLerpMaxSteps = 20000;

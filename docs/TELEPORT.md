@@ -46,9 +46,11 @@ Le pas et la cadence sont **réglables depuis l'onglet Teleport** (sliders
 « Step size (u) » et « Speed (steps/s) ») et persistés avec les slots :
 
 - **Step size** = distance d'un petit TP. Trop grand → le serveur refuse
-  (rubber-band) ; défaut 2 u ;
-- **Speed** = nombre de pas par seconde (borné par la cadence d'image) ;
-  défaut 60 pas/s.
+  (rubber-band) ; le max qui tient en jeu est ~5,5 u (défaut 5,5 u) ;
+- **Speed** = nombre de pas par seconde. Le timer du jeu ne se déclenche
+  qu'~60 fois/s max (mesuré), donc au-delà de ~60 le slider ne change rien ;
+  défaut 120 (sature). Le readout affiche la vitesse **réelle** :
+  `step × min(speed, fps)`.
 
 La vitesse effective (affichée « => X u/s ») est `step × speed`. La boucle est
 **auto-limitée** (flag `active`) et un nouveau TP annule le précédent : rien ne
