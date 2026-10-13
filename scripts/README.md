@@ -28,7 +28,7 @@ plupart des scripts ont leurs réglages dans des constantes en tête de fichier)
 | `marks-dump.lua` | positions d'une famille (coffres, cristaux, floraisons, ambre, éco…) |
 | `chests.lua` | les coffres : marques monde + entités vivantes, corrélées |
 | `chest-tp.lua` | coffres **non ouverts** (liste) **+ TP lerp vers le plus proche** — filtre le cache local |
-| `chest-open.lua` | coffre **non ouvert** le plus proche : TP lerp **puis ouverture automatique** — marque l'id « ouvert » dans le cache dès que l'interaction aboutit |
+| `chest-open.lua` | coffres **non ouverts** les plus proches, **enchaînés** : TP lerp + ouverture automatique de `CHAIN_OPENS` coffres d'affilée (3 par défaut), marqués « ouvert » dans le cache dès que l'interaction aboutit |
 | `entities-classes.lua` | **combien de chaque type** (entités vivantes par classe) |
 | `entities-near.lua` | qu'y a-t-il autour de moi (rayon réglable) |
 | `entity-dump.lua` | tous les champs d'une entité (joueur / plus proche / par classe) |
@@ -60,8 +60,8 @@ TOTAL=<n> / TOTAL_MARKS=<n> / TOTAL_LIVE=<n>
 | champs d'une marque | `markConfigId`, `markType`, `markPosition` `{x,y,z}`, `largeAreaId`, `infoTitle` |
 | nom localisé | `require('Utils.ClientTextUtils').getLocalizationText(textId)` |
 | **coffres non ouverts** | l'état n'est *pas* dans les marques (toutes `activeState=2`) : les ids des marques disponibles sont dans `pg.game.map.markUnlocker.unlockChunkMap` (par chunk, autour du joueur). Vérifié : 749 marques Coffre en 3000, 40 déverrouillées, et tous les `ClientChest` vivants y sont. ⚠️ ce registre n'est **pas** purgé en temps réel après ouverture — l'entité vivante absente est le signal fiable. Seules les marques cfg `10506` sont traitées (pas les Ambre lumin / ramassages / Aniipods, même si leur entité a `isChest=true`). |
-| **cache local « déjà ouverts »** | `pg.me.__specterChestOpened` (champ d'instance, **jamais réinitialisé** s'il existe) : ids des coffres déjà ouverts par nos scripts, posés **dès que l'interaction aboutit** — la liste des « non ouverts » n'attend plus le despawn ni la purge. Un id en cache est masqué, **sauf si une entité vivante réapparaît** (respawn) : la règle du filtre repasse l'id en disponible. Vérifié en live : 3 coffres ouverts, présents dans le registre, absents de nos listes. |
-| **ouvrir un coffre** | interaction = chemin de la touche F : unité d'interaction du coffre dans `pg.game.interaction.unitMap[1]` (type 1, `actionPrototypeId` = 59, `globalId` = l'`id` de l'entité), puis `pg.game.interaction:doUnitInteractive(unit)`. Le serveur valide → le coffre s'ouvre (l'entité disparaît, la récompense tombe). Précondition lisible : `unit:canInteractive(pg.me)`. Vérifié : cochée par script TP→open ; dernier id ouvert dans `pg.me.__specterLastOpen`. |
+| **cache local « déjà ouverts »** | `pg.me.__specterChestOpened` (champ d'instance, **jamais réinitialisé** s'il existe) : ids des coffres déjà ouverts par nos scripts, posés **dès que l'interaction aboutit** — la liste des « non ouverts » n'attend plus le despawn ni la purge. **Autoritatif** : un id en cache n'y réapparaît plus (l'entité d'un coffre ouvert peut encore traîner un moment avec `chestValid=true`, elle ne fait pas « repasser » l'id en disponible). Reset : `pg.me.__specterChestOpened = nil`. Vérifié en live : 10 coffres ouverts, tous présents dans le registre officiel, tous absents de nos listes. |
+| **ouvrir un coffre** | interaction = chemin de la touche F : unité d'interaction du coffre dans `pg.game.interaction.unitMap[1]` (type 1, `actionPrototypeId` = 59, `globalId` = l'`id` de l'entité), puis `pg.game.interaction:doUnitInteractive(unit)`. Le serveur valide → le coffre s'ouvre (la récompense tombe ; l'entité met un moment à disparaître). Précondition lisible : `unit:canInteractive(pg.me)`. Vérifié : chaîne de 3 coffres ouverts d'affilée sans attendre les despawns ; dernier id dans `pg.me.__specterLastOpen`, progression dans `pg.me.__specterOpenState`. |
 | config interaction | `Data.interact_data[59]` : `type=1`, `interactiveDist=2`, `startAnim=Kick`, `actionTime=1.2`, `actCooldown=5` |
 
 ### `markConfigId` connus (scènes 3000 / 3003, valeurs live)
@@ -105,9 +105,10 @@ pas les positions : celles-ci viennent des marques.
 - **Sandbox Lua** : les variables globales ne persistent pas d'un chunk à
   l'autre ; les écritures de *champs* d'instances, si — c'est le support du
   cache `pg.me.__specterChestOpened`.
-- **Despawn / purge lente** : après ouverture, l'entité peut rester un moment et
-  `unlockChunkMap` n'est pas purgé en temps réel → on s'appuie sur le cache
-  local (ci-dessus) plutôt que sur le despawn pour savoir qu'un coffre est déjà
-  ouvert. Garde-fou : une entité vivante repasse l'id en « disponible ».
+- **Despawn / purge lente** : après ouverture, l'entité du coffre peut rester un
+  moment (avec `chestValid=true`) et `unlockChunkMap` n'est pas purgé en temps
+  réel → on s'appuie sur le cache local (ci-dessus), **autoritatif**, plutôt que
+  sur le despawn pour savoir qu'un coffre est déjà ouvert. Reset :
+  `pg.me.__specterChestOpened = nil`.
 - Les fichiers Lua du jeu sont du **bytecode LuaJIT** (`\x1bLJ\x02`) : on lit les
   chaînes (`strings`) et on introspecte en live, pas le source.

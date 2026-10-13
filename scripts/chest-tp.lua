@@ -14,9 +14,11 @@
 --
 -- Cache local "déjà ouvert" : on garde sur pg.me.__specterChestOpened la liste
 -- des coffres que nous avons déjà ouverts, re-chargée (jamais réinitialisée) à
--- chaque exécution. Un id mis en cache disparaît de la liste, sauf si une
--- entité vivante prouve qu'il est redevenu disponible (respawn) — le registre
--- unlockChunkMap, lui, ne se purge pas en temps réel après une ouverture.
+-- chaque exécution. Un id mis en cache disparaît de la liste pour de bon
+-- (source de vérité : l'entité d'un coffre déjà ouvert peut encore traîner un
+-- moment avec chestValid=true — on n'attend pas le despawn). Reset si besoin :
+-- pg.me.__specterChestOpened = nil. Le registre unlockChunkMap, lui, ne se
+-- purge pas en temps réel après une ouverture.
 --
 -- Réglages :
 local LERP_STEP  = 5.5     -- unités par tick (mêmes valeurs que le menu TP)
@@ -83,15 +85,11 @@ local function liveChestIds()
 end
 
 local function sieve(rowsIn)
-  local liveNow = liveChestIds()
+  -- Autoritatif : un id du cache ne réapparaît pas dans la liste, même si une
+  -- entité du coffre ouvert traîne encore (despawn lent).
   local out = {}
   for _, r in ipairs(rowsIn) do
-    if opened[r.id] and not liveNow[r.id] then
-      -- en cache => déjà ouvert, on saute
-    else
-      if opened[r.id] then
-        opened[r.id] = nil -- entité vivante => disponible à nouveau
-      end
+    if not opened[r.id] then
       out[#out + 1] = r
     end
   end
