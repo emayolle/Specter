@@ -131,6 +131,7 @@ HCURSOR WINAPI hk_set_cursor(HCURSOR c)
 bool g_cursor_saved = false;
 bool g_had_clip = false;
 RECT g_saved_clip = {};
+int g_saved_show_count = 0;
 
 void enter_menu()
 {
@@ -146,11 +147,17 @@ void enter_menu()
     } else {
         g_had_clip = false;
     }
+
+    // Record the exact OS cursor display-counter the game had. While the menu
+    // is open every ShowCursor/SetCursor call is swallowed by the gate, so the
+    // counter is frozen at this value and leave_menu() can restore it exactly.
+    g_saved_show_count = real_show_cursor(0);
     real_clip_cursor(nullptr);
     real_set_cursor(nullptr);
 
     g_cursor_saved = true;
-    log::info("input: menu open - cursor released (clip=%d)", g_had_clip);
+    log::info("input: menu open - cursor released (clip=%d, show=%d)",
+              g_had_clip, g_saved_show_count);
 }
 
 void leave_menu()
@@ -166,23 +173,25 @@ void leave_menu()
     }
 
     // The game keeps its hardware cursor hidden by setting it to NULL; hand
-    // the OS back exactly that state. The gate swallowed the game's
-    // ShowCursor(FALSE) calls while the menu was open (each returned 1 without
-    // touching the real display counter), so that counter is too positive for
-    // the game's own show/hide pairs: on its native "show cursor" shortcut
-    // (ALT) it does ShowCursor(TRUE) then ShowCursor(FALSE) on release, and
-    // the FALSE lands on 0 = *shown* instead of negative = hidden — a cursor
-    // stuck on screen even though the camera works. Force the counter into its
-    // canonical hidden range (negative) so future TRUE/FALSE pairs balance out
-    // from a known base.
+    // the OS back exactly that state.
     real_set_cursor(nullptr);
-    int c = real_show_cursor(0);  // read, no change
-    for (int i = 0; i < 64 && c >= 0; ++i) {
-        real_show_cursor(FALSE);
-        c = real_show_cursor(0);
+
+    // Restore the display counter to the value it had when the menu opened —
+    // do NOT force it negative. Pushing it below zero desynchronises the
+    // game's own ShowCursor(TRUE/FALSE) pairs: its next single TRUE no longer
+    // reaches the visible range, so the game cursor stays invisible most of
+    // the time even when the game asks to show it.
+    const int cur_count = real_show_cursor(0);  // read, no change
+    const int n = g_saved_show_count - cur_count;
+    const BOOL dir = n < 0 ? FALSE : TRUE;
+    int n_abs = n < 0 ? -n : n;
+    if (n_abs > 64) n_abs = 64;
+    for (int i = 0; i < n_abs; ++i) {
+        real_show_cursor(dir);
     }
     g_cursor_saved = false;
-    log::info("input: menu closed - cursor state restored (show_count=%d)", c);
+    log::info("input: menu closed - cursor state restored (show %d -> %d)",
+              cur_count, g_saved_show_count);
 }
 
 // ---- window subclass -----------------------------------------------------
