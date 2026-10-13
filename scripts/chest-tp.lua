@@ -12,6 +12,12 @@
 -- joueur par petits pas (forceSetPos), auto-annulé en fin de course, et
 -- remplace un éventuel TP en cours.
 --
+-- Cache local "déjà ouvert" : on garde sur pg.me.__specterChestOpened la liste
+-- des coffres que nous avons déjà ouverts, re-chargée (jamais réinitialisée) à
+-- chaque exécution. Un id mis en cache disparaît de la liste, sauf si une
+-- entité vivante prouve qu'il est redevenu disponible (respawn) — le registre
+-- unlockChunkMap, lui, ne se purge pas en temps réel après une ouverture.
+--
 -- Réglages :
 local LERP_STEP  = 5.5     -- unités par tick (mêmes valeurs que le menu TP)
 local LERP_SPEED = 120     -- ticks par seconde (~660 u/s)
@@ -52,6 +58,73 @@ if mu and mu.unlockChunkMap then
 end
 
 local pnow = e:getPosition()
+
+-- ------------------------------------------------ cache local "déjà ouverts"
+-- Champ d'instance sur le joueur : les écritures de champs persistent entre
+-- les chunks, et on ne recrée JAMAIS la table si elle existe déjà (sinon on
+-- perdrait la liste d'une exécution à l'autre).
+local CACHE_KEY = '__specterChestOpened'
+local SEED_RADIUS = 4   -- u : coffre du registre très proche sans entité
+                        -- vivante => considéré comme déjà ouvert
+local opened = pg.me[CACHE_KEY]
+if type(opened) ~= 'table' then
+  opened = {}
+  pg.me[CACHE_KEY] = opened
+end
+
+local function liveChestIds()
+  local s = {}
+  for _, en in pairs(pg.getEntities() or {}) do
+    if en.isChest and en.markBindStaticId then
+      s[en.markBindStaticId] = true
+    end
+  end
+  return s
+end
+
+local function sieve(rowsIn)
+  local liveNow = liveChestIds()
+  local out = {}
+  for _, r in ipairs(rowsIn) do
+    if opened[r.id] and not liveNow[r.id] then
+      -- en cache => déjà ouvert, on saute
+    else
+      if opened[r.id] then
+        opened[r.id] = nil -- entité vivante => disponible à nouveau
+      end
+      out[#out + 1] = r
+    end
+  end
+  return out
+end
+
+local function seedNear(rowsIn)
+  local liveNow = liveChestIds()
+  for _, r in ipairs(rowsIn) do
+    if not opened[r.id] and r.d <= SEED_RADIUS and not liveNow[r.id] then
+      opened[r.id] = true
+      print(string.format('SEED_OPEN id=%s d=%.1f', tostring(r.id), r.d))
+    end
+  end
+end
+
+-- Que les VRAIS coffres (markConfigId 10506) : l'indicateur isChest couvre
+-- aussi ramassages / Ambre lumin / Aniipods — le registre déverrouillé, lui,
+-- ne liste que des Coffre (cfg 10506) ; on aligne le repli "entités vivantes".
+local markCfg = {}
+local okm, mpts = pcall(SU.getSceneMarkPointData, e.sceneId)
+if okm and type(mpts) == 'table' then
+  for mid, mp in pairs(mpts) do
+    markCfg[mid] = mp.markConfigId
+  end
+end
+local function isCoffre(id)
+  return type(id) == 'number' and markCfg[id] == CHEST_CONFIG
+end
+
+local nCache = 0
+for _ in pairs(opened) do nCache = nCache + 1 end
+
 local rows = {}
 
 local ok, pts = pcall(SU.getSceneMarkPointData, e.sceneId)
@@ -74,7 +147,7 @@ end
 -- vivants (par construction non ouverts).
 if #rows == 0 then
   for _, en in pairs(pg.getEntities() or {}) do
-    if en.isChest and en.markBindStaticId then
+    if en.isChest and isCoffre(en.markBindStaticId) then
       local okp, p = pcall(function() return en:getPosition() end)
       if okp and p then
         local dx, dy, dz = p[1] - pnow[1], p[2] - pnow[2], p[3] - pnow[3]
@@ -89,9 +162,15 @@ if #rows == 0 then
   end
 end
 
+-- Réconciliation : tout coffre du registre quasi-collé au joueur et sans
+-- entité vivante est déjà ouvert (le registre n'est pas purgé en temps réel).
+seedNear(rows)
+rows = sieve(rows)
+
 table.sort(rows, function(a, b) return a.d < b.d end)
 
-print('# coffres NON OUVERTS (scene ' .. tostring(e.sceneId) .. ') : ' .. #rows)
+print('# coffres NON OUVERTS (scene ' .. tostring(e.sceneId) .. ') : ' .. #rows
+      .. '  [cache déjà ouverts: ' .. nCache .. ']')
 for i, r in ipairs(rows) do
   if i > MAX_LIST then
     print(string.format('... (%d de plus)', #rows - MAX_LIST))

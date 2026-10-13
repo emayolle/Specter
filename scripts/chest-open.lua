@@ -12,6 +12,14 @@
 --      chemin de la touche F. Le serveur valide, le coffre s'ouvre (l'entité
 --      disparaît, la récompense tombe). Vérifié en live.
 --
+-- Cache local "déjà ouvert" : dès que doUnitInteractive aboutit sans erreur,
+-- l'id de la marque est marqué ouvert dans pg.me.__specterChestOpened (champ
+-- d'instance : persiste entre les chunks, JAMAIS réinitialisé). La liste des
+-- "non ouverts" ne dépend plus du despawn/registre lent. Garde-fous : une
+-- entité vivante repasse l'id en disponible (respawn) ; et seuls les VRAIS
+-- coffres sont traités (marques cfg 10506 — pas les Ambre lumin / ramassages
+-- / Aniipods, même si leur entité a isChest=true).
+--
 -- Réglages :
 local LERP_STEP  = 5.5      -- unités par tick (mêmes valeurs que le menu TP)
 local LERP_SPEED = 120      -- ticks par seconde (~660 u/s)
@@ -42,12 +50,75 @@ end
 
 local pnow = e:getPosition()
 
+-- ------------------------------------------------ cache local "déjà ouverts"
+-- (v. commentaire d'en-tête) — champ d'instance, JAMAIS réinitialisé s'il
+-- existe déjà (sinon on perdrait la liste d'une exécution à l'autre).
+local CACHE_KEY = '__specterChestOpened'
+local SEED_RADIUS = 4
+local opened = pg.me[CACHE_KEY]
+if type(opened) ~= 'table' then
+  opened = {}
+  pg.me[CACHE_KEY] = opened
+end
+
+local function liveChestIds()
+  local s = {}
+  for _, en in pairs(pg.getEntities() or {}) do
+    if en.isChest and en.markBindStaticId then
+      s[en.markBindStaticId] = true
+    end
+  end
+  return s
+end
+
+local function sieve(rowsIn)
+  local liveNow = liveChestIds()
+  local out = {}
+  for _, r in ipairs(rowsIn) do
+    if opened[r.id] and not liveNow[r.id] then
+      -- en cache => déjà ouvert, on saute
+    else
+      if opened[r.id] then
+        opened[r.id] = nil -- entité vivante => disponible à nouveau
+      end
+      out[#out + 1] = r
+    end
+  end
+  return out
+end
+
+local function seedNear(rowsIn)
+  local liveNow = liveChestIds()
+  for _, r in ipairs(rowsIn) do
+    if not opened[r.id] and r.d <= SEED_RADIUS and not liveNow[r.id] then
+      opened[r.id] = true
+      print(string.format('SEED_OPEN id=%s d=%.1f', tostring(r.id), r.d))
+    end
+  end
+end
+
+local nCache = 0
+for _ in pairs(opened) do nCache = nCache + 1 end
+
+-- Que les VRAIS coffres : on restreint aux marques de cfg Coffre (10506) —
+-- les entités "isChest" couvrent aussi ramassages / Ambre lumin / Aniipods.
+local markCfg = {}
+local okm, mpts = pcall(SU.getSceneMarkPointData, e.sceneId)
+if okm and type(mpts) == 'table' then
+  for mid, mp in pairs(mpts) do
+    markCfg[mid] = mp.markConfigId
+  end
+end
+local function isCoffre(id)
+  return type(id) == 'number' and markCfg[id] == CHEST_CONFIG
+end
+
 -- Priorité 1 : entités ClientChest VIVANTES (par construction non ouvertes, et
 -- surtout le registre unlockChunkMap n'oublie pas les coffres déjà ouverts —
 -- une entité absente est le seul signal fiable à distance de TOUCHER).
 local byLive = {}
 for _, en in pairs(pg.getEntities() or {}) do
-  if en.isChest and en.markBindStaticId and en.chestValid then
+  if en.isChest and en.chestValid and isCoffre(en.markBindStaticId) then
     local okp, p = pcall(function() return en:getPosition() end)
     if okp and p then
       local dx, dy, dz = p[1] - pnow[1], p[2] - pnow[2], p[3] - pnow[3]
@@ -61,6 +132,7 @@ for _, en in pairs(pg.getEntities() or {}) do
   end
 end
 table.sort(byLive, function(a, b) return a.d < b.d end)
+byLive = sieve(byLive)
 
 -- Priorité 2 : marques Coffre (cfg 10506) déverrouillées (registre).
 local unlocked = {}
@@ -91,13 +163,16 @@ if ok and type(pts) == 'table' then
     end
   end
 end
+seedNear(rows)
+rows = sieve(rows)
 table.sort(rows, function(a, b) return a.d < b.d end)
 
 local list = #byLive > 0 and byLive or rows
 local source = #byLive > 0 and 'entités vivantes' or 'registre déverrouillé'
 
 print('# coffres NON OUVERTS (scene ' .. tostring(e.sceneId) .. ', source: '
-      .. source .. ') : ' .. #list)
+      .. source .. ') : ' .. #list
+      .. '  [cache déjà ouverts: ' .. nCache .. ']')
 for i, r in ipairs(list) do
   if i > MAX_LIST then
     print(string.format('... (%d de plus)', #list - MAX_LIST))
@@ -183,6 +258,7 @@ end
 local tries = 0
 local TM = require('Core.Timer.TimerManager')
 local marker = target.id
+local markx, marky, markz = target.x, target.y, target.z
 local poll
 
 poll = TM.addRepeatTimer(0.15, function()
@@ -214,12 +290,28 @@ poll = TM.addRepeatTimer(0.15, function()
   if not unit then
     tries = tries + 1
     if tries * 0.15 > TRY_SECONDS then
-      print('OPEN_NO_UNIT (ent=' .. tostring(ent ~= nil) .. ')')
+      -- Plus d'entité ni d'unité : si on est collé au point visé, c'est un
+      -- coffre du registre dont l'entité est morte/absent (désync) => on le
+      -- marque ouvert pour ne plus retenter.
+      local okp, p = pcall(function() return e:getPosition() end)
+      local d0 = okp and p and
+        ((p[1]-markx)^2 + (p[2]-marky)^2 + (p[3]-markz)^2) ^ 0.5
+      if d0 and d0 <= 3 then
+        opened[marker] = true
+        print('OPEN_NO_UNIT -> marqué ouvert (ent=' .. tostring(ent ~= nil)
+              .. ')')
+      end
       pcall(function() TM.removeTimer(poll) end)
     end
     return
   end
   pcall(function() TM.removeTimer(poll) end)
   local okr, res = pcall(function() return it:doUnitInteractive(unit) end)
+  if okr then
+    -- Succès (appel exécuté) : on passe l'id en "ouvert" tout de suite, sans
+    -- attendre le despawn/la purge du registre.
+    opened[marker] = true
+    pg.me.__specterLastOpen = { id = marker, t = (os and os.time and os.time()) or 0 }
+  end
   print('OPEN_INTERACT ok=' .. tostring(okr) .. ' res=' .. tostring(res))
 end)
