@@ -22,6 +22,7 @@ local CHEST_CONFIG = 10506  -- markConfigId "Coffre"
 local MAX_LIST   = 40       -- lignes imprimées au plus
 local INTERACT_TYPE = 1     -- interactionType du coffre (actif / ENT_FUNC)
 local TRY_SECONDS = 5       -- fenêtre pour trouver l'entité + son unité
+local WAIT_AFTER_TP = 0.2   -- s, à attendre APRÈS le TP avant d'interagir
 local CHAIN_OPENS = 3       -- nb de coffres à ouvrir par exécution (0 = tout)
 local BREATH = 0.6          -- s, pause entre deux ouvertures
 local OPEN_ENABLED = true   -- false = TP seulement (vers le plus proche)
@@ -221,9 +222,16 @@ local function startPoll()
   local tries = 0
   local marker = curTarget.id
   local mkx, mky, mkz = curTarget.x, curTarget.y, curTarget.z
+  local waitTicks = math.max(0, math.floor(WAIT_AFTER_TP / 0.15))
+  local waited = 0
   curPoll = TM.addRepeatTimer(0.15, function()
     -- pas encore arrivé ?
     if not curArrived and curTp and curTp.active then
+      return
+    end
+    -- attendre la fenêtre configurée APRÈS le TP avant d'interagir
+    if waited < waitTicks then
+      waited = waited + 1
       return
     end
     -- 1) l'entité liée à la marque
