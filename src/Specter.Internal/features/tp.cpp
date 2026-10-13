@@ -28,6 +28,17 @@ constexpr std::size_t kNameCap = 32;
 const wchar_t* kFile = L"Z:\\tmp\\specter-tp.json";
 const wchar_t* kFileTmp = L"Z:\\tmp\\specter-tp.json.tmp";
 
+// Floraisons (Leyline Flowers) live in their own file so a bad/hand-edited
+// entry can never corrupt the saved teleport slots.
+const wchar_t* kFloraFile = L"Z:\\tmp\\specter-floraisons.json";
+const wchar_t* kFloraFileTmp = L"Z:\\tmp\\specter-floraisons.json.tmp";
+constexpr int kMaxFlora = 256;
+
+// Open-world scenes known to hold Leyline Flower marks. The mark data of every
+// scene is queried from Lua on request; keeping the list short makes the scan
+// effectively instant (a wrong scene id is simply skipped).
+constexpr int kFloraScenes[] = {3000, 3003};
+
 // Lerp tuning bounds (defaults are the fastest values found to hold live:
 // step 5.5 u at 120 steps/s ~= 660 u/s).
 constexpr float kLerpStepDef = 5.5f;
@@ -60,6 +71,21 @@ bool g_cur_valid = false;
 float g_lerp_step = kLerpStepDef;
 float g_lerp_speed = kLerpSpeedDef;
 
+// One Leyline Flower: the zone ("large area") it belongs to and its position.
+struct Floraison
+{
+    int zone = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+std::vector<Floraison> g_flora;
+bool g_flora_pending = false;
+// Accumulates "F ..." lines of the result currently being parsed; committed to
+// g_flora when the terminating marker arrives.
+std::vector<Floraison> g_flora_tmp;
+
 void write_slots()
 {
     std::string out;
@@ -86,6 +112,104 @@ void write_slots()
     ::WriteFile(h, out.data(), static_cast<DWORD>(out.size()), &wrote, nullptr);
     ::CloseHandle(h);
     ::MoveFileExW(kFileTmp, kFile, MOVEFILE_REPLACE_EXISTING);
+}
+
+// Floraisons are written as one "<zone> <x> <y> <z>" line per entry. Order is
+// by zone so the on-disk list (and the panel) stays stable.
+void sort_flora(std::vector<Floraison>& v)
+{
+    for (std::size_t i = 1; i < v.size(); ++i) {
+        Floraison k = v[i];
+        std::size_t j = i;
+        while (j > 0 && v[j - 1].zone > k.zone) {
+            v[j] = v[j - 1];
+            --j;
+        }
+        v[j] = k;
+    }
+    // Drop duplicate zones (a scene may describe the same flower twice).
+    std::vector<Floraison> out;
+    for (const Floraison& f : v) {
+        if (!out.empty() && out.back().zone == f.zone) {
+            continue;
+        }
+        out.push_back(f);
+    }
+    v.swap(out);
+}
+
+void write_floraisons()
+{
+    std::string out;
+    out.reserve(g_flora.size() * 40 + 16);
+    for (const Floraison& f : g_flora) {
+        char line[80];
+        std::snprintf(line, sizeof(line), "%d %.6f %.6f %.6f\n", f.zone,
+                      static_cast<double>(f.x), static_cast<double>(f.y),
+                      static_cast<double>(f.z));
+        out += line;
+    }
+    HANDLE h = ::CreateFileW(kFloraFileTmp, GENERIC_WRITE, 0, nullptr,
+                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        log::error("tp: can't write %ls", kFloraFileTmp);
+        return;
+    }
+    DWORD wrote = 0;
+    ::WriteFile(h, out.data(), static_cast<DWORD>(out.size()), &wrote, nullptr);
+    ::CloseHandle(h);
+    ::MoveFileExW(kFloraFileTmp, kFloraFile, MOVEFILE_REPLACE_EXISTING);
+}
+
+void load_floraisons()
+{
+    g_flora.clear();
+    HANDLE h = ::CreateFileW(kFloraFile, GENERIC_READ,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    static char buf[32768];
+    DWORD got = 0;
+    DWORD total = 0;
+    while (total < sizeof(buf) - 1 &&
+           ::ReadFile(h, buf + total,
+                      static_cast<DWORD>(sizeof(buf) - 1 - total), &got,
+                      nullptr) &&
+           got != 0) {
+        total += got;
+    }
+    ::CloseHandle(h);
+    buf[total] = '\0';
+    const char* p = buf;
+    while (p && *p) {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+            ++p;
+        }
+        if (!*p) {
+            break;
+        }
+        if (*p == '@' || *p == '#') {  // comment line
+            const char* eol = std::strchr(p, '\n');
+            p = eol ? eol + 1 : p + std::strlen(p);
+            continue;
+        }
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+        int zone = 0;
+        if (std::sscanf(p, "%d %f %f %f", &zone, &x, &y, &z) == 4 &&
+            g_flora.size() < kMaxFlora) {
+            Floraison f;
+            f.zone = zone;
+            f.x = x;
+            f.y = y;
+            f.z = z;
+            g_flora.push_back(f);
+        }
+        const char* eol = std::strchr(p, '\n');
+        p = eol ? eol + 1 : p + std::strlen(p);
+    }
+    sort_flora(g_flora);
 }
 
 // Slot names travel through a whitespace-separated file, so keep them to a
@@ -211,6 +335,48 @@ bool send_setpos(float x, float y, float z)
     return features::lua::tp_submit(code, n);
 }
 
+// Builds and queues the Floraison scan. It asks SceneUtils for the mark data of
+// the open-world scenes and prints one "F <zone> <x> <y> <z>" line per Leyline
+// Flower mark (markType 26), then "FLORA_DONE". handle_result() parses it. The
+// scan is bounded to a handful of scenes, so it returns within a frame.
+bool send_flora_probe()
+{
+    std::string code;
+    code.reserve(1024);
+    code +=
+        "local SU=require('Common.Utils.SceneUtils')\n"
+        "local e=pg.me\n"
+        "local set={}\n"
+        "local function add(s) if s and s>100 then set[s]=true end end\n"
+        "if e and e.sceneId then add(e.sceneId) end\n"
+        "local m=pg.game and pg.game.map\n"
+        "if m then add(m.sceneId) add(m.mainSceneId) end\n";
+    for (int sid : kFloraScenes) {
+        code += "add(";
+        code += std::to_string(sid);
+        code += ")\n";
+    }
+    code +=
+        "local seen={}\n"
+        "for sid in pairs(set) do\n"
+        "  local ok,pts=pcall(SU.getSceneMarkPointData,sid)\n"
+        "  if ok and type(pts)=='table' then\n"
+        "    for id,p in pairs(pts) do\n"
+        "      if p.markType==26 then\n"
+        "        local mp=p.markPosition\n"
+        "        if mp and not seen[id] then\n"
+        "          seen[id]=true\n"
+        "          print(string.format('F %d %.2f %.2f %.2f',"
+        "p.largeAreaId or 0,mp[1],mp[2],mp[3]))\n"
+        "        end\n"
+        "      end\n"
+        "    end\n"
+        "  end\n"
+        "end\n"
+        "print('FLORA_DONE')\n";
+    return features::lua::tp_submit(code.c_str(), static_cast<int>(code.size()));
+}
+
 }  // namespace
 
 void init()
@@ -282,6 +448,10 @@ void init()
               static_cast<int>(g_slots.size()),
               static_cast<double>(g_lerp_step),
               static_cast<double>(g_lerp_speed));
+
+    load_floraisons();
+    log::info("tp: %d Floraison(s) loaded from /tmp/specter-floraisons.json",
+              static_cast<int>(g_flora.size()));
 }
 
 void request_position()
@@ -315,16 +485,55 @@ void handle_result(const char* text)
     if (!text || !*text) {
         return;
     }
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-    int sp = 1;
-    if (parse_position(text, &x, &y, &z, &sp)) {
-        g_cur[0] = x;
-        g_cur[1] = y;
-        g_cur[2] = z;
-        g_cur_space = sp;
-        g_cur_valid = true;
+    // One result may hold several lines: a position ("P x y z space"), the
+    // Floraison scan ("F <zone> <x> <y> <z>" lines ending in "FLORA_DONE"), or
+    // an error. Handle each line on its own so both probes can share the buffer.
+    const char* p = text;
+    while (*p) {
+        const char* eol = std::strchr(p, '\n');
+        std::size_t len =
+            eol ? static_cast<std::size_t>(eol - p) : std::strlen(p);
+        while (len > 0 && (p[len - 1] == '\r' || p[len - 1] == ' ' ||
+                           p[len - 1] == '\t')) {
+            --len;
+        }
+        if (len > 0 && p[0] == 'F' && (p[1] == ' ' || p[1] == '\t')) {
+            int zone = 0;
+            float x = 0.0f, y = 0.0f, z = 0.0f;
+            if (std::sscanf(p + 1, "%d %f %f %f", &zone, &x, &y, &z) == 4 &&
+                g_flora_tmp.size() < kMaxFlora) {
+                Floraison f;
+                f.zone = zone;
+                f.x = x;
+                f.y = y;
+                f.z = z;
+                g_flora_tmp.push_back(f);
+            }
+        } else if (std::strncmp(p, "FLORA_DONE", 10) == 0) {
+            if (!g_flora_tmp.empty()) {
+                sort_flora(g_flora_tmp);
+                g_flora = g_flora_tmp;
+                write_floraisons();
+                log::info("tp: %d Floraison(s) fetched from the game",
+                          static_cast<int>(g_flora.size()));
+            }
+            g_flora_tmp.clear();
+            g_flora_pending = false;
+        } else if (std::strncmp(p, "ERROR", 5) == 0) {
+            g_flora_tmp.clear();
+            g_flora_pending = false;
+        } else {
+            float x = 0.0f, y = 0.0f, z = 0.0f;
+            int sp = 1;
+            if (parse_position(p, &x, &y, &z, &sp)) {
+                g_cur[0] = x;
+                g_cur[1] = y;
+                g_cur[2] = z;
+                g_cur_space = sp;
+                g_cur_valid = true;
+            }
+        }
+        p = eol ? eol + 1 : p + std::strlen(p);
     }
 }
 
@@ -416,6 +625,61 @@ void get_slot(int idx, char* name, int cap, float* x, float* y, float* z)
     if (z) {
         *z = s.z;
     }
+}
+
+void request_floraisons()
+{
+    g_flora_tmp.clear();
+    if (send_flora_probe()) {
+        g_flora_pending = true;
+    } else {
+        log::error("tp: can't request Floraisons (bridge not ready)");
+    }
+}
+
+bool floraisons_pending()
+{
+    return g_flora_pending;
+}
+
+int floraison_count()
+{
+    return static_cast<int>(g_flora.size());
+}
+
+void get_floraison(int idx, int* zone, float* x, float* y, float* z)
+{
+    if (idx < 0 || idx >= static_cast<int>(g_flora.size())) {
+        return;
+    }
+    const Floraison& f = g_flora[idx];
+    if (zone) {
+        *zone = f.zone;
+    }
+    if (x) {
+        *x = f.x;
+    }
+    if (y) {
+        *y = f.y;
+    }
+    if (z) {
+        *z = f.z;
+    }
+}
+
+bool teleport_to_floraison(int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(g_flora.size())) {
+        return false;
+    }
+    const Floraison& f = g_flora[idx];
+    if (!send_setpos(f.x, f.y, f.z)) {
+        return false;
+    }
+    log::info("tp: teleport to Floraison zone %d (%.2f, %.2f, %.2f)", f.zone,
+              static_cast<double>(f.x), static_cast<double>(f.y),
+              static_cast<double>(f.z));
+    return true;
 }
 
 float lerp_step()

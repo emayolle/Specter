@@ -122,6 +122,7 @@ std::string g_lua_log;
 
 bool g_tp_loaded = false;        // slot file loaded once, lazily
 int g_tp_refresh = 0;            // frame counter: throttle position polling
+bool g_tp_flora_auto = false;    // tried the one-shot Floraison auto-fetch
 char g_tp_name[32] = "spot";
 
 // Keyboard sink: the window subclass forwards swallowed key/char messages here
@@ -590,6 +591,59 @@ void build_ui()
                 ImGui::TextDisabled(
                     "=> ~%.0f u/s  (step x min(speed, %.0f fps))",
                     features::tp::lerp_step() * eff_speed, cap);
+
+                ImGui::Separator();
+                // One-shot: if no Floraison list is known (e.g. /tmp was wiped
+                // by a reboot), fetch it once the tab is opened.
+                if (!g_tp_flora_auto && features::tp::floraison_count() == 0 &&
+                    features::lua::ready()) {
+                    g_tp_flora_auto = true;
+                    features::tp::request_floraisons();
+                }
+                if (ImGui::CollapsingHeader("Floraisons (Leyline Flowers)")) {
+                    if (features::tp::floraisons_pending()) {
+                        ImGui::TextDisabled("scanning the game...");
+                    } else {
+                        ImGui::TextDisabled("%d zone(s)",
+                                            features::tp::floraison_count());
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Refresh from game")) {
+                        if (features::lua::ready()) {
+                            features::tp::request_floraisons();
+                        } else {
+                            g_lua_log += "! tp: bridge not ready\n";
+                        }
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip(
+                            "Re-reads every zone's Leyline Flower (Floraison) "
+                            "position from the game's scene data. The list is "
+                            "cached in /tmp/specter-floraisons.json.");
+                    }
+                    ImGui::BeginChild("##tp_flora", ImVec2(-1.0f, 150.0f), true);
+                    if (features::tp::floraison_count() == 0) {
+                        ImGui::TextDisabled(
+                            "no Floraison yet - press Refresh once in-world");
+                    }
+                    for (int i = 0; i < features::tp::floraison_count(); ++i) {
+                        int zone = 0;
+                        float fx = 0.0f, fy = 0.0f, fz = 0.0f;
+                        features::tp::get_floraison(i, &zone, &fx, &fy, &fz);
+                        ImGui::PushID(100000 + i);
+                        ImGui::Text("Zone %d", zone);
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(%.1f, %.1f, %.1f)", fx, fy, fz);
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Teleport")) {
+                            if (!features::tp::teleport_to_floraison(i)) {
+                                g_lua_log += "! tp: bridge not ready\n";
+                            }
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::EndChild();
+                }
 
                 ImGui::Separator();
                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);

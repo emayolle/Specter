@@ -53,6 +53,29 @@ int count();
 // Copy the i-th slot out (name is sanitized; coords are the saved ones).
 void get_slot(int idx, char* name, int cap, float* x, float* y, float* z);
 
+// --- Floraisons (Leyline Flowers) -------------------------------------------
+//
+// Every zone (a "large area") has one Leyline Flower, drawn on the map as a
+// "Floraison" (the Nourish / Enrichissement fast-travel flower). The game tags
+// them in its per-scene mark data as markType 26, and their world position is
+// the mark's markPosition. Reading them has to happen in the game's Lua, so it
+// goes through the same TP channel: request_floraisons() asks the game for the
+// list and handle_result() parses the answer. The list is also loaded from
+// /tmp/specter-floraisons.json at init().
+
+// Queue a chunk that lists the Floraisons of the open-world scenes. The answer
+// arrives asynchronously as "F <zone> <x> <y> <z>" lines.
+void request_floraisons();
+
+// True while a scan has been requested but not answered yet.
+bool floraisons_pending();
+
+int floraison_count();
+// Copy the i-th Floraison (zone id + coords; any out pointer may be null).
+void get_floraison(int idx, int* zone, float* x, float* y, float* z);
+// One-click teleport to the i-th Floraison. False if the bridge is down.
+bool teleport_to_floraison(int idx);
+
 // --- Lerp tuning (render thread) --------------------------------------------
 //
 // `step` is the distance (world units) moved per step; `speed` is how many

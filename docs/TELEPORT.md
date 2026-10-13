@@ -90,6 +90,57 @@ séparé par des espaces. Le fichier est relu au démarrage de l'overlay, donc l
 positions survivent à un changement de scène, un relog **et** un redémarrage du
 jeu (la DLL est ré-injectée à chaque lancement).
 
+## Floraisons (fleurs de veine)
+
+Chaque **zone** (grande aire) possède une « Floraison » — la *Leyline Flower*,
+fleur de veine qui sert de point d'information / téléport régional (icône
+`$UI_Img_Map_Preview_Leylinesflower.png`, à faire bourgeonner avec
+l'**Enrichissement**). Une fois bourgeonnée elle attire un groupe d'Aniimo et
+fait grossir le « fruit de veine » en son centre.
+
+L'onglet **Teleport** contient une section **Floraisons (Leyline Flowers)** qui
+les liste (zone + coordonnées) avec un bouton **Teleport** par zone, réutilisant
+le lerp de TP ci-dessus.
+
+Source de vérité : les *mark points* de scène du jeu,
+`SceneUtils.getSceneMarkPointData(sceneId)` ; les Floraisons y portent
+`markType == 26` et exposent `markPosition` = `{x, y, z}` ainsi que
+`largeAreaId` = la zone. C'est un chunk du canal TP qui les lit :
+
+```lua
+local SU=require('Common.Utils.SceneUtils')
+for sid in pairs(set) do
+  local ok,pts=pcall(SU.getSceneMarkPointData,sid)
+  if ok and type(pts)=='table' then
+    for id,p in pairs(pts) do
+      if p.markType==26 then
+        local mp=p.markPosition
+        if mp then print(string.format('F %d %.2f %.2f %.2f',p.largeAreaId,mp[1],mp[2],mp[3])) end
+      end
+    end
+  end
+end
+print('FLORA_DONE')
+```
+
+`set` regroupe la scène courante, la scène principale, et `3000`, `3003` (les
+scènes de monde ouvert connues). Balayer **toutes** les scènes est proscrit :
+`getSceneMarkPointData` coûte ~0,7 ms même pour une scène inexistante, soit
+~14 s sur toute la plage — le scan est donc borné à ces quelques scènes (≈ ms).
+État du jeu actuel : **14 Floraisons** dans le monde ouvert (scène `3000`, zones
+`20200`–`21500`) + **1** en scène `3003` (zone `21600`).
+
+La liste est persistée dans `/tmp/specter-floraisons.json`, une ligne par zone :
+
+```
+<zone> <x> <y> <z>
+```
+
+Elle est relue au démarrage. Si le fichier manque (ex. `/tmp` vidé au reboot),
+le menu déclenche **une** récupération automatique à l'ouverture de l'onglet.
+Le bouton **Refresh from game** relit les positions à la demande et réécrit le
+fichier.
+
 ## Limites connues
 
 - Le TP est **côté client** (pas de RPC serveur). Le lerp fait accepter le
@@ -99,3 +150,8 @@ jeu (la DLL est ré-injectée à chaque lancement).
   `LuaManager.CommonUpdate` tourne). Hors monde, la position affiche
   « position unknown ».
 - Le TP dure le temps du trajet (~1 s pour 150 u), pas instantané.
+- Les **Floraisons** sont identifiées par l'`id` de zone (grande aire) : le jeu
+  n'expose pas de nom lisible côté client (`getSceneName` renvoie l'id, les
+  entrées d'aire sont des placeholders `区域_<id>`). Le scan ne couvre que les
+  scènes de monde ouvert connues (`3000`, `3003`) : une scène de monde ouverte
+  ajoutée par un patch nécessiterait d'étendre `kFloraScenes` (feature `tp.cpp`).
