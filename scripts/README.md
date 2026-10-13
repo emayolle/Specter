@@ -27,6 +27,7 @@ plupart des scripts ont leurs réglages dans des constantes en tête de fichier)
 | `marks-summary.lua` | **combien de chaque type** (marques par `markConfigId`, par scène) |
 | `marks-dump.lua` | positions d'une famille (coffres, cristaux, floraisons, ambre, éco…) |
 | `chests.lua` | les coffres : marques monde + entités vivantes, corrélées |
+| `chest-tp.lua` | coffres **non ouverts** (liste) **+ TP lerp vers le plus proche** |
 | `entities-classes.lua` | **combien de chaque type** (entités vivantes par classe) |
 | `entities-near.lua` | qu'y a-t-il autour de moi (rayon réglable) |
 | `entity-dump.lua` | tous les champs d'une entité (joueur / plus proche / par classe) |
@@ -57,6 +58,7 @@ TOTAL=<n> / TOTAL_MARKS=<n> / TOTAL_LIVE=<n>
 | marques de scène | `require('Common.Utils.SceneUtils').getSceneMarkPointData(sceneId)` |
 | champs d'une marque | `markConfigId`, `markType`, `markPosition` `{x,y,z}`, `largeAreaId`, `infoTitle` |
 | nom localisé | `require('Utils.ClientTextUtils').getLocalizationText(textId)` |
+| **coffres non ouverts** | l'état n'est *pas* dans les marques (toutes `activeState=2`) : les ids des marques disponibles sont dans `pg.game.map.markUnlocker.unlockChunkMap` (par chunk, autour du joueur). Vérifié : 749 marques Coffre en 3000, 40 déverrouillées, et tous les `ClientChest` vivants y sont. |
 
 ### `markConfigId` connus (scènes 3000 / 3003, valeurs live)
 
