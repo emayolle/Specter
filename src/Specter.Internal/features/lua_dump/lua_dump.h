@@ -50,9 +50,16 @@ bool enabled();
 // Number of chunks written since attach (statistics for the UI / log).
 unsigned long long dumped();
 
-// Suppress dumping for chunks that *we* inject. The console and the teleport
-// channel push a chunk through luaL_loadbuffer too; those are ours, not the
-// game's, and must not land in the dump. Scope with Suppress below.
+// Suppress dumping for chunks that *we* inject. The console pushes a chunk
+// through luaL_loadbuffer too; that one is ours, not the game's, and must not
+// land in the dump.
+//
+// The Lua pump consults this through set_chunk_filter() rather than calling in
+// here, so the dependency stays feature -> lua and `lua/` never has to know that
+// a feature exists. Matching is by chunk name.
+bool filter(const char* chunk_name);
+
+// RAII scope for the counter, for a caller that is not the pump.
 void push_suppress();
 void pop_suppress();
 

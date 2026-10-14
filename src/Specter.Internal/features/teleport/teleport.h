@@ -1,3 +1,8 @@
+// Specter.Internal — teleport. DISABLED, NOT BUILT.
+//
+// See teleport.cpp for why, and for how to bring it back. The declarations are
+// kept so the file still reads as the feature it was; nothing compiles it.
+
 // Specter.Internal — teleport feature (saved positions + teleport).
 //
 // The overlay is D3D12/ImGui on the render thread; reading or writing the

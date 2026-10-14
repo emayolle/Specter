@@ -182,7 +182,7 @@ for spec in \
   "$SRC/render/input.cpp:render-input" \
   "$SRC/features/console/console.cpp:features-console" \
   "$SRC/features/lua_dump/lua_dump.cpp:features-lua_dump" \
-  "$SRC/features/teleport/teleport.cpp:features-teleport"; do
+  "$SRC/lua/pump.cpp:lua-pump"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
   build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
   OUR_OBJS+=("$obj")

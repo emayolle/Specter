@@ -222,6 +222,12 @@ unsigned long long dumped()
     return g_dumped.load(std::memory_order_relaxed);
 }
 
+bool filter(const char* chunk_name)
+{
+    (void)chunk_name;
+    return g_suppress.load(std::memory_order_relaxed) > 0;
+}
+
 void push_suppress()
 {
     g_suppress.fetch_add(1, std::memory_order_relaxed);

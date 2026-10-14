@@ -52,6 +52,7 @@
     <ClCompile Include="platform\hook\detour.cpp" />
     <ClCompile Include="render\input.cpp" />
     <ClCompile Include="features\console\console.cpp" />
+    <ClCompile Include="lua\pump.cpp" />
     <ClCompile Include="features\lua_dump.cpp" />
   </ItemGroup>
 
@@ -103,6 +104,8 @@
     <ClInclude Include="platform\hook\detour_ld_table.h" />
     <ClInclude Include="render\input.h" />
     <ClInclude Include="features\console\console.h" />
+    <ClInclude Include="lua\pump.h" />
+    <ClInclude Include="lua\mailbox.h" />
     <ClInclude Include="features\lua_dump.h" />
   </ItemGroup>
 
