@@ -1,5 +1,9 @@
 # Steam overlay hook engine (`GameOverlayRenderer64.dll`)
 
+> **Note** : l'arborescence décrite ici est celle de la base `2572297`.
+> Le code vit maintenant dans `platform/hook/detour.*` — voir `docs/ARCHITECTURE.md` §2.
+
+
 Specter **ported** Steam's inline-detour engine instead of shipping its own.
 Steam injects `GameOverlayRenderer64.dll` into the game process (also under
 Proton/Wine), and that DLL contains a complete, well-tested x86-64 detour

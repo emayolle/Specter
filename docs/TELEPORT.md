@@ -1,5 +1,15 @@
 # Téléportation — positions sauvegardées + TP
 
+> ⚠️ **Ce document décrit une feature DÉSACTIVÉE.**
+>
+> `features/teleport/` est commenté et hors du build : déplacer le joueur exige
+> d'exécuter du Lua sans que l'utilisateur l'ait demandé, et la seule exécution
+> autorisée est le bouton « Execute » (voir `docs/ARCHITECTURE.md` §4).
+>
+> Le code est conservé tel quel ; voir le bandeau en tête de `teleport.cpp` pour
+> ce qu'il faut savoir avant de le réactiver.
+
+
 L'onglet **Teleport** du menu (SUPPR) permet de sauvegarder la position du
 joueur et d'y revenir en un clic. Tout passe par le pont Lua : le panneau
 (thread de rendu) ne touche jamais au `lua_State` lui-même.

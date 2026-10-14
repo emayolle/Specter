@@ -1,5 +1,17 @@
 # Plan — ré-architecture de `Specter.Internal`
 
+> ✅ **EXÉCUTÉ** (branche `rebuild-from-2572297`). Le plan est ci-dessous pour ce
+> qu'il explique ; l'état réel est dans `docs/ARCHITECTURE.md`.
+>
+> | Phase | Commit |
+> |---|---|
+> | 1 — déplacement en couches | `d8af0ed` |
+> | 2 — namespaces par rôle | `e0771e0` |
+> | 3 — pompe + mailbox, Execute seul chemin d'exécution | `d4e5b4f` |
+> | 4 — seam feature (registre) | `d66f669` |
+> | 5 — constantes RE dans `il2cpp/target.h` | `ebf59cb` |
+> | 5 — garde SEH mutualisée | `eb70b06` |
+
 > **Base** : `2572297` (13 oct. 11:04).
 > **Objet** : réorganiser le code en couches, sans changement de comportement.
 > **Règle unique côté Lua** : on n'écrit rien dans l'état Lua du jeu. Ni `_G`, ni

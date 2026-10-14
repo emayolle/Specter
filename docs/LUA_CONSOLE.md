@@ -1,5 +1,16 @@
 # La console Lua — module, interface et canal CLI
 
+> ⚠️ **Ce document décrit un état de rue antérieur.**
+>
+> Le pont Lua n'a plus de canaux : ni canal téléport, ni maintenance de la
+> stamina, ni canal CLI. La pompe est dans `lua/pump.*`, le transport dans
+> `lua/mailbox.h`, et **la seule exécution de Lua est le bouton « Execute »** de
+> l'onglet Lua Editor.
+>
+> Voir `docs/ARCHITECTURE.md` §4 pour l'état réel, et `docs/PLAN.md` pour la
+> migration.
+
+
 Tout le gameplay d'Aniimo (attributs, stamina, capacités, état UI) vit en **Lua**,
 pas en C#. Le C# ne fait que *relayer* : `CharacterControllerComponent.CheckStamina`
 résout un `LuaFunction` et l'appelle. Pour agir sur le jeu, il faut donc exécuter

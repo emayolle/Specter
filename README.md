@@ -99,11 +99,19 @@ tools/build-dll.sh     # -> generated/bin/Release/Specter.Internal.dll
 ```
 
 Le script reproduit le projet MSVC (mêmes defines, PCH `pch-il2cpp.h`) et lie en
-`/MT`. Imports attendus du binaire : `KERNEL32.dll`, `USER32.dll` uniquement.
+`/MT`. Imports attendus du binaire : `KERNEL32.dll`, `USER32.dll`, `dxgi.dll`,
+`SHELL32.dll`, `IMM32.dll` — et **rien d'autre**, en particulier aucun import
+réseau.
 
-Écris ton code dans `src/Specter.Internal/` : le point d'entrée est
-`specter::start()` (`specter.cpp`). Toutes les méthodes du jeu sont accessibles
-par offset image via `generated/sdk/appdata/il2cpp-functions.h`.
+Écris ton code dans `src/Specter.Internal/`, rangé en **couches** — `app/`,
+`render/`, `features/`, `lua/`, `il2cpp/`, `platform/` — où un dossier porte le nom
+de son rôle et les dépendances vont vers le bas. Le point d'entrée est
+`specter::start()` (`app/specter.cpp`), qui installe chaque feature en itérant
+`features/registry.cpp`. Toutes les méthodes du jeu sont accessibles par offset
+image via `generated/sdk/appdata/il2cpp-functions.h`.
+
+Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) pour l'arbre réel et les
+règles de dépendances.
 
 ## Injecter (wine-hostch)
 
@@ -135,14 +143,14 @@ Des variables permettent d'ajuster : `SPECTER_LOG`, `SPECTER_WAIT` (s),
 **visible** et son adresse de départ tomberait dans la mémoire manual-mappée —
 signal d'anti-cheat classique. Le `framework/dllmain.cpp` généré (qui fait un
 `CreateThread`) n'est donc **pas compilé** : on fournit notre propre `DllMain`
-dans `entry.cpp`, qui ne fait que lancer la mise en route sur un thread caché
+dans `app/entry.cpp`, qui ne fait que lancer la mise en route sur un thread caché
 (`nt::spawn_hidden()`) et rendre la main.
 
 Pour un worker persistant (boucle, hooks), on utilise `nt::spawn_hidden()`
-(`src/Specter.Internal/nt.cpp`) : il appelle l'entrée dédiée non exportée
+(`src/Specter.Internal/platform/nt.cpp`) : il appelle l'entrée dédiée non exportée
 `HostchSpawnThread` du fork (`wine-hostch/patches/hostch-spawnthread.patch`), qui
 crée un thread **caché** (`is_system`). La RVA de cette entrée est bakée par
-`wine-hostch/emit-hostch-rva.sh` dans `src/Specter.Internal/hostch-rva.h` (à
+`wine-hostch/emit-hostch-rva.sh` dans `src/Specter.Internal/platform/hostch-rva.h` (à
 régénérer après chaque rebuild du fork). Détails :
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), « Injection, threads et discrétion ».
 
@@ -184,7 +192,7 @@ variable Windows `SPECTER_PIPE`.
 * **Aucun export `il2cpp_*`** dans `GameAssembly.dll` (390 exports, 0 en
   `il2cpp_`) : NetEase les a retirés. `generated/sdk/appdata/il2cpp-api-functions.h`
   est donc vide et les appels type `il2cpp_thread_attach()` ne se résolvent pas
-  par nom. Toute la résolution est isolée dans `src/Specter.Internal/runtime.cpp`
+  par nom. Toute la résolution est isolée dans `src/Specter.Internal/il2cpp/`
   (scan de motifs à implémenter). Les offsets de méthodes, eux, sont présents.
 * Le déchiffreur `metadata_decrypt.py` est **spécifique NEProtect2/AFK Journey** :
   il fonctionne ici mais pourrait casser à une maj du jeu.
