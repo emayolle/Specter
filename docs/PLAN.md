@@ -67,14 +67,20 @@ Trois invariants — ils marchent aujourd'hui, on ne les casse pas :
 2. **jamais de constructeur global / « magic static »** : la DLL est manual-mappée,
    le guard CRT des statiques n'est pas initialisé. Les objets d'espace de noms
    sont des POD à initialisation nulle, et tout enregistrement est **explicite** ;
-3. **jamais d'écriture dans l'état Lua du jeu** : ni global (`_G.…`, `lua_setglobal`,
-   `LUA_GLOBALSINDEX`), ni clé nommée au registre, ni remplacement de
-   `lua_atpanic`, ni export d'une table de notre part dans l'environnement. On
-   **exécute** des chunks et on lit des valeurs ; on ne **dépose rien**.
+3. **provisoirement** : pas d'écriture dans l'état Lua du jeu — ni global
+   (`_G.…`, `lua_setglobal`, `LUA_GLOBALSINDEX`), ni clé nommée au registre, ni
+   remplacement de `lua_atpanic`. On **exécute** des chunks et on lit des
+   valeurs ; on ne **dépose rien**.
 
-> L'invariant 3 est vérifiable mécaniquement : `tools/check-invariants.sh` doit
-> **faire échouer le build** si une de ces écritures réapparaît. C'est le seul
-> moyen qu'elle tienne dans le temps.
+> ⚠️ **L'invariant 3 n'est pas figé.** La question « faut-il des globals ? »
+> sera tranchée plus tard, et elle a des conséquences dans les deux sens : le mode
+> texte est moche, un namespace publié est plus propre à lire. **Tant que la
+> décision n'est pas prise, on ne verrouille rien mécaniquement** — un contrôle de
+> build qui interdit les globals prendrait la décision à la place du lecteur, et
+> il faudrait l'abolir le jour où elle s'inverse.
+>
+> Les invariants 1 et 2, eux, sont acquis et peuvent être contrôlés dès
+> maintenant.
 
 ---
 
@@ -231,10 +237,13 @@ Chaque phase est **build-intact** : la DLL reste injectable, le comportement
 identique, on vérifie, on commit, on avance.
 
 ### Phase 0 — outillage
-- **But** : que les violations se voient. Créer `tools/check-invariants.sh`
-  (échoue si on trouve `CreateThread`, un `#include` réseau, ou une écriture dans
-  l'état Lua du jeu : `lua_setglobal`, `LUA_GLOBALSINDEX`, `lua_atpanic`, un nom
-  `__specter`) et le brancher sur `tools/build-dll.sh`.
+- **But** : que les violations acquises se voient. Créer
+  `tools/check-invariants.sh` qui **échoue** si on trouve `CreateThread`, un
+  `#include` réseau, ou un constructeur global, et le brancher sur
+  `tools/build-dll.sh`.
+- **Hors périmètre pour l'instant** : ne **pas** contrôler les écritures dans
+  l'état Lua du jeu. La question des globals n'est pas tranchée (§2, invariant 3) ;
+  la contrôler maintenant reviendrait à trancher à la place du lecteur.
 - Créer `tools/gen-compile-commands.sh` + `.clangd` pour l'IntelliSense.
 - **Critère** : le contrôle passe sur `2572297` tel quel.
 
@@ -305,9 +314,11 @@ identique, on vérifie, on commit, on avance.
 - **Pas de changement de comportement.** Aucun correctif fonctionnel n'est
   introduit par ce plan, hormis le n°6 (verrou non thread-safe), qui est une
   correction de bug.
-- **Aucune écriture dans l'état Lua du jeu** — invariant n°3 du §2. Cette règle
-  tient tant qu'on garde le mode texte ; toute évolution qui publiés une table
-  depuis le C++ la casserait, et doit être refusée à la revue.
+- **Point non tranché : les écritures dans l'état Lua du jeu** (invariant n°3 du
+  §2). Le mode texte de `2572297` n'en fait aucune ; mais globals ou pas reste
+  **à décider**, et cette décision n'appartient pas à ce plan. Tant qu'elle n'est
+  pas prise, on n'écrit rien — sans que quoi que ce soit ne l'impose
+  mécaniquement, pour pouvoir la revoir dans les deux sens.
 - **Pas de nouvelle feature**, et pas de feature dérivée d'un mod tiers.
 - **Windows natif** : hors Wine/Proton, `NEPKernel.sys` se charge et le minifilter
   devient réel. Ne pas jouer avec Specter tel quel hors Wine/Proton.
