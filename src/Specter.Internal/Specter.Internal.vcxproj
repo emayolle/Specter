@@ -99,6 +99,7 @@
     <ClInclude Include="platform\nt.h" />
     <ClInclude Include="platform\hostch-rva.h" />
     <ClInclude Include="platform\log.h" />
+    <ClInclude Include="platform\seh.h" />
     <ClInclude Include="render\dxgi_hook.h" />
     <ClInclude Include="render\d3d12_overlay.h" />
     <ClInclude Include="platform\hook\detour.h" />

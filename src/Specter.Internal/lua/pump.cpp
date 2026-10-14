@@ -20,6 +20,7 @@
 #include "il2cpp/target.h"
 #include "platform/hook/detour.h"
 #include "platform/log.h"
+#include "platform/seh.h"
 
 namespace specter::lua {
 namespace pump {
@@ -175,28 +176,13 @@ void pump_impl(void* self)
     }
 }
 
-// Fault guard: a bug in our Lua work must never take the whole game down. MSVC
-// / clang-cl lower __try/__except to SEH, which is available even in this
-// manually mapped DLL (no CRT unveil needed).
-int log_pump_exception(unsigned long code, EXCEPTION_POINTERS* ep)
-{
-    const void* addr = (ep != nullptr && ep->ExceptionRecord != nullptr)
-                           ? ep->ExceptionRecord->ExceptionAddress
-                           : nullptr;
-    log::error("lua: pump exception code=0x%08lX at %p", code, addr);
-    return code == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER
-                                              : EXCEPTION_CONTINUE_SEARCH;
-}
-
+// A bug in our Lua work must never take the whole game down. platform/seh.h
+// explains why SEH and not a C++ try/catch.
 void pump(void* self)
 {
-    __try {
-        pump_impl(self);
-    } __except (log_pump_exception(GetExceptionCode(),
-                                   GetExceptionInformation())) {
-        log::error("lua: pump access violation swallowed - Lua work skipped "
-                   "for this frame");
-    }
+    SPECTER_SEH_BEGIN
+    pump_impl(self);
+    SPECTER_SEH_END("lua: work skipped for this frame")
 }
 
 void common_update_hook(void* self, void* method)
