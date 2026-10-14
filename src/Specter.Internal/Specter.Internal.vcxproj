@@ -106,7 +106,13 @@
     <ClInclude Include="platform\hook\detour_ld_table.h" />
     <ClInclude Include="render\input.h" />
     <ClCompile Include="features\registry.cpp" />
+    <ClCompile Include="features\teleport\teleport.cpp" />
+    <ClCompile Include="features\teleport\teleport_ui.cpp" />
+    <ClCompile Include="features\inf_stamina\inf_stamina.cpp" />
     <ClInclude Include="features\feature.h" />
+    <ClInclude Include="features\teleport\teleport.h" />
+    <ClInclude Include="features\teleport\teleport_ui.h" />
+    <ClInclude Include="features\inf_stamina\inf_stamina.h" />
     <ClInclude Include="features\console\console.h" />
     <ClInclude Include="lua\pump.h" />
     <ClInclude Include="lua\mailbox.h" />

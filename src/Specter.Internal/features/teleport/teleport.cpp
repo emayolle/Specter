@@ -1,24 +1,3 @@
-// Specter.Internal — teleport. DISABLED, NOT BUILT.
-//
-// WHY: moving the player requires running Lua on its own — a position probe,
-// a forceSetPos and a lerp timer are all submitted without the user pressing
-// Execute. Running Lua is currently permitted through exactly one path: the
-// Execute button in the Lua Editor (see features/console/). So the feature is
-// parked, and its Lua channel is gone from the console it used to call into.
-//
-// The code below is kept verbatim so it can come back without being rewritten.
-// It is NOT listed in tools/build-dll.sh nor in Specter.Internal.vcxproj.
-//
-// TO RE-ENABLE: resolve the globals question first (docs/PLAN.md, invariant 3),
-// then rewire submit() behind the transport the answer implies. As written,
-// this file calls features::console::tp_submit(), which no longer exists.
-
-// Specter.Internal — teleport feature (implementation).
-//
-// See tp.h. The persistence file is /tmp (mapped as Z:\ under wine), the same
-// place the log fallback and the Lua CLI channel live: never inside the game
-// directory or the wine prefix.
-
 #include "pch-il2cpp.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -491,7 +470,7 @@ bool send_setpos(float x, float y, float z)
     if (n <= 0 || n >= static_cast<int>(sizeof(code))) {
         return false;
     }
-    return features::console::tp_submit(code, n);
+    return features::console::submit(features::console::kChannelTeleport, code, n);
 }
 
 // Builds and queues one scan for both fast-travel lists. It walks the
@@ -552,12 +531,12 @@ bool send_marks_probe()
         "  end\n"
         "end\n"
         "print('MARKS_DONE')\n";
-    return features::console::tp_submit(code.c_str(), static_cast<int>(code.size()));
+    return features::console::submit(features::console::kChannelTeleport, code.c_str(), static_cast<int>(code.size()));
 }
 
 }  // namespace
 
-void init()
+bool init()
 {
     g_slots.clear();
     HANDLE h = ::CreateFileW(kFile, GENERIC_READ,
@@ -634,11 +613,12 @@ void init()
     load_waypoints();
     log::info("tp: %d waypoint(s) loaded from /tmp/specter-waypoints.json",
               static_cast<int>(g_wp.size()));
+    return true;
 }
 
 void request_position()
 {
-    features::console::tp_submit(kPosProbe, static_cast<int>(sizeof(kPosProbe) - 1));
+    features::console::submit(features::console::kChannelTeleport, kPosProbe, static_cast<int>(sizeof(kPosProbe) - 1));
 }
 
 bool have_position()

@@ -1,34 +1,11 @@
-// Specter.Internal — teleport. DISABLED, NOT BUILT.
-//
-// See teleport.cpp for why, and for how to bring it back. The declarations are
-// kept so the file still reads as the feature it was; nothing compiles it.
-
-// Specter.Internal — teleport feature (saved positions + teleport).
-//
-// The overlay is D3D12/ImGui on the render thread; reading or writing the
-// player's position must happen inside the game's Lua and on the game's Lua
-// thread. This module owns the SLOT registry (a small list persisted to
-// /tmp/specter-tp.json) and turns UI actions into chunk traffic on the
-// dedicated bridge channel (features::console::tp_submit / tp_take_result), which
-// keeps its results out of the Lua console and out.txt.
-//
-// The lever is the player entity's own API:
-//   * `ent:getPosition()` -> {x, y, z, space}
-//   * `ent:forceSetPos({x, y, z}, true)` -> moves the character (validated in-game)
-//
-// A single jump is reverted by the server (rubber-band), so a teleport lerps:
-// it walks to the target in small per-tick steps whose size and rate are
-// user-tunable (see the sliders in the Teleport tab).
-//
-// All functions here are render-thread only.
-
 #pragma once
 
 namespace specter::features {
 namespace teleport {
 
-// Load saved slots from the persistence file. Call once (render thread).
-void init();
+// Install: load the saved slots and the cached mark lists. Called once from
+// specter::start(), through the feature registry. Safe to call again.
+bool init();
 
 // Queue a chunk that reads the player's current position. The answer arrives
 // asynchronously; feed drained channel output to handle_result().

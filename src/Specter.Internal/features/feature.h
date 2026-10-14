@@ -31,6 +31,15 @@ struct Feature {
     // Run every frame, on the render thread, already inside the feature's tab.
     // May be nullptr for a feature with no UI.
     void (*draw_ui)();
+
+    // Run every frame, on the render thread, OUTSIDE any tab — for the work a
+    // feature must do whether or not its tab is visible (polling a value,
+    // draining a channel, feeding its own UI state). May be nullptr.
+    //
+    // Distinct from draw_ui on purpose: a tab that is not open still needs its
+    // feature fed, and asking the overlay to "call the tab's feature when the tab
+    // is closed" is exactly the coupling this registry exists to remove.
+    void (*on_frame)();
 };
 
 // The registry: the one and only place a feature is wired.

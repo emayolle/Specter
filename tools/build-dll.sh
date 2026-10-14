@@ -182,6 +182,9 @@ for spec in \
   "$SRC/render/input.cpp:render-input" \
   "$SRC/features/console/console.cpp:features-console" \
   "$SRC/features/lua_dump/lua_dump.cpp:features-lua_dump" \
+  "$SRC/features/teleport/teleport.cpp:features-teleport" \
+  "$SRC/features/teleport/teleport_ui.cpp:features-teleport_ui" \
+  "$SRC/features/inf_stamina/inf_stamina.cpp:features-inf_stamina" \
   "$SRC/features/registry.cpp:features-registry" \
   "$SRC/lua/pump.cpp:lua-pump"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"

@@ -110,12 +110,6 @@ char g_snapshot[512] = {};
 // 
 // // ---- Lua console state (touch()d only on the render thread) ----------------
 // 
-// char g_lua_src[16384] =
-//     "-- Specter Lua console - runs in the game's own lua_State, on the game's\n"
-//     "-- Lua thread. `print(...)` output and the chunk's return values appear\n"
-//     "-- below; errors are caught and reported.\n"
-//     "print('hello from Specter', _VERSION)";
-// std::string g_lua_log;
 
 // ---- Teleport tab state (render thread only) -------------------------------
 
@@ -459,24 +453,19 @@ void build_ui()
 {
     ImGuiIO& io = ImGui::GetIO();
 
-//     // Drain the dedicated teleport channel and feed parsed position data.
-//     if (!g_tp_loaded) {
-//         g_tp_loaded = true;
-//         features::teleport::init();
-//     }
-//     {
-//         char buf[256];
-//         bool ok = false;
-//         if (features::console::tp_take_result(buf, sizeof(buf), &ok)) {
-//             features::teleport::handle_result(buf);
-//         }
-//     }
-
     ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(780.0f, 600.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Specter")) {
         ImGui::TextUnformatted(g_snapshot);
         ImGui::Separator();
+
+        // Feed every feature first, visible tab or not.
+        for (int i = 0; i < features::registry_count(); ++i) {
+            const features::Feature* f = features::registry()[i];
+            if (f->on_frame) {
+                f->on_frame();
+            }
+        }
 
         if (ImGui::BeginTabBar("##main_tabs")) {
             // One tab per feature that wants one. The overlay no longer knows
@@ -492,258 +481,8 @@ void build_ui()
                 }
             }
 
-//             if (ImGui::BeginTabItem("Teleport")) {
-//                 // Poll the player's position while the tab is visible (~0.75 s
-//                 // at 60 fps). The chunks run on the game's Lua thread.
-//                 if (++g_tp_refresh >= 45) {
-//                     g_tp_refresh = 0;
-//                     if (features::console::ready()) {
-//                         features::teleport::request_position();
-//                     }
-//                 }
-// 
-//                 float cx = 0.0f, cy = 0.0f, cz = 0.0f;
-//                 int csp = 0;
-//                 if (features::teleport::have_position()) {
-//                     features::teleport::position(&cx, &cy, &cz, &csp);
-//                     ImGui::Text("Position: (%.2f, %.2f, %.2f)  space %d", cx, cy,
-//                                 cz, csp);
-//                 } else {
-//                     ImGui::TextDisabled(
-//                         "position unknown - wait until you are in-world");
-//                 }
-// 
-//                 ImGui::SetNextItemWidth(180.0f);
-//                 ImGui::InputText("Name", g_tp_name, sizeof(g_tp_name));
-//                 ImGui::SameLine();
-//                 if (ImGui::Button("Save current position")) {
-//                     if (!features::teleport::save_current(g_tp_name)) {
-//                         g_lua_log +=
-//                             "! tp: nothing saved (need a live position or a "
-//                             "non-empty name)\n";
-//                     }
-//                 }
-// 
-//                 ImGui::Separator();
-//                 ImGui::TextUnformatted("Lerp tuning");
-//                 ImGui::SameLine();
-//                 ImGui::TextDisabled(
-//                     "(a teleport walks to the target in small steps)");
-//                 float stepv = features::teleport::lerp_step();
-//                 ImGui::SetNextItemWidth(240.0f);
-//                 if (ImGui::SliderFloat("Step size (u)", &stepv, 0.25f, 20.0f,
-//                                        "%.2f u/step")) {
-//                     features::teleport::set_lerp_step(stepv);
-//                 }
-//                 if (ImGui::IsItemHovered()) {
-//                     ImGui::SetTooltip(
-//                         "Distance moved per small TP. Too big and the server "
-//                         "rejects it (rubber-band).");
-//                 }
-//                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-//                     features::teleport::persist();
-//                 }
-//                 float spdv = features::teleport::lerp_speed();
-//                 ImGui::SetNextItemWidth(240.0f);
-//                 if (ImGui::SliderFloat("Speed (steps/s)", &spdv, 5.0f, 120.0f,
-//                                        "%.0f steps/s")) {
-//                     features::teleport::set_lerp_speed(spdv);
-//                 }
-//                 if (ImGui::IsItemHovered()) {
-//                     ImGui::SetTooltip(
-//                         "How many steps are applied per second (capped by the "
-//                         "game frame rate).");
-//                 }
-//                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-//                     features::teleport::persist();
-//                 }
-//                 const float fps = ImGui::GetIO().Framerate;
-//                 const float cap = fps > 1.0f ? fps : 60.0f;
-//                 const float sps = features::teleport::lerp_speed();
-//                 const float eff_speed = sps < cap ? sps : cap;
-//                 ImGui::TextDisabled(
-//                     "=> ~%.0f u/s  (step x min(speed, %.0f fps))",
-//                     features::teleport::lerp_step() * eff_speed, cap);
-// 
-//                 ImGui::Separator();
-//                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
-//                 if (features::teleport::count() == 0) {
-//                     ImGui::TextDisabled("no saved positions yet");
-//                 }
-//                 for (int i = 0; i < features::teleport::count(); ++i) {
-//                     char nm[36] = {};
-//                     float sx = 0.0f, sy = 0.0f, sz = 0.0f;
-//                     features::teleport::get_slot(i, nm, sizeof(nm), &sx, &sy, &sz);
-//                     ImGui::PushID(i);
-//                     ImGui::TextUnformatted(nm);
-//                     ImGui::SameLine();
-//                     ImGui::TextDisabled("(%.2f, %.2f, %.2f)", sx, sy, sz);
-//                     ImGui::SameLine();
-//                     if (ImGui::SmallButton("Teleport")) {
-//                         if (!features::teleport::teleport_to(i)) {
-//                             g_lua_log += "! tp: bridge not ready\n";
-//                         }
-//                     }
-//                     ImGui::SameLine();
-//                     if (ImGui::SmallButton("Delete")) {
-//                         features::teleport::remove_at(i);
-//                         --i;  // slots shifted left; re-check this index
-//                     }
-//                     ImGui::PopID();
-//                 }
-//                 ImGui::EndChild();
-//                 if (ImGui::IsItemHovered()) {
-//                     ImGui::SetTooltip(
-//                         "Teleports lerp the player toward the target so the "
-//                         "server accepts the move; slots persist in "
-//                         "/tmp/specter-tp.json.");
-//                 }
-//                 ImGui::EndTabItem();
-//             }
-
-//             if (ImGui::BeginTabItem("Waypoints")) {
-//                 const int nflora = features::teleport::floraison_count();
-//                 const int nwp = features::teleport::waypoint_count();
-//                 // One-shot fetch if a cached list is missing (e.g. /tmp was
-//                 // wiped by a reboot). Both lists come from the same scan.
-//                 if (!g_wp_auto && (nflora == 0 || nwp == 0) &&
-//                     features::console::ready()) {
-//                     g_wp_auto = true;
-//                     features::teleport::request_marks();
-//                 }
-// 
-//                 // Merge the Floraisons and the crystals, grouped by zone.
-//                 int zones[128];
-//                 int nz = 0;
-//                 auto add_zone = [&](int z) {
-//                     for (int k = 0; k < nz; ++k) {
-//                         if (zones[k] == z) {
-//                             return;
-//                         }
-//                     }
-//                     if (nz < static_cast<int>(sizeof(zones) /
-//                                               sizeof(zones[0]))) {
-//                         zones[nz++] = z;
-//                     }
-//                 };
-//                 for (int i = 0; i < nflora; ++i) {
-//                     int z = 0;
-//                     features::teleport::get_floraison(i, &z, nullptr, nullptr,
-//                                                 nullptr);
-//                     add_zone(z);
-//                 }
-//                 for (int i = 0; i < nwp; ++i) {
-//                     int z = 0;
-//                     features::teleport::get_waypoint(i, &z, nullptr, 0, nullptr,
-//                                                nullptr, nullptr);
-//                     add_zone(z);
-//                 }
-//                 for (int i = 1; i < nz; ++i) {  // insertion sort, ascending
-//                     const int k = zones[i];
-//                     int j = i;
-//                     while (j > 0 && zones[j - 1] > k) {
-//                         zones[j] = zones[j - 1];
-//                         --j;
-//                     }
-//                     zones[j] = k;
-//                 }
-// 
-//                 if (features::teleport::marks_pending()) {
-//                     ImGui::TextDisabled("scanning the game...");
-//                 } else {
-//                     ImGui::TextDisabled(
-//                         "%d zone(s): %d Floraison(s), %d waypoint(s)", nz,
-//                         nflora, nwp);
-//                 }
-//                 ImGui::SameLine();
-//                 if (ImGui::SmallButton("Refresh from game")) {
-//                     if (features::console::ready()) {
-//                         features::teleport::request_marks();
-//                     } else {
-//                         g_lua_log += "! tp: bridge not ready\n";
-//                     }
-//                 }
-//                 if (ImGui::IsItemHovered()) {
-//                     ImGui::SetTooltip(
-//                         "Re-reads every zone's Leyline Flower (Floraison) and "
-//                         "every Teleportation Array crystal from the game's "
-//                         "scene data. Cached in /tmp/specter-floraisons.json "
-//                         "and /tmp/specter-waypoints.json.");
-//                 }
-//                 ImGui::Separator();
-//                 ImGui::BeginChild("##wp_list", ImVec2(-1.0f, -1.0f), true);
-//                 if (nz == 0) {
-//                     ImGui::TextDisabled(
-//                         "nothing yet - press Refresh once in-world");
-//                 }
-//                 for (int zi = 0; zi < nz; ++zi) {
-//                     const int zone = zones[zi];
-//                     ImGui::Separator();
-//                     ImGui::TextDisabled("Zone %d", zone);
-//                     for (int i = 0; i < nflora; ++i) {
-//                         int z = 0;
-//                         float fx = 0.0f, fy = 0.0f, fz = 0.0f;
-//                         features::teleport::get_floraison(i, &z, &fx, &fy, &fz);
-//                         if (z != zone) {
-//                             continue;
-//                         }
-//                         ImGui::PushID(100000 + i);
-//                         ImGui::TextUnformatted("Floraison");
-//                         ImGui::SameLine();
-//                         ImGui::TextDisabled("(%.1f, %.1f, %.1f)", fx, fy, fz);
-//                         ImGui::SameLine();
-//                         if (ImGui::SmallButton("Teleport")) {
-//                             if (!features::teleport::teleport_to_floraison(i)) {
-//                                 g_lua_log += "! tp: bridge not ready\n";
-//                             }
-//                         }
-//                         ImGui::PopID();
-//                     }
-//                     for (int i = 0; i < nwp; ++i) {
-//                         int z = 0;
-//                         char nm[64] = {};
-//                         float wx = 0.0f, wy = 0.0f, wz = 0.0f;
-//                         features::teleport::get_waypoint(i, &z, nm, sizeof(nm), &wx,
-//                                                    &wy, &wz);
-//                         if (z != zone) {
-//                             continue;
-//                         }
-//                         ImGui::PushID(200000 + i);
-//                         ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
-//                         ImGui::SameLine();
-//                         ImGui::TextDisabled("(%.1f, %.1f, %.1f)", wx, wy, wz);
-//                         ImGui::SameLine();
-//                         if (ImGui::SmallButton("Teleport")) {
-//                             if (!features::teleport::teleport_to_waypoint(i)) {
-//                                 g_lua_log += "! tp: bridge not ready\n";
-//                             }
-//                         }
-//                         ImGui::PopID();
-//                     }
-//                 }
-//                 ImGui::EndChild();
-//                 ImGui::EndTabItem();
-//             }
 
             if (ImGui::BeginTabItem("Miscellaneous")) {
-//                 bool inf = features::console::infinite_stamina();
-//                 if (ImGui::Checkbox(
-//                         "Infinite movement stamina (sprint/dash/glide/climb)",
-//                         &inf)) {
-//                     if (!features::console::set_infinite_stamina(inf)) {
-//                         g_lua_log += "! bridge not ready - can't toggle stamina\n";
-//                     }
-//                 }
-//                 ImGui::SameLine();
-//                 ImGui::TextDisabled("(?)");
-//                 if (ImGui::IsItemHovered()) {
-//                     ImGui::SetTooltip(
-//                         "Intercepts the player's stamina cost function "
-//                         "(changeStamina): sprint/dash/glide/climb costs are "
-//                         "blocked and stamina is refilled to full once at "
-//                         "install. Re-applies automatically after a scene "
-//                         "change or relog (~10 s).");
-//                 }
 
                 ImGui::Separator();
                 ImGui::Checkbox("ImGui demo window", &g_demo);

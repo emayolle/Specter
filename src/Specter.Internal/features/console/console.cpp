@@ -43,9 +43,11 @@ struct Output {
     bool ok;
 };
 
-// Replace, single slot: the console is a "what did I just type" channel. A
-// backlog of superseded chunks would only make the result harder to read.
-lua::Mailbox<Chunk, Output, 1, lua::Replace> g_channel;
+// Replace, single slot per channel: these are all "what did I just ask for"
+// lanes. A backlog of superseded chunks would only make the result harder to
+// read, and for the teleport channel it would let an old position probe clobber
+// a move that has not run yet.
+lua::Mailbox<Chunk, Output, 1, lua::Replace> g_channels[kChannelCount];
 
 unsigned long long g_out_seq = 0;  // bumped per result, Lua thread only
 
@@ -90,6 +92,10 @@ void log_result(bool ok, const char* text, int n)
 }
 
 // The pump's result sink. Runs on the Lua thread, inside pump::run.
+// One sink per channel. The pump takes a plain function pointer, so it cannot be
+// told "which channel" any other way.
+Channel g_sink_channel = kChannelConsole;
+
 void sink(bool ok, const char* text, int n)
 {
     if (n < 0) {
@@ -105,7 +111,7 @@ void sink(bool ok, const char* text, int n)
     out.text[n] = '\0';
     out.len = n;
     out.ok = ok;
-    g_channel.publish(out);
+    g_channels[g_sink_channel].publish(out);
     ++g_out_seq;
     log_result(ok, text, n);
 }
@@ -118,10 +124,13 @@ void on_lua_tick(void* L)
     // would be pushed on the game's Lua-thread stack sixty times a second for
     // the privilege of usually going unused. Only the Lua thread reaches it.
     static Chunk c;
-    if (!g_channel.take_pending(c)) {
-        return;
+    for (int i = 0; i < kChannelCount; ++i) {
+        if (!g_channels[i].take_pending(c)) {
+            continue;
+        }
+        g_sink_channel = static_cast<Channel>(i);
+        lua::pump::run(L, c.code, c.len, &sink);
     }
-    lua::pump::run(L, c.code, c.len, &sink);
 }
 
 }  // namespace
@@ -138,8 +147,11 @@ bool ready()
     return lua::pump::ready();
 }
 
-bool submit(const char* code, int len)
+bool submit(Channel ch, const char* code, int len)
 {
+    if (ch < 0 || ch >= kChannelCount) {
+        return false;
+    }
     if (!lua::pump::ready()) {
         return false;
     }
@@ -153,16 +165,16 @@ bool submit(const char* code, int len)
     std::memcpy(c.code, code, static_cast<std::size_t>(len));
     c.code[len] = '\0';
     c.len = len;
-    return g_channel.submit(c);
+    return g_channels[ch].submit(c);
 }
 
-bool take_result(char* out, int cap, bool* out_ok)
+bool take_result(Channel ch, char* out, int cap, bool* out_ok)
 {
-    if (!out || cap <= 0) {
+    if (ch < 0 || ch >= kChannelCount || !out || cap <= 0) {
         return false;
     }
     Output o;
-    if (!g_channel.take_result(o)) {
+    if (!g_channels[ch].take_result(o)) {
         return false;
     }
     int n = o.len;
@@ -188,12 +200,24 @@ void drain_result()
 {
     char buf[8192];
     bool ok = false;
-    if (!take_result(buf, sizeof(buf), &ok)) {
+    if (!take_result(kChannelConsole, buf, sizeof(buf), &ok)) {
         return;
     }
     g_log += ok ? "> " : "! ";
     g_log += buf;
     g_log += '\n';
+    constexpr std::size_t kKeep = 60000;
+    if (g_log.size() > kKeep) {
+        g_log.erase(0, g_log.size() - kKeep / 2);
+    }
+}
+
+void note(const char* text)
+{
+    if (!text) {
+        return;
+    }
+    g_log += text;
     constexpr std::size_t kKeep = 60000;
     if (g_log.size() > kKeep) {
         g_log.erase(0, g_log.size() - kKeep / 2);
@@ -209,7 +233,7 @@ void draw_ui()
                               ImVec2(-1.0f, 180.0f));
     if (ImGui::Button("Execute")) {
         const int n = static_cast<int>(std::strlen(g_src));
-        if (!submit(g_src, n)) {
+        if (!submit(kChannelConsole, g_src, n)) {
             g_log += "! bridge not ready\n";
         }
     }
