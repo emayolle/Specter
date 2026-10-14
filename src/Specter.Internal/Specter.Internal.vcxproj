@@ -40,18 +40,19 @@
 
   <!-- Our code -->
   <ItemGroup>
-    <ClCompile Include="entry.cpp" />
-    <ClCompile Include="specter.cpp" />
-    <ClCompile Include="runtime.cpp" />
-    <ClCompile Include="il2cpp-api.cpp" />
-    <ClCompile Include="nt.cpp" />
-    <ClCompile Include="log.cpp" />
-    <ClCompile Include="overlay\dxgi_hook.cpp" />
-    <ClCompile Include="overlay\d3d12_overlay.cpp" />
-    <ClCompile Include="overlay\d3dcompiler_shim.cpp" />
-    <ClCompile Include="overlay\detour.cpp" />
-    <ClCompile Include="overlay\game_input.cpp" />
-    <ClCompile Include="features\lua_console.cpp" />
+    <ClCompile Include="app\entry.cpp" />
+    <ClCompile Include="app\specter.cpp" />
+    <ClCompile Include="il2cpp\runtime.cpp" />
+    <ClCompile Include="il2cpp\api.cpp" />
+    <ClCompile Include="platform\nt.cpp" />
+    <ClCompile Include="platform\log.cpp" />
+    <ClCompile Include="render\dxgi_hook.cpp" />
+    <ClCompile Include="render\d3d12_overlay.cpp" />
+    <ClCompile Include="render\d3dcompiler_shim.cpp" />
+    <ClCompile Include="platform\hook\detour.cpp" />
+    <ClCompile Include="render\input.cpp" />
+    <ClCompile Include="features\console\console.cpp" />
+    <ClCompile Include="features\lua_dump.cpp" />
   </ItemGroup>
 
   <!-- Vendored Dear ImGui cores + D3D12/Win32 backends (no Specter PCH). -->
@@ -90,18 +91,19 @@
     <ClInclude Include="..\..\generated\sdk\framework\il2cpp-appdata.h" />
     <ClInclude Include="..\..\generated\sdk\framework\il2cpp-init.h" />
     <ClInclude Include="..\..\generated\sdk\framework\pch-il2cpp.h" />
-    <ClInclude Include="specter.h" />
-    <ClInclude Include="runtime.h" />
-    <ClInclude Include="il2cpp-api.h" />
-    <ClInclude Include="nt.h" />
-    <ClInclude Include="hostch-rva.h" />
-    <ClInclude Include="log.h" />
-    <ClInclude Include="overlay\dxgi_hook.h" />
-    <ClInclude Include="overlay\d3d12_overlay.h" />
-    <ClInclude Include="overlay\detour.h" />
-    <ClInclude Include="overlay\detour_ld_table.h" />
-    <ClInclude Include="overlay\game_input.h" />
-    <ClInclude Include="features\lua_console.h" />
+    <ClInclude Include="app\specter.h" />
+    <ClInclude Include="il2cpp\runtime.h" />
+    <ClInclude Include="il2cpp\api.h" />
+    <ClInclude Include="platform\nt.h" />
+    <ClInclude Include="platform\hostch-rva.h" />
+    <ClInclude Include="platform\log.h" />
+    <ClInclude Include="render\dxgi_hook.h" />
+    <ClInclude Include="render\d3d12_overlay.h" />
+    <ClInclude Include="platform\hook\detour.h" />
+    <ClInclude Include="platform\hook\detour_ld_table.h" />
+    <ClInclude Include="render\input.h" />
+    <ClInclude Include="features\console\console.h" />
+    <ClInclude Include="features\lua_dump.h" />
   </ItemGroup>
 
   <PropertyGroup Label="Globals">

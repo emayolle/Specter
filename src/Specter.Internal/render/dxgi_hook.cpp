@@ -26,9 +26,9 @@
 #include <d3d12.h>
 #include <dxgi1_4.h>
 
-#include "overlay/dxgi_hook.h"
-#include "overlay/d3d12_overlay.h"
-#include "log.h"
+#include "render/dxgi_hook.h"
+#include "render/d3d12_overlay.h"
+#include "platform/log.h"
 
 // Our own image base (the module is manually mapped; see entry.cpp).
 extern "C" IMAGE_DOS_HEADER __ImageBase;

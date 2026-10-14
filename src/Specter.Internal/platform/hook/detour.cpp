@@ -1,7 +1,7 @@
 // Specter.Internal — self-contained inline-detour engine (implementation).
 //
 // Ported from Steam's overlay engine: same table-driven length decoder, same
-// relocation rules, same E9-with-FF25-fallback strategy. See overlay/detour.h
+// relocation rules, same E9-with-FF25-fallback strategy. See platform/hook/detour.h
 // for context and docs/STEAM_HOOK.md for the original analysis.
 
 #include "pch-il2cpp.h"
@@ -12,9 +12,9 @@
 #include <cstdint>
 #include <cstring>
 
-#include "overlay/detour.h"
-#include "overlay/detour_ld_table.h"
-#include "log.h"
+#include "platform/hook/detour.h"
+#include "platform/hook/detour_ld_table.h"
+#include "platform/log.h"
 
 namespace specter::overlay {
 namespace detour {

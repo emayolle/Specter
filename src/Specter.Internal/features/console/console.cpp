@@ -1,6 +1,6 @@
 // Specter.Internal — Lua console bridge (implementation).
 //
-// See lua_console.h for the design. Summary:
+// See console.h for the design. Summary:
 //   * xlua.dll exports the LuaJIT 5.1 C API, resolved by name here;
 //   * the lua_State is LuaManager.luaenv(@0x18)->rawL(@0x10), read on the Lua
 //     thread inside our LuaManager.CommonUpdate detour;
@@ -20,10 +20,11 @@
 #include <cstdio>
 #include <cstring>
 
-#include "features/lua_console.h"
-#include "overlay/detour.h"
-#include "runtime.h"
-#include "log.h"
+#include "features/console/console.h"
+#include "features/lua_dump/lua_dump.h"
+#include "platform/hook/detour.h"
+#include "il2cpp/runtime.h"
+#include "platform/log.h"
 
 namespace specter::features {
 namespace lua {
@@ -339,6 +340,8 @@ void run_chunk_to(lua_State* L, const char* code, int len, result_sink sink)
     std::memcpy(src + plen + len, kSuffix, static_cast<std::size_t>(slen));
 
     const int top = p_gettop(L);
+    // Our own chunk ("@specter") must not land in the runtime dumper.
+    features::lua_dump::Suppress no_dump;
     if (p_loadbuffer(L, src, static_cast<size_t>(plen + len + slen),
                      "@specter") != 0) {
         std::size_t n = 0;
@@ -384,6 +387,8 @@ void run_silent(lua_State* L, const char* code, int len)
     std::memcpy(src + plen + len, kSuffix, static_cast<std::size_t>(slen));
 
     const int top = p_gettop(L);
+    // Our own chunk ("@specter") must not land in the runtime dumper.
+    features::lua_dump::Suppress no_dump;
     if (p_loadbuffer(L, src, static_cast<size_t>(plen + len + slen),
                      "@specter") != 0) {
         p_settop(L, top);
@@ -496,6 +501,13 @@ unsigned long long g_stamina_install_ticks = 0;  // Lua thread only
 void pump(void* self)
 {
     g_ticks.fetch_add(1, std::memory_order_relaxed);
+
+    // The chunk dumper taps xluaL_loadbuffer in the same module we resolve here,
+    // and xlua.dll is routinely not mapped yet when we attach -- so retry from
+    // the pump for the same reason resolve_xlua() does. Retried every frame
+    // until it sticks; it is a single atomic load once installed.
+    features::lua_dump::tick();
+
     if (!resolve_xlua()) {
         return;
     }

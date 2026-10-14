@@ -6,7 +6,7 @@
 #include <Windows.h>
 
 #include "helpers.h"  // il2cppi_log_write (fallback file sink)
-#include "log.h"
+#include "platform/log.h"
 
 #include <string>
 #include <cstdarg>

@@ -21,9 +21,9 @@
 #include <Windows.h>
 
 #include "il2cpp-init.h"  // init_il2cpp() — generated scaffold bindings
-#include "log.h"          // specter::log::init / error
-#include "nt.h"           // specter::nt::spawn_hidden
-#include "specter.h"
+#include "platform/log.h"          // specter::log::init / error
+#include "platform/nt.h"           // specter::nt::spawn_hidden
+#include "app/specter.h"
 
 // Log file used by the generated helper `il2cppi_log_write` (see helpers.cpp).
 // Only used when the host pipe is gone (fallback). It must never land in the

@@ -19,7 +19,7 @@
 #include <Windows.h>
 #include <d3dcompiler.h>
 
-#include "log.h"
+#include "platform/log.h"
 
 namespace {
 

@@ -2,12 +2,13 @@
 
 #include "pch-il2cpp.h"
 
-#include "specter.h"
-#include "features/lua_console.h"
-#include "log.h"
-#include "runtime.h"
-#include "nt.h"
-#include "overlay/dxgi_hook.h"
+#include "app/specter.h"
+#include "features/console/console.h"
+#include "features/lua_dump/lua_dump.h"
+#include "platform/log.h"
+#include "il2cpp/runtime.h"
+#include "platform/nt.h"
+#include "render/dxgi_hook.h"
 
 namespace specter {
 
@@ -24,10 +25,20 @@ bool start()
     runtime::self_check();
 
     // Lua console bridge: detour LuaManager.CommonUpdate so queued chunks run
-    // on the game's own Lua thread (see features/lua_console.*).
+    // on the game's own Lua thread (see features/console/*).
     if (!features::lua::install()) {
         log::error("start: Lua bridge unavailable - the console will not run");
     }
+
+    // Runtime Lua chunk dumper: taps xluaL_loadbuffer in xlua.dll so the
+    // shipped LuaJIT bytecode (and anything XPatch drops at runtime) can be
+    // captured. Installed here so it is in place before the game loads its
+    // startup pack; xlua.dll may not be mapped yet, in which case the CommonUpdate
+    // pump retries. The detour goes in regardless of the armed flag -- arming only
+    // gates the file writes -- so toggling it later still captures everything
+    // from the game's first chunk onwards.
+    features::lua_dump::install();
+    features::lua_dump::set_enabled(true);
 
     // D3D12 overlay: hook IDXGISwapChain::Present and render ImGui. Runs on
     // its own hidden thread so it never depends on the loader thread and never

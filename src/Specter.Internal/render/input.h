@@ -7,7 +7,7 @@
 //   * ClipCursor / ShowCursor / SetCursor  (the locked first-person cursor)
 //
 // We detour those user32 exports with our own inline-detour engine
-// (overlay/detour.*), a port of the Steam overlay's engine (we cannot call
+// (platform/hook/detour.*), a port of the Steam overlay's engine (we cannot call
 // Steam's own copy: it is manual-mapped but never initialised in this game — see
 // docs/STEAM_HOOK.md). While the menu is open the proxies return neutral values
 // (no keys, no raw input, no re-clip, cursor stays hidden); closed, each proxy

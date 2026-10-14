@@ -5,9 +5,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-#include "runtime.h"
-#include "il2cpp-api.h"
-#include "log.h"
+#include "il2cpp/runtime.h"
+#include "il2cpp/api.h"
+#include "platform/log.h"
 
 namespace specter {
 namespace runtime {

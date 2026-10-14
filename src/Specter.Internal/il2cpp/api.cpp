@@ -5,8 +5,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-#include "il2cpp-api.h"
-#include "log.h"
+#include "il2cpp/api.h"
+#include "platform/log.h"
 
 namespace specter {
 namespace api {
@@ -41,7 +41,7 @@ int resolve()
     int bound = 0;
 
     // Bind every body-verified export we rely on. The tiny generic accessors
-    // are real functions (see il2cpp-api.h); the inert stubs are not listed.
+    // are real functions (see api.h); the inert stubs are not listed.
     auto req = [&](const char* name, auto& slot) {
         if (bind(module, name, slot)) {
             ++bound;

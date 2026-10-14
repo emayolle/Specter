@@ -22,9 +22,9 @@
 #include <atomic>
 #include <cstdint>
 
-#include "overlay/game_input.h"
-#include "overlay/detour.h"
-#include "log.h"
+#include "render/input.h"
+#include "platform/hook/detour.h"
+#include "platform/log.h"
 
 namespace specter::overlay {
 namespace game_input {

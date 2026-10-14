@@ -15,9 +15,9 @@
 #include <string>
 #include <vector>
 
-#include "features/lua_console.h"
-#include "features/tp.h"
-#include "log.h"
+#include "features/console/console.h"
+#include "features/teleport/teleport.h"
+#include "platform/log.h"
 
 namespace specter::features {
 namespace tp {

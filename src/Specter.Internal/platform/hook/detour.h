@@ -8,7 +8,7 @@
 // docs/STEAM_HOOK.md. So we ship the same design ourselves, in-process:
 //
 //   * a table-driven x86-64 instruction-length decoder. The 188-entry table is
-//     embedded verbatim from the Steam DLL (overlay/detour_ld_table.h).
+//     embedded verbatim from the Steam DLL (platform/hook/detour_ld_table.h).
 //   * a +/-2GB trampoline allocator (VirtualQuery scan near the target).
 //   * a rel32/rel8 relocation pass; a rel8 `EB` branch is promoted to `E9`.
 //   * an E9 patch at the target. The target always jumps to a *stub* inside the

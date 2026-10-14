@@ -29,12 +29,12 @@
 #include <cstring>
 #include <string>
 
-#include "overlay/d3d12_overlay.h"
-#include "overlay/game_input.h"
-#include "features/lua_console.h"
-#include "features/tp.h"
-#include "il2cpp-api.h"
-#include "log.h"
+#include "render/d3d12_overlay.h"
+#include "render/input.h"
+#include "features/console/console.h"
+#include "features/teleport/teleport.h"
+#include "il2cpp/api.h"
+#include "platform/log.h"
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -403,7 +403,7 @@ InitResult init_once(IDXGISwapChain* sc)
     io.LogFilename = nullptr;
     // The game hides the OS cursor; draw ImGui's own so the user can see what
     // they are pointing at. The OS cursor is forced hidden while the menu is up
-    // (see overlay/game_input.*).
+    // (see render/input.*).
     io.MouseDrawCursor = true;
     ImGui::StyleColorsDark();
     ImGui_ImplWin32_Init(g_hwnd ? g_hwnd : g_probe_hwnd);

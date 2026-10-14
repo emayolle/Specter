@@ -6,7 +6,7 @@
 // locating the runtime and resolving the few functions we need, so the rest of
 // the code never worries about it.
 //
-// Resolution itself lives in api/ (il2cpp-api.{h,cpp}): the VM functions are
+// Resolution itself lives in api/ (api.{h,cpp}): the VM functions are
 // exported under `mono_*` compatibility names, recovered here by export name
 // after body verification on the real binary.
 

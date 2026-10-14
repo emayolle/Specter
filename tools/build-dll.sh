@@ -169,19 +169,20 @@ fi
 echo "== [3/5] Specter internals =="
 OUR_OBJS=()
 for spec in \
-  "$SRC/entry.cpp:entry" \
-  "$SRC/specter.cpp:specter" \
-  "$SRC/runtime.cpp:runtime" \
-  "$SRC/il2cpp-api.cpp:il2cpp-api" \
-  "$SRC/nt.cpp:nt" \
-  "$SRC/log.cpp:log" \
-  "$SRC/overlay/dxgi_hook.cpp:overlay-dxgi_hook" \
-  "$SRC/overlay/d3d12_overlay.cpp:overlay-d3d12_overlay" \
-  "$SRC/overlay/d3dcompiler_shim.cpp:overlay-d3dcompiler_shim" \
-  "$SRC/overlay/detour.cpp:overlay-detour" \
-  "$SRC/overlay/game_input.cpp:overlay-game_input" \
-  "$SRC/features/lua_console.cpp:features-lua_console" \
-  "$SRC/features/tp.cpp:features-tp"; do
+  "$SRC/app/entry.cpp:app-entry" \
+  "$SRC/app/specter.cpp:app-specter" \
+  "$SRC/il2cpp/runtime.cpp:il2cpp-runtime" \
+  "$SRC/il2cpp/api.cpp:il2cpp-api" \
+  "$SRC/platform/nt.cpp:platform-nt" \
+  "$SRC/platform/log.cpp:platform-log" \
+  "$SRC/platform/hook/detour.cpp:platform-detour" \
+  "$SRC/render/dxgi_hook.cpp:render-dxgi_hook" \
+  "$SRC/render/d3d12_overlay.cpp:render-d3d12_overlay" \
+  "$SRC/render/d3dcompiler_shim.cpp:render-d3dcompiler_shim" \
+  "$SRC/render/input.cpp:render-input" \
+  "$SRC/features/console/console.cpp:features-console" \
+  "$SRC/features/lua_dump/lua_dump.cpp:features-lua_dump" \
+  "$SRC/features/teleport/teleport.cpp:features-teleport"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
   build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
   OUR_OBJS+=("$obj")
