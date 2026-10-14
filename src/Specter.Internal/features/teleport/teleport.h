@@ -4,7 +4,7 @@
 // player's position must happen inside the game's Lua and on the game's Lua
 // thread. This module owns the SLOT registry (a small list persisted to
 // /tmp/specter-tp.json) and turns UI actions into chunk traffic on the
-// dedicated bridge channel (features::lua::tp_submit / tp_take_result), which
+// dedicated bridge channel (features::console::tp_submit / tp_take_result), which
 // keeps its results out of the Lua console and out.txt.
 //
 // The lever is the player entity's own API:
@@ -20,7 +20,7 @@
 #pragma once
 
 namespace specter::features {
-namespace tp {
+namespace teleport {
 
 // Load saved slots from the persistence file. Call once (render thread).
 void init();

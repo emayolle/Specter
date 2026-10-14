@@ -27,7 +27,7 @@
 #include "platform/log.h"
 
 namespace specter::features {
-namespace lua {
+namespace console {
 namespace {
 
 // ---- field offsets and RVAs (from generated/dump + appdata) ----------------
@@ -606,13 +606,13 @@ bool install()
     ensure_lock();
 
     if (!g_hook_installed.load(std::memory_order_relaxed)) {
-        const std::uintptr_t base = runtime::module_base();
+        const std::uintptr_t base = il2cpp::module_base();
         if (base == 0) {
             log::error("lua: GameAssembly.dll not mapped - no Lua bridge");
             return false;
         }
         void* target = reinterpret_cast<void*>(base + kCommonUpdateRva);
-        if (specter::overlay::detour::install(
+        if (specter::hook::install(
                 target, reinterpret_cast<void*>(&common_update_hook),
                 reinterpret_cast<void**>(&g_orig_common_update),
                 "LuaManager.CommonUpdate")) {

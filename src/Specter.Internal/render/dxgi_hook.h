@@ -13,7 +13,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-namespace specter::overlay {
+namespace specter::dxgi {
 
 // Install the vtable hooks. Call ONCE from a hidden worker thread (never
 // CreateThread). Returns true when at least Present is hooked.
@@ -22,4 +22,4 @@ bool dxgi_install();
 // Hidden worker entry, spawned by specter::start via nt::spawn_hidden.
 unsigned long WINAPI overlay_worker(void* arg);
 
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

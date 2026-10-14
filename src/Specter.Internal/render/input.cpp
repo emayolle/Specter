@@ -26,8 +26,8 @@
 #include "platform/hook/detour.h"
 #include "platform/log.h"
 
-namespace specter::overlay {
-namespace game_input {
+namespace specter {
+namespace input {
 namespace {
 
 std::atomic<bool> g_open{false};
@@ -319,12 +319,12 @@ bool install(void* hwnd)
             log::error("input: %s not found in user32", t.proc);
             continue;
         }
-        if (detour::is_installed(fn)) {
+        if (hook::is_installed(fn)) {
             log::info("input: %s already detoured - reusing", t.name);
             ++hooked;
             continue;
         }
-        if (detour::install(fn, t.hook, t.orig, t.name)) {
+        if (hook::install(fn, t.hook, t.orig, t.name)) {
             ++hooked;
         }
     }
@@ -404,4 +404,4 @@ short real_async_key_state(int vk)
 }
 
 }  // namespace game_input
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

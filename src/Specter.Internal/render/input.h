@@ -26,8 +26,8 @@
 
 #include <cstdint>
 
-namespace specter::overlay {
-namespace game_input {
+namespace specter {
+namespace input {
 
 // Callback invoked (on the game's message thread) for every keyboard message
 // the subclass swallows while the menu is open, so ImGui can still receive
@@ -61,4 +61,4 @@ bool armed();
 short real_async_key_state(int vk);
 
 }  // namespace game_input
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

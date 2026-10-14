@@ -16,17 +16,17 @@ bool start()
 {
     log::init();
 
-    if (!runtime::initialize()) {
+    if (!il2cpp::initialize()) {
         log::error("start failed: GameAssembly.dll is not mapped");
         return false;
     }
 
     // First feature: prove the resolved VM API from inside the process.
-    runtime::self_check();
+    il2cpp::self_check();
 
     // Lua console bridge: detour LuaManager.CommonUpdate so queued chunks run
     // on the game's own Lua thread (see features/console/*).
-    if (!features::lua::install()) {
+    if (!features::console::install()) {
         log::error("start: Lua bridge unavailable - the console will not run");
     }
 
@@ -43,7 +43,7 @@ bool start()
     // D3D12 overlay: hook IDXGISwapChain::Present and render ImGui. Runs on
     // its own hidden thread so it never depends on the loader thread and never
     // uses CreateThread.
-    if (!nt::spawn_hidden(overlay::overlay_worker, nullptr)) {
+    if (!nt::spawn_hidden(dxgi::overlay_worker, nullptr)) {
         log::error("start: overlay worker not spawned - no overlay");
     }
 

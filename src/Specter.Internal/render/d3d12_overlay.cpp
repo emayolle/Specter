@@ -47,8 +47,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd,
                                                              WPARAM wParam,
                                                              LPARAM lParam);
 
-namespace specter::overlay {
-namespace d3d12_overlay {
+namespace specter {
+namespace render {
 namespace {
 
 constexpr UINT kSrvHeapSize = 128;  // power of two: the bump allocator wraps
@@ -254,7 +254,7 @@ void srv_free(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE,
 
 void build_snapshot()
 {
-    using namespace specter::api;
+    using namespace specter::il2cpp;
     auto& t = table();
     const int bound = resolve();
     const bool ok = ready();
@@ -333,7 +333,7 @@ InitResult init_once(IDXGISwapChain* sc)
     fetch_desc(sc);
 
     // Arm the input gate + cursor control as soon as we know the game window.
-    game_input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
+    input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
 
     // Shader-visible SRV heap (fonts/textures) with a wrapping bump allocator.
     {
@@ -410,7 +410,7 @@ InitResult init_once(IDXGISwapChain* sc)
 
     // Once the context exists, route keyboard messages the subclass swallows to
     // ImGui, so the Lua console can receive typed text.
-    game_input::set_keyboard_sink(&keyboard_sink);
+    input::set_keyboard_sink(&keyboard_sink);
 
     ImGui_ImplDX12_InitInfo info = {};
     info.Device = g_dev;
@@ -437,7 +437,7 @@ bool is_vk_down(int vk)
 {
     // Real key state even while the menu gate is active (our own toggle and
     // ImGui input must not be blocked by our own hooks).
-    return (game_input::real_async_key_state(vk) & 0x8000) != 0;
+    return (input::real_async_key_state(vk) & 0x8000) != 0;
 }
 
 void feed_input()
@@ -464,7 +464,7 @@ void build_ui()
     {
         char buf[8192];
         bool ok = false;
-        if (features::lua::take_result(buf, sizeof(buf), &ok)) {
+        if (features::console::take_result(buf, sizeof(buf), &ok)) {
             g_lua_log += ok ? "> " : "! ";
             g_lua_log += buf;
             g_lua_log += '\n';
@@ -478,13 +478,13 @@ void build_ui()
     // Drain the dedicated teleport channel and feed parsed position data.
     if (!g_tp_loaded) {
         g_tp_loaded = true;
-        features::tp::init();
+        features::teleport::init();
     }
     {
         char buf[256];
         bool ok = false;
-        if (features::lua::tp_take_result(buf, sizeof(buf), &ok)) {
-            features::tp::handle_result(buf);
+        if (features::console::tp_take_result(buf, sizeof(buf), &ok)) {
+            features::teleport::handle_result(buf);
         }
     }
 
@@ -496,13 +496,13 @@ void build_ui()
 
         if (ImGui::BeginTabBar("##main_tabs")) {
             if (ImGui::BeginTabItem("Lua Editor")) {
-                ImGui::Text("bridge: %s", features::lua::status());
+                ImGui::Text("bridge: %s", features::console::status());
                 ImGui::InputTextMultiline("##lua_src", g_lua_src,
                                           sizeof(g_lua_src),
                                           ImVec2(-1.0f, 180.0f));
                 if (ImGui::Button("Execute")) {
                     const int n = static_cast<int>(std::strlen(g_lua_src));
-                    if (!features::lua::submit(g_lua_src, n)) {
+                    if (!features::console::submit(g_lua_src, n)) {
                         g_lua_log += "! bridge not ready\n";
                     }
                 }
@@ -524,15 +524,15 @@ void build_ui()
                 // at 60 fps). The chunks run on the game's Lua thread.
                 if (++g_tp_refresh >= 45) {
                     g_tp_refresh = 0;
-                    if (features::lua::ready()) {
-                        features::tp::request_position();
+                    if (features::console::ready()) {
+                        features::teleport::request_position();
                     }
                 }
 
                 float cx = 0.0f, cy = 0.0f, cz = 0.0f;
                 int csp = 0;
-                if (features::tp::have_position()) {
-                    features::tp::position(&cx, &cy, &cz, &csp);
+                if (features::teleport::have_position()) {
+                    features::teleport::position(&cx, &cy, &cz, &csp);
                     ImGui::Text("Position: (%.2f, %.2f, %.2f)  space %d", cx, cy,
                                 cz, csp);
                 } else {
@@ -544,7 +544,7 @@ void build_ui()
                 ImGui::InputText("Name", g_tp_name, sizeof(g_tp_name));
                 ImGui::SameLine();
                 if (ImGui::Button("Save current position")) {
-                    if (!features::tp::save_current(g_tp_name)) {
+                    if (!features::teleport::save_current(g_tp_name)) {
                         g_lua_log +=
                             "! tp: nothing saved (need a live position or a "
                             "non-empty name)\n";
@@ -556,11 +556,11 @@ void build_ui()
                 ImGui::SameLine();
                 ImGui::TextDisabled(
                     "(a teleport walks to the target in small steps)");
-                float stepv = features::tp::lerp_step();
+                float stepv = features::teleport::lerp_step();
                 ImGui::SetNextItemWidth(240.0f);
                 if (ImGui::SliderFloat("Step size (u)", &stepv, 0.25f, 20.0f,
                                        "%.2f u/step")) {
-                    features::tp::set_lerp_step(stepv);
+                    features::teleport::set_lerp_step(stepv);
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(
@@ -568,13 +568,13 @@ void build_ui()
                         "rejects it (rubber-band).");
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-                    features::tp::persist();
+                    features::teleport::persist();
                 }
-                float spdv = features::tp::lerp_speed();
+                float spdv = features::teleport::lerp_speed();
                 ImGui::SetNextItemWidth(240.0f);
                 if (ImGui::SliderFloat("Speed (steps/s)", &spdv, 5.0f, 120.0f,
                                        "%.0f steps/s")) {
-                    features::tp::set_lerp_speed(spdv);
+                    features::teleport::set_lerp_speed(spdv);
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip(
@@ -582,38 +582,38 @@ void build_ui()
                         "game frame rate).");
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
-                    features::tp::persist();
+                    features::teleport::persist();
                 }
                 const float fps = ImGui::GetIO().Framerate;
                 const float cap = fps > 1.0f ? fps : 60.0f;
-                const float sps = features::tp::lerp_speed();
+                const float sps = features::teleport::lerp_speed();
                 const float eff_speed = sps < cap ? sps : cap;
                 ImGui::TextDisabled(
                     "=> ~%.0f u/s  (step x min(speed, %.0f fps))",
-                    features::tp::lerp_step() * eff_speed, cap);
+                    features::teleport::lerp_step() * eff_speed, cap);
 
                 ImGui::Separator();
                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
-                if (features::tp::count() == 0) {
+                if (features::teleport::count() == 0) {
                     ImGui::TextDisabled("no saved positions yet");
                 }
-                for (int i = 0; i < features::tp::count(); ++i) {
+                for (int i = 0; i < features::teleport::count(); ++i) {
                     char nm[36] = {};
                     float sx = 0.0f, sy = 0.0f, sz = 0.0f;
-                    features::tp::get_slot(i, nm, sizeof(nm), &sx, &sy, &sz);
+                    features::teleport::get_slot(i, nm, sizeof(nm), &sx, &sy, &sz);
                     ImGui::PushID(i);
                     ImGui::TextUnformatted(nm);
                     ImGui::SameLine();
                     ImGui::TextDisabled("(%.2f, %.2f, %.2f)", sx, sy, sz);
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Teleport")) {
-                        if (!features::tp::teleport_to(i)) {
+                        if (!features::teleport::teleport_to(i)) {
                             g_lua_log += "! tp: bridge not ready\n";
                         }
                     }
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Delete")) {
-                        features::tp::remove_at(i);
+                        features::teleport::remove_at(i);
                         --i;  // slots shifted left; re-check this index
                     }
                     ImGui::PopID();
@@ -629,14 +629,14 @@ void build_ui()
             }
 
             if (ImGui::BeginTabItem("Waypoints")) {
-                const int nflora = features::tp::floraison_count();
-                const int nwp = features::tp::waypoint_count();
+                const int nflora = features::teleport::floraison_count();
+                const int nwp = features::teleport::waypoint_count();
                 // One-shot fetch if a cached list is missing (e.g. /tmp was
                 // wiped by a reboot). Both lists come from the same scan.
                 if (!g_wp_auto && (nflora == 0 || nwp == 0) &&
-                    features::lua::ready()) {
+                    features::console::ready()) {
                     g_wp_auto = true;
-                    features::tp::request_marks();
+                    features::teleport::request_marks();
                 }
 
                 // Merge the Floraisons and the crystals, grouped by zone.
@@ -655,13 +655,13 @@ void build_ui()
                 };
                 for (int i = 0; i < nflora; ++i) {
                     int z = 0;
-                    features::tp::get_floraison(i, &z, nullptr, nullptr,
+                    features::teleport::get_floraison(i, &z, nullptr, nullptr,
                                                 nullptr);
                     add_zone(z);
                 }
                 for (int i = 0; i < nwp; ++i) {
                     int z = 0;
-                    features::tp::get_waypoint(i, &z, nullptr, 0, nullptr,
+                    features::teleport::get_waypoint(i, &z, nullptr, 0, nullptr,
                                                nullptr, nullptr);
                     add_zone(z);
                 }
@@ -675,7 +675,7 @@ void build_ui()
                     zones[j] = k;
                 }
 
-                if (features::tp::marks_pending()) {
+                if (features::teleport::marks_pending()) {
                     ImGui::TextDisabled("scanning the game...");
                 } else {
                     ImGui::TextDisabled(
@@ -684,8 +684,8 @@ void build_ui()
                 }
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Refresh from game")) {
-                    if (features::lua::ready()) {
-                        features::tp::request_marks();
+                    if (features::console::ready()) {
+                        features::teleport::request_marks();
                     } else {
                         g_lua_log += "! tp: bridge not ready\n";
                     }
@@ -710,7 +710,7 @@ void build_ui()
                     for (int i = 0; i < nflora; ++i) {
                         int z = 0;
                         float fx = 0.0f, fy = 0.0f, fz = 0.0f;
-                        features::tp::get_floraison(i, &z, &fx, &fy, &fz);
+                        features::teleport::get_floraison(i, &z, &fx, &fy, &fz);
                         if (z != zone) {
                             continue;
                         }
@@ -720,7 +720,7 @@ void build_ui()
                         ImGui::TextDisabled("(%.1f, %.1f, %.1f)", fx, fy, fz);
                         ImGui::SameLine();
                         if (ImGui::SmallButton("Teleport")) {
-                            if (!features::tp::teleport_to_floraison(i)) {
+                            if (!features::teleport::teleport_to_floraison(i)) {
                                 g_lua_log += "! tp: bridge not ready\n";
                             }
                         }
@@ -730,7 +730,7 @@ void build_ui()
                         int z = 0;
                         char nm[64] = {};
                         float wx = 0.0f, wy = 0.0f, wz = 0.0f;
-                        features::tp::get_waypoint(i, &z, nm, sizeof(nm), &wx,
+                        features::teleport::get_waypoint(i, &z, nm, sizeof(nm), &wx,
                                                    &wy, &wz);
                         if (z != zone) {
                             continue;
@@ -741,7 +741,7 @@ void build_ui()
                         ImGui::TextDisabled("(%.1f, %.1f, %.1f)", wx, wy, wz);
                         ImGui::SameLine();
                         if (ImGui::SmallButton("Teleport")) {
-                            if (!features::tp::teleport_to_waypoint(i)) {
+                            if (!features::teleport::teleport_to_waypoint(i)) {
                                 g_lua_log += "! tp: bridge not ready\n";
                             }
                         }
@@ -753,11 +753,11 @@ void build_ui()
             }
 
             if (ImGui::BeginTabItem("Miscellaneous")) {
-                bool inf = features::lua::infinite_stamina();
+                bool inf = features::console::infinite_stamina();
                 if (ImGui::Checkbox(
                         "Infinite movement stamina (sprint/dash/glide/climb)",
                         &inf)) {
-                    if (!features::lua::set_infinite_stamina(inf)) {
+                    if (!features::console::set_infinite_stamina(inf)) {
                         g_lua_log += "! bridge not ready - can't toggle stamina\n";
                     }
                 }
@@ -927,7 +927,7 @@ void on_present(IDXGISwapChain* sc)
     // Match the input gate + OS cursor to the menu state (block the game and
     // free the cursor while the menu is open). Only meaningful once the render
     // pipeline is live.
-    game_input::set_menu_open(g_ui_enabled.load(std::memory_order_relaxed) &&
+    input::set_menu_open(g_ui_enabled.load(std::memory_order_relaxed) &&
                               g_state == State::Ready);
 
     if (!g_ui_enabled.load(std::memory_order_relaxed)) {
@@ -957,13 +957,13 @@ void on_present(IDXGISwapChain* sc)
         return;
     }
 
-    // The input gate is armed by game_input::install() inside init_once(); if it
+    // The input gate is armed by input::install() inside init_once(); if it
     // failed there (e.g. a prologue our decoder cannot handle) keep retrying
     // (throttled) in case the situation changes.
-    if (!game_input::armed()) {
+    if (!input::armed()) {
         static int retry = 0;
         if ((retry++ % 120) == 0) {
-            game_input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
+            input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
         }
     }
 
@@ -992,4 +992,4 @@ void on_present(IDXGISwapChain* sc)
 }
 
 }  // namespace d3d12_overlay
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

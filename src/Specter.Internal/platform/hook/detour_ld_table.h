@@ -6,7 +6,7 @@
 #pragma once
 #include <cstdint>
 
-namespace specter::overlay::detour {
+namespace specter::hook {
 
 struct LdEntry {
     std::uint8_t  prefix[4];
@@ -209,4 +209,4 @@ static const LdEntry kLdTable[188] = {
 
 static const int kLdCount = 188;
 
-} // namespace specter::overlay::detour
+} // namespace specter::hook

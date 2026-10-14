@@ -19,7 +19,7 @@
 #pragma once
 
 namespace specter::features {
-namespace lua {
+namespace console {
 
 // Resolve xlua.dll's Lua C API and detour LuaManager.CommonUpdate. Called once
 // from specter::start() (on the hidden worker thread). Safe to call again: the

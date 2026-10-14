@@ -25,7 +25,7 @@
 #include "il2cpp-appdata.h"  // SDK types: Il2CppDomain, Il2CppClass, MethodInfo, ...
 
 namespace specter {
-namespace api {
+namespace il2cpp {
 
 // Export names (constants kept here so the resolver and the docs agree).
 namespace names {

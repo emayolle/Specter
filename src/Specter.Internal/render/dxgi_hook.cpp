@@ -35,7 +35,7 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 // CRT per-thread initialiser for threads entered outside the loader (nt.h).
 extern "C" int __cdecl _CRT_INIT(void*, unsigned long, void*);
 
-namespace specter::overlay {
+namespace specter::dxgi {
 namespace {
 
 using D3D12CreateDeviceFn =
@@ -93,7 +93,7 @@ void render_once(IDXGISwapChain* sc)
         return;
     }
     g_in_present = true;
-    d3d12_overlay::on_present(sc);
+    render::on_present(sc);
     g_in_present = false;
 }
 
@@ -116,7 +116,7 @@ HRESULT STDMETHODCALLTYPE resize_proxy(IDXGISwapChain* sc, UINT width,
                                        UINT height, UINT flags,
                                        const DXGI_FORMAT* fmt)
 {
-    d3d12_overlay::on_resize(sc);
+    render::on_resize(sc);
     return g_o_resize ? g_o_resize(sc, width, height, flags, fmt) : E_FAIL;
 }
 
@@ -126,7 +126,7 @@ HRESULT STDMETHODCALLTYPE resize1_proxy(IDXGISwapChain3* sc, UINT count,
                                         const UINT* node_mask,
                                         IUnknown* const* present_queue)
 {
-    d3d12_overlay::on_resize(reinterpret_cast<IDXGISwapChain*>(sc));
+    render::on_resize(reinterpret_cast<IDXGISwapChain*>(sc));
     return g_o_resize1
                ? g_o_resize1(sc, count, width, height, fmt, flags, node_mask,
                              present_queue)
@@ -136,7 +136,7 @@ HRESULT STDMETHODCALLTYPE resize1_proxy(IDXGISwapChain3* sc, UINT count,
 void STDMETHODCALLTYPE execute_proxy(ID3D12CommandQueue* queue, UINT count,
                                      ID3D12CommandList* const* lists)
 {
-    d3d12_overlay::on_command_queue(queue);
+    render::on_command_queue(queue);
     if (g_o_execute) {
         g_o_execute(queue, count, lists);
     }
@@ -289,7 +289,7 @@ bool dxgi_install()
         g_o_resize1 = nullptr;
     }
 
-    d3d12_overlay::set_probe_window(hwnd);
+    render::set_probe_window(hwnd);
 
     // The probe objects themselves are no longer needed; the patches live on
     // the shared class vtable.
@@ -305,4 +305,4 @@ bool dxgi_install()
     return true;
 }
 
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

@@ -15,9 +15,9 @@
 #include <cstdint>
 
 namespace specter {
-namespace runtime {
+namespace il2cpp {
 
-// Locate GameAssembly.dll and resolve the runtime API (api::resolve()).
+// Locate GameAssembly.dll and resolve the runtime API (il2cpp::resolve()).
 // Returns false if the module is not mapped.
 bool initialize();
 

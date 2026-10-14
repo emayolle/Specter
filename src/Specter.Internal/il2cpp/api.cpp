@@ -9,7 +9,7 @@
 #include "platform/log.h"
 
 namespace specter {
-namespace api {
+namespace il2cpp {
 
 static Table g_table;
 

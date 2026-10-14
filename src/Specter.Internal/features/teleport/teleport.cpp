@@ -20,7 +20,7 @@
 #include "platform/log.h"
 
 namespace specter::features {
-namespace tp {
+namespace teleport {
 namespace {
 
 constexpr int kMaxSlots = 64;
@@ -476,7 +476,7 @@ bool send_setpos(float x, float y, float z)
     if (n <= 0 || n >= static_cast<int>(sizeof(code))) {
         return false;
     }
-    return features::lua::tp_submit(code, n);
+    return features::console::tp_submit(code, n);
 }
 
 // Builds and queues one scan for both fast-travel lists. It walks the
@@ -537,7 +537,7 @@ bool send_marks_probe()
         "  end\n"
         "end\n"
         "print('MARKS_DONE')\n";
-    return features::lua::tp_submit(code.c_str(), static_cast<int>(code.size()));
+    return features::console::tp_submit(code.c_str(), static_cast<int>(code.size()));
 }
 
 }  // namespace
@@ -623,7 +623,7 @@ void init()
 
 void request_position()
 {
-    features::lua::tp_submit(kPosProbe, static_cast<int>(sizeof(kPosProbe) - 1));
+    features::console::tp_submit(kPosProbe, static_cast<int>(sizeof(kPosProbe) - 1));
 }
 
 bool have_position()

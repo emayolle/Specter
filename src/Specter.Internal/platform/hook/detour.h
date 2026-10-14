@@ -25,8 +25,8 @@
 
 #pragma once
 
-namespace specter::overlay {
-namespace detour {
+namespace specter {
+namespace hook {
 
 // Inline-detour `target` to `hook`. On success `*out_orig` is a trampoline you
 // call to run the original code. `name` is for logging only. Idempotent for the
@@ -40,4 +40,4 @@ bool remove(void* target);
 bool is_installed(void* target);
 
 }  // namespace detour
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

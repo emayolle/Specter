@@ -16,8 +16,8 @@
 #include "platform/hook/detour_ld_table.h"
 #include "platform/log.h"
 
-namespace specter::overlay {
-namespace detour {
+namespace specter {
+namespace hook {
 namespace {
 
 // The E9 we write needs a 5-byte window, so the prologue we relocate must be at
@@ -445,4 +445,4 @@ bool is_installed(void* target)
 }
 
 }  // namespace detour
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

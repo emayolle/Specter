@@ -10,7 +10,7 @@
 #include "platform/log.h"
 
 namespace specter {
-namespace runtime {
+namespace il2cpp {
 
 uintptr_t module_base()
 {
@@ -29,7 +29,7 @@ bool initialize()
     //
     // Per-method pointers from appdata/il2cpp-functions.h are offsets relative
     // to module_base() and need no resolution.
-    api::resolve();
+    il2cpp::resolve();
 
     log::info("runtime: GameAssembly.dll mapped");
     return true;
@@ -45,14 +45,14 @@ static const char* image_name_of(const Il2CppImage* image)
     if (!image) {
         return "(no image)";
     }
-    const char* n = specter::api::table().image_get_name(image);
+    const char* n = specter::il2cpp::table().image_get_name(image);
     return n ? n : "(unknown)";
 }
 
 void self_check()
 {
-    auto& t = api::table();
-    if (!api::ready()) {
+    auto& t = il2cpp::table();
+    if (!il2cpp::ready()) {
         log::error("self_check: runtime API not ready");
         return;
     }

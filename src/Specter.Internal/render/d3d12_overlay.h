@@ -15,8 +15,8 @@
 struct IDXGISwapChain;
 struct ID3D12CommandQueue;
 
-namespace specter::overlay {
-namespace d3d12_overlay {
+namespace specter {
+namespace render {
 
 // Render-thread, called from the Present hook (before the original call).
 void on_present(IDXGISwapChain* sc);
@@ -36,4 +36,4 @@ void on_command_queue(ID3D12CommandQueue* queue);
 void set_probe_window(void* hwnd);
 
 }  // namespace d3d12_overlay
-}  // namespace specter::overlay
+}  // namespace specter::dxgi

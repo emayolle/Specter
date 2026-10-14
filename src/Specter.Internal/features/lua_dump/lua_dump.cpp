@@ -182,7 +182,7 @@ bool install()
             return false;
         }
 
-        if (!specter::overlay::detour::install(
+        if (!specter::hook::install(
                 target, reinterpret_cast<void*>(&loadbuffer_hook),
                 reinterpret_cast<void**>(&g_orig), which)) {
             log::error("lua_dump: detour on %s failed", which);
