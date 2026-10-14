@@ -15,6 +15,9 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <string>
+
+#include "imgui.h"
 
 #include "lua/mailbox.h"
 #include "lua/pump.h"
@@ -45,6 +48,11 @@ struct Output {
 lua::Mailbox<Chunk, Output, 1, lua::Replace> g_channel;
 
 unsigned long long g_out_seq = 0;  // bumped per result, Lua thread only
+
+// UI state, owned here rather than by the overlay: the tab is this feature's,
+// so its buffers are too.
+char g_src[16384] = "print('hello from the game Lua')";
+std::string g_log;
 
 // Mirror the captured output to the host log pipe, line by line, so the console
 // is readable in the terminal and in specter.log next to everything else.
@@ -169,6 +177,49 @@ bool take_result(char* out, int cap, bool* out_ok)
 const char* status()
 {
     return lua::pump::status();
+}
+
+// Drain whatever the Lua thread produced since the last frame. Called from
+// draw_ui, because that is the only place the result is shown.
+void drain_result()
+{
+    char buf[8192];
+    bool ok = false;
+    if (!take_result(buf, sizeof(buf), &ok)) {
+        return;
+    }
+    g_log += ok ? "> " : "! ";
+    g_log += buf;
+    g_log += '\n';
+    constexpr std::size_t kKeep = 60000;
+    if (g_log.size() > kKeep) {
+        g_log.erase(0, g_log.size() - kKeep / 2);
+    }
+}
+
+void draw_ui()
+{
+    drain_result();
+
+    ImGui::Text("bridge: %s", status());
+    ImGui::InputTextMultiline("##lua_src", g_src, sizeof(g_src),
+                              ImVec2(-1.0f, 180.0f));
+    if (ImGui::Button("Execute")) {
+        const int n = static_cast<int>(std::strlen(g_src));
+        if (!submit(g_src, n)) {
+            g_log += "! bridge not ready\n";
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear output")) {
+        g_log.clear();
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(an infinite loop freezes the game)");
+
+    ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);
+    ImGui::TextUnformatted(g_log.c_str());
+    ImGui::EndChild();
 }
 
 }  // namespace console

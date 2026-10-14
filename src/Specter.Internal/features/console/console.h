@@ -43,4 +43,13 @@ bool take_result(char* out, int cap, bool* out_ok);
 // One-line, human-readable bridge status for the UI.
 const char* status();
 
+// Draw the console's tab. Called every frame from inside the tab the registry
+// gave us, on the render thread.
+//
+// The feature owns its editor buffer and its output log: the overlay used to
+// hold both, which meant the UI layer had to know about the console's internals
+// just to display them. It also drains the captured result here, since that is
+// the only thing that consumes it.
+void draw_ui();
+
 }  // namespace specter::features::console

@@ -103,6 +103,8 @@
     <ClInclude Include="platform\hook\detour.h" />
     <ClInclude Include="platform\hook\detour_ld_table.h" />
     <ClInclude Include="render\input.h" />
+    <ClCompile Include="features\registry.cpp" />
+    <ClInclude Include="features\feature.h" />
     <ClInclude Include="features\console\console.h" />
     <ClInclude Include="lua\pump.h" />
     <ClInclude Include="lua\mailbox.h" />

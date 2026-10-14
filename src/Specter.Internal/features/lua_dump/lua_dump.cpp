@@ -18,6 +18,7 @@
 #include <cstring>
 
 #include "features/lua_dump/lua_dump.h"
+#include "lua/pump.h"
 #include "platform/log.h"
 #include "platform/hook/detour.h"
 
@@ -191,6 +192,16 @@ bool install()
         g_hook_installed.store(true, std::memory_order_relaxed);
         log::info("lua_dump: hooked %s in xlua.dll (%p) -> %s", which, target, kDumpDir);
     }
+
+    // Tell the pump not to feed our own chunks back into this capture. Done from
+    // the feature rather than from app::start(), so the wiring stays on the
+    // feature -> lua side and start() keeps naming nothing.
+    specter::lua::pump::set_chunk_filter(&filter);
+
+    // Capturing is the whole point of the tool, so it writes as soon as it is
+    // installed. This is a research tool, not a gameplay feature: it observes
+    // chunks, it never executes anything.
+    set_enabled(true);
     return true;
 }
 

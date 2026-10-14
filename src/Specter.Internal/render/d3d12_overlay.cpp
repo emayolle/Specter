@@ -31,7 +31,7 @@
 
 #include "render/d3d12_overlay.h"
 #include "render/input.h"
-#include "features/console/console.h"
+#include "features/feature.h"
 #include "il2cpp/api.h"
 #include "platform/log.h"
 
@@ -107,15 +107,15 @@ D3D12_CPU_DESCRIPTOR_HANDLE g_rtv_handles[kRtvHeapSize] = {};
 bool g_resize_dirty = true;
 bool g_demo = false;
 char g_snapshot[512] = {};
-
-// ---- Lua console state (touch()d only on the render thread) ----------------
-
-char g_lua_src[16384] =
-    "-- Specter Lua console - runs in the game's own lua_State, on the game's\n"
-    "-- Lua thread. `print(...)` output and the chunk's return values appear\n"
-    "-- below; errors are caught and reported.\n"
-    "print('hello from Specter', _VERSION)";
-std::string g_lua_log;
+// 
+// // ---- Lua console state (touch()d only on the render thread) ----------------
+// 
+// char g_lua_src[16384] =
+//     "-- Specter Lua console - runs in the game's own lua_State, on the game's\n"
+//     "-- Lua thread. `print(...)` output and the chunk's return values appear\n"
+//     "-- below; errors are caught and reported.\n"
+//     "print('hello from Specter', _VERSION)";
+// std::string g_lua_log;
 
 // ---- Teleport tab state (render thread only) -------------------------------
 
@@ -459,21 +459,6 @@ void build_ui()
 {
     ImGuiIO& io = ImGui::GetIO();
 
-    // Drain whatever the Lua thread produced since the last frame.
-    {
-        char buf[8192];
-        bool ok = false;
-        if (features::console::take_result(buf, sizeof(buf), &ok)) {
-            g_lua_log += ok ? "> " : "! ";
-            g_lua_log += buf;
-            g_lua_log += '\n';
-            constexpr std::size_t kKeep = 60000;
-            if (g_lua_log.size() > kKeep) {
-                g_lua_log.erase(0, g_lua_log.size() - kKeep / 2);
-            }
-        }
-    }
-
 //     // Drain the dedicated teleport channel and feed parsed position data.
 //     if (!g_tp_loaded) {
 //         g_tp_loaded = true;
@@ -494,28 +479,17 @@ void build_ui()
         ImGui::Separator();
 
         if (ImGui::BeginTabBar("##main_tabs")) {
-            if (ImGui::BeginTabItem("Lua Editor")) {
-                ImGui::Text("bridge: %s", features::console::status());
-                ImGui::InputTextMultiline("##lua_src", g_lua_src,
-                                          sizeof(g_lua_src),
-                                          ImVec2(-1.0f, 180.0f));
-                if (ImGui::Button("Execute")) {
-                    const int n = static_cast<int>(std::strlen(g_lua_src));
-                    if (!features::console::submit(g_lua_src, n)) {
-                        g_lua_log += "! bridge not ready\n";
-                    }
+            // One tab per feature that wants one. The overlay no longer knows
+            // what a console is, or that a teleport tab used to exist.
+            for (int i = 0; i < features::registry_count(); ++i) {
+                const features::Feature* f = features::registry()[i];
+                if (!f->tab || !f->draw_ui) {
+                    continue;
                 }
-                ImGui::SameLine();
-                if (ImGui::Button("Clear output")) {
-                    g_lua_log.clear();
+                if (ImGui::BeginTabItem(f->tab)) {
+                    f->draw_ui();
+                    ImGui::EndTabItem();
                 }
-                ImGui::SameLine();
-                ImGui::TextDisabled("(an infinite loop freezes the game)");
-
-                ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);
-                ImGui::TextUnformatted(g_lua_log.c_str());
-                ImGui::EndChild();
-                ImGui::EndTabItem();
             }
 
 //             if (ImGui::BeginTabItem("Teleport")) {
