@@ -13,16 +13,32 @@
 
 ## 0. Pourquoi cette base
 
-`ANALYSE-DETECTION.md` §5 établit le fait central : entre `2572297` et `HEAD`, **la
-couche C++ est fonctionnellement identique** (mêmes hooks, caractère près), et **le
-delta fonctionnel est intégralement dans la couche Lua** :
+### L'observation qui tranche (14 octobre, après-midi)
+
+| Version | Comportement observé |
+|---|---|
+| `HEAD` (layer Lua, `SPECTER`, LuaBridge, thunks) | **2 à 3 avertissements à 25–30 min** d'utilisation |
+| `2572297` | **0 avertissement sur plus de 4 h** |
+
+`HEAD` déclenche dans une fenêtre de **25–30 min**. Le test de `2572297` couvre
+**~8 fois** cette fenêtre. Ce n'est pas une absence de détection à T+1h comme
+l'analyse le craignait pour une observation courte : c'est une **absence sur une
+fenêtre où l'autre version se déclenche systématiquement**. Les deux versions se
+distinguent donc réellement.
+
+Et puisque `ANALYSE-DETECTION.md` §5 établit que **la couche C++ est
+rigoureusement identique** entre les deux, la différence est **côté Lua**.
+
+### Le delta à reconstruire
+
+Entre `2572297` et `HEAD`, tout le delta fonctionnel est dans la couche Lua :
 
 | Ajouté après `2572297` | Nature |
 |---|---|
 | `lua/native.cpp` (pont LuaBridge) | confort de dev |
 | `lua/bridge.cpp`, `lua/api.cpp`, `lua/thunks.cpp` (142 thunks) | confort de dev |
 | `specter_init.lua` | le layer Lua |
-| 3 écritures dans l'état Lua du jeu (§6 de l'analyse) | **l'écart suspecté** |
+| 3 écritures dans l'état Lua du jeu (§6 de l'analyse) | **écart suspecté** |
 
 Ce qu'écrit le build dans l'état Lua du jeu, et qui n'a **aucune** raison
 d'exister :
@@ -34,6 +50,10 @@ d'exister :
 > La reconstruction doit obtenir l'architecture cible **par un autre chemin** que
 > ces trois écritures. C'est la seule vraie difficulté du plan, et elle est
 > traitée au §4.
+>
+> **Prudence** : cette observation n'établit pas *quelle* écriture est en cause,
+> seulement que le delta Lua est le terrain. `O3` (build désarmé signalé quand
+> même) reste partiellement en tension avec cette lecture — voir §6.
 
 ---
 
@@ -280,15 +300,17 @@ le diff de footprint avant de commiter.
 
 ## 6. Ce que ce plan ne prétend pas
 
-- **Aucune garantie de non-détection.** `ANALYSE-DETECTION.md` §7 pose une
-  contradiction non résolue entre O1 (`2572297` jamais signalé) et O3 (build désarmé
-  signalé quand même), et H4 — un contrôle **natif** capable d'inspecter le registre,
-  que Lua ne voit pas — reste la seule hypothèse qui réconcilie les deux. Ce plan
-  **retire** des écritures dont on n'a pas la preuve qu'elles sont le vecteur ; ce
-  n'est pas une preuve de sécurité.
-- Les sanctions sont **asynchrones et par vagues** (`DETECTION.md` facteur 4) :
-  l'absence d'avertissement à T+1h ne prouve rien. Cette base n'a pas été validée
-  par ce critère, seulement par l'usage historique.
+- **Aucune garantie de non-détection.** §0 établit que le delta Lua est le terrain
+  et que `2572297` tient sur une fenêtre où `HEAD` se déclenche — mais cela ne dit
+  pas *quelle* écriture est en cause, ni si les sanctions peuvent encore arriver en
+  vague au-delà de cette fenêtre. `ANALYSE-DETECTION.md` §7 pose une contradiction
+  non résolue entre O1 et O3 (build **désarmé**, donc n'exécutant rien, signalé
+  quand même), et H4 — un contrôle **natif** capable d'inspecter le registre que
+  Lua ne voit pas — reste la seule hypothèse qui réconcilie les deux. Ce plan
+  **retire** des écritures ; ce n'est pas une preuve de sécurité.
+- Ce plan **corrige H2** (« l'injection seule suffit ») seulement partiellement :
+  les hooks restent identiques à `2572297`, donc ce qui rendait `2572297` propre
+  reste, mais rien n'exclut qu'un jour ce vecteur suffise.
 - H2 (« l'injection seule suffit ») reste ouverte et **ne serait pas corrigée** par
   ce plan : les hooks restent identiques.
 
