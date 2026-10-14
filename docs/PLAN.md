@@ -1,150 +1,129 @@
-# Plan — reconstruire Specter sur la base `2572297`
+# Plan — ré-architecture de `Specter.Internal`
 
-> **Base** : `2572297` (13 oct. 11:04) — le dernier état jamais signalé.
-> **But** : reprendre l'architecture cible (couches, namespaces, fonctions Lua
-> nommées) **sans jamais réintroduire l'empreinte Lua** que cet état n'avait pas.
->
-> Contraintes issues de `docs/ANALYSE-DETECTION.md`, `docs/DETECTION.md` et
-> `docs/ANTICHEAT.md`. Ces trois documents sont des **contraintes de conception**,
-> pas de la documentation décorative : chaque phase du plan est evaluée contre
-> eux.
+> **Base** : `2572297` (13 oct. 11:04).
+> **Objet** : réorganiser le code en couches, sans changement de comportement.
+> **Règle unique côté Lua** : on n'écrit rien dans l'état Lua du jeu. Ni `_G`, ni
+> clé nommée au registre, ni `lua_atpanic`. Le mode texte de `2572297`
+> (`submit` / `take_result`) est conservé tel quel.
 
 ---
 
-## 0. Pourquoi cette base
+## 1. Le problème
 
-### L'observation qui tranche (14 octobre, après-midi)
+Le code est propre *à l'intérieur* de ses modules ; c'est le **rangement** qui ne
+suit aucune règle. On ne peut pas dire « qui est la base » sans ouvrir les
+fichiers.
 
-| Version | Comportement observé |
-|---|---|
-| `HEAD` (layer Lua, `SPECTER`, LuaBridge, thunks) | **2 à 3 avertissements à 25–30 min** d'utilisation |
-| `2572297` | **0 avertissement sur plus de 4 h** |
+1. **La racine mélange quatre rôles.** `entry.cpp` / `specter.cpp` (cycle de vie),
+   `runtime.*` / `il2cpp-api.*` (seam VM), `log.*` / `nt.*` (primitives),
+   `hostch-rva.h` (généré) : quatre responsabilités côte à côte.
+2. **Les dossiers sont nommés d'après un occupant, pas un rôle.** `overlay/`
+   contient `detour.*`, un **moteur de hook générique** aussi utilisé par
+   `game_input` — rien de « overlay ».
+3. **`lua_console.{h,cpp}` (808 lignes) fait trois métiers** : le detour
+   `CommonUpdate` (de l'infra), le transport inter-thread, et la console (une
+   feature). Il est dans `features/`, alors que deux des trois sont de l'infra.
+4. **La couche `features` n'a pas de seam.** `d3d12_overlay.cpp` **inclut** chaque
+   feature, et `specter.cpp` les câble en dur. Ajouter une feature touche 3–4
+   fichiers.
+5. **Les constantes RE sont dispersées** (offsets `0x18`/`0x10`, RVA
+   `0x172ADC0`, indices de vtable) au fond des modules.
+6. **`lua_console.cpp` a un `ensure_lock()` qui n'est pas thread-safe** :
+   `if (!g_lock_ready) { InitializeCriticalSection(...); g_lock_ready = true; }` —
+   deux threads peuvent passer le test avant l'initialisation.
 
-`HEAD` déclenche dans une fenêtre de **25–30 min**. Le test de `2572297` couvre
-**~8 fois** cette fenêtre. Ce n'est pas une absence de détection à T+1h comme
-l'analyse le craignait pour une observation courte : c'est une **absence sur une
-fenêtre où l'autre version se déclenche systématiquement**. Les deux versions se
-distinguent donc réellement.
-
-Et puisque `ANALYSE-DETECTION.md` §5 établit que **la couche C++ est
-rigoureusement identique** entre les deux, la différence est **côté Lua**.
-
-### Le delta à reconstruire
-
-Entre `2572297` et `HEAD`, tout le delta fonctionnel est dans la couche Lua :
-
-| Ajouté après `2572297` | Nature |
-|---|---|
-| `lua/native.cpp` (pont LuaBridge) | confort de dev |
-| `lua/bridge.cpp`, `lua/api.cpp`, `lua/thunks.cpp` (142 thunks) | confort de dev |
-| `specter_init.lua` | le layer Lua |
-| 3 écritures dans l'état Lua du jeu (§6 de l'analyse) | **écart suspecté** |
-
-Ce qu'écrit le build dans l'état Lua du jeu, et qui n'a **aucune** raison
-d'exister :
-
-1. `_G.SPECTER` — global étranger, écrit en raw ;
-2. `registry["__specter_ns"]` — clé nommée dans le registre ;
-3. `lua_atpanic` **remplacé** — c'était du diagnostic.
-
-> La reconstruction doit obtenir l'architecture cible **par un autre chemin** que
-> ces trois écritures. C'est la seule vraie difficulté du plan, et elle est
-> traitée au §4.
->
-> **Prudence** : cette observation n'établit pas *quelle* écriture est en cause,
-> seulement que le delta Lua est le terrain. `O3` (build désarmé signalé quand
-> même) reste partiellement en tension avec cette lecture — voir §6.
+Le but : **en lisant seulement l'arbre, comprendre l'architecture.**
 
 ---
 
-## 1. Invariants — les règles qui ne se négocient pas
+## 2. Le principe
 
-### A. Discrétion (inchangé, vient de `2572297`)
-
-1. **Jamais de commande « GM »**, ni d'entrée qui en borrow. Aucune feature dérivée
-   de Shinoko, définitivement. C'est la cause racine du premier avertissement.
-2. **Aucun import réseau** — vérifié à 0 sur le binaire produit (`dxgi`, `IMM32`,
-   `KERNEL32`, `SHELL32`, `USER32`).
-3. **Aucun fichier écrit dans le dossier du jeu ni dans le prefix** — tout sort par
-   le pipe ou `Z:\tmp\...` (= racine Linux hors prefix).
-4. Manual-map hostch, worker `is_system`, aucun objet nommé, aucun socket.
-
-### B. Empreinte sur l'état Lua du jeu — **nouveau, c'est le cœur du plan**
-
-5. **On n'écrit rien** dans l'état Lua du jeu. Ni `_G`, ni clé nommée au registre,
-   ni remplacement de `lua_atpanic`. Pas d'exception.
-6. Le seul artefact autorisé est une **référence de registre anonyme**
-   (`luaL_ref(L, LUA_REGISTRYINDEX)`), créée **uniquement pendant que la couche est
-   armée**, et relâchée à `disarm()`.
-7. **Désarmé par défaut.** Injecter n'exécute aucune ligne de Lua. L'armement est un
-   acte explicite de l'utilisateur.
-8. **Aucune exécution automatique à l'injection** : pas d'installation de layer, pas
-   de tick de réconciliation, pas d'exécution déclenchée par le système de fichiers
-   (`poll_cli` — voir §5.4, à **supprimer**).
-
-### C. Ingénierie
-
-9. Jamais de `CreateThread` : uniquement `nt::spawn_hidden()`.
-10. Jamais de constructeur global ni de « magic static » — la DLL est manual-mappée,
-    le guard CRT des statiques n'est pas initialisé. Les objets d'espace de noms
-    doivent être des POD à initialisation nulle ; tout enregistrement est explicite.
-11. Une seule source de vérité par état.
-
-> Les invariants B sont **vérifiables statiquement**. Ils deviennent un contrôle
-> automatique en phase 0 (§5.0) — sinon ils ne tiendront pas.
-
----
-
-## 2. L'architecture cible
-
-Le principe est inchangé : **un dossier = un rôle**, et les dépendances pointent
-**vers le bas**.
+> L'arbre est un **empilement de couches**. Les dépendances vont **vers le bas**.
+> Un dossier est nommé pour son **rôle**, jamais pour un de ses occupants.
 
 ```
-src/Specter.Internal/
-├── app/                 cycle de vie : DllMain + start()/stop()  (composition root)
-│   ├── entry.cpp
-│   └── specter.{h,cpp}
-├── render/              front-end : overlay D3D12, fenêtre, input
-│   ├── dxgi_hook.{h,cpp}
-│   ├── d3d12_overlay.{h,cpp}
-│   ├── d3dcompiler_shim.cpp
-│   └── input.{h,cpp}
-├── features/            une feature par dossier
-│   ├── feature.h        l'interface + le registre
-│   ├── registry.cpp     LA ligne qui câble chaque feature
-│   ├── teleport/        slots + marks + lerp
-│   └── lua_dump/        outil de RE (recherche, pas une feature de jeu)
-├── lua/                 infra du pont Lua
-│   ├── pump.{h,cpp}     detour CommonUpdate + tick(L)
-│   ├── mailbox.h        transport inter-thread
-│   ├── call.{h,cpp}     seam C++ → Lua (§4)
-│   └── layer.{h,cpp}    chargement du chunk de layer + refs anonymes
-├── il2cpp/              seam VM
-│   ├── runtime.{h,cpp}
-│   ├── api.{h,cpp}
-│   └── target.h         constantes RE regroupées
-└── platform/            primitives réutilisables
-    ├── log.{h,cpp}
-    ├── nt.{h,cpp}
-    ├── seh.h            garde-fou SEH
-    └── hook/detour.{h,cpp}
+  app/          cycle de vie : DllMain + start()/stop()   (composition root)
+   │
+   ├── render/    front-end : overlay D3D12, fenêtre, input, UI
+   └── features/  les fonctionnalités, une par dossier
+        │
+   lua/  il2cpp/  infra : pompe Lua, seam VM
+        │
+   platform/      primitives réutilisables : log, threads cachés, hook engine
 ```
 
-| Couche | Peut inclure | Ne peut pas inclure |
+| Couche | Peut inclure | Ne peut **pas** inclure |
 |---|---|---|
 | `app/` | `render/`, `features/`, `lua/`, `il2cpp/`, `platform/` | — |
-| `render/` | `features/` (via le registre), `lua/`, `il2cpp/`, `platform/` | `app/`, un `.h` de feature précis |
+| `render/` | `features/` (via le **registre** seulement), `lua/`, `il2cpp/`, `platform/` | `app/`, un `.h` de feature précis |
 | `features/` | `lua/`, `il2cpp/`, `platform/` | `app/`, `render/` |
 | `lua/` | `platform/` | tout le reste |
 | `il2cpp/` | `platform/` | tout le reste |
-| `platform/` | *(rien)* | tout le reste |
+| `platform/` | *(rien en interne)* | tout le reste |
+
+Trois invariants — ils marchent aujourd'hui, on ne les casse pas :
+
+1. **jamais de `CreateThread`** : uniquement via `platform/nt::spawn_hidden()` ;
+2. **jamais de constructeur global / « magic static »** : la DLL est manual-mappée,
+   le guard CRT des statiques n'est pas initialisé. Les objets d'espace de noms
+   sont des POD à initialisation nulle, et tout enregistrement est **explicite** ;
+3. **jamais d'écriture dans l'état Lua du jeu** : ni global (`_G.…`, `lua_setglobal`,
+   `LUA_GLOBALSINDEX`), ni clé nommée au registre, ni remplacement de
+   `lua_atpanic`, ni export d'une table de notre part dans l'environnement. On
+   **exécute** des chunks et on lit des valeurs ; on ne **dépose rien**.
+
+> L'invariant 3 est vérifiable mécaniquement : `tools/check-invariants.sh` doit
+> **faire échouer le build** si une de ces écritures réapparaît. C'est le seul
+> moyen qu'elle tienne dans le temps.
 
 ---
 
-## 3. Correspondance `2572297` → cible
+## 3. Arbre cible
 
-| Aujourd'hui (`2572297`) | Cible | Nature |
+```
+src/Specter.Internal/
+├── app/
+│   ├── entry.cpp                    DllMain + bootstrap
+│   └── specter.{h,cpp}              start()/stop() — composition root
+│
+├── render/
+│   ├── dxgi_hook.{h,cpp}            hook vtable DXGI (Present/ResizeBuffers/Execute)
+│   ├── d3d12_overlay.{h,cpp}        pont ImGui ↔ D3D12 + l'UI
+│   ├── d3dcompiler_shim.cpp         D3DCompile paresseux (import-safe)
+│   └── input.{h,cpp}                (ex game_input) gate input + curseur
+│
+├── features/
+│   ├── feature.h                    l'interface d'une feature + le registre
+│   ├── registry.cpp                 LA ligne unique qui câble chaque feature
+│   ├── teleport/                    (ex tp) slots + marks + lerp
+│   │   └── teleport.{h,cpp}
+│   ├── console/                     console Lua (UI + résultat)
+│   │   └── console.{h,cpp}
+│   └── lua_dump/                    dumper de chunks (outil de RE)
+│       └── lua_dump.{h,cpp}
+│
+├── lua/
+│   ├── pump.{h,cpp}                 detour CommonUpdate + tick(L)   ← extrait
+│   └── mailbox.h                    transport inter-thread          ← nouveau
+│
+├── il2cpp/
+│   ├── runtime.{h,cpp}              localise GameAssembly + init
+│   ├── api.{h,cpp}                  (ex il2cpp-api) résolution mono_*
+│   └── target.h                     constantes RE regroupées       ← nouveau
+│
+└── platform/
+    ├── log.{h,cpp}                  journalisation (pipe / fichier)
+    ├── nt.{h,cpp}                   spawn_hidden (thread is_system)
+    ├── seh.h                        garde-fou SEH du pump           ← nouveau
+    ├── hostch-rva.h                 GÉNÉRÉ (bannière AUTO-GENERATED)
+    └── hook/
+        ├── detour.{h,cpp}           moteur de detour inline générique
+        └── detour_ld_table.h        table du décodeur x86-64
+```
+
+### Correspondance (état actuel → cible)
+
+| Aujourd'hui | Cible | Nature |
 |---|---|---|
 | `entry.cpp` | `app/entry.cpp` | déplacement |
 | `specter.{h,cpp}` | `app/specter.{h,cpp}` | déplacement |
@@ -159,167 +138,176 @@ src/Specter.Internal/
 | `overlay/game_input.{h,cpp}` | `render/input.{h,cpp}` | déplacement + renommage |
 | `overlay/detour.{h,cpp}` | `platform/hook/detour.{h,cpp}` | déplacement (générique) |
 | `overlay/detour_ld_table.h` | `platform/hook/detour_ld_table.h` | déplacement |
-| `features/lua_console.{h,cpp}` | **éclaté** : `lua/pump.*` + `lua/mailbox.h` + `lua/call.*` + `lua/layer.*` + `features/console/*` | refactor |
-| `features/lua_dump.{h,cpp}` | `features/lua_dump/*` | déplacement |
 | `features/tp.{h,cpp}` | `features/teleport/*` | déplacement + renommage |
+| `features/lua_dump.{h,cpp}` | `features/lua_dump/*` | déplacement |
+| `features/lua_console.{h,cpp}` | **éclaté** : `lua/pump.*` + `lua/mailbox.h` + `features/console/*` | refactor |
 
-Style d'include résultant (tout relatif à la racine `src/Specter.Internal`) :
+Style d'include résultant (tout relatif à la racine `src/Specter.Internal`,
+qui reste le seul `-I`) :
 
 ```cpp
-#include "platform/log.h"          // et non "log.h"
-#include "platform/hook/detour.h"  // et non "overlay/detour.h"
+#include "app/specter.h"            // et non "specter.h"
+#include "platform/log.h"           // et non "log.h"
+#include "platform/hook/detour.h"   // et non "overlay/detour.h"
+#include "il2cpp/api.h"             // et non "il2cpp-api.h"
 #include "lua/pump.h"
+#include "features/feature.h"
 ```
 
 ---
 
-## 4. Le point difficile — le seam C++ → Lua sans écrire dans l'environnement
+## 4. Les seams à introduire
 
-On veut des **fonctions Lua nommées** appelées par le C++ (`SPECTER.teleport.to(x,y,z)`)
-— mais l'invariant 5 interdit d'écrire dans l'état du jeu.
+Le déplacement seul rend l'arbre lisible, mais ne corrige pas l'inversion de
+couche. C'est l'objet des trois seams ci-dessous.
 
-### La solution : le chunk **retourne** ses fonctions, C++ les prend par référence anonyme
+### 4.1 Seam « feature » (corrige le n°4)
 
-```
-1. C++ charge le chunk de layer et l'appelle UNE fois, armé.
-     → le chunk retourne une table { teleport = { to = fn, pos = fn }, … }
-2. C++ la pop, et pour chaque fonction fait :
-     luaL_ref(L, LUA_REGISTRYINDEX)   →  un INT anonyme dans le registre
-   Rien n'est écrit sous un nom. La table n'existe plus après le pop.
-3. C++ appelle : push args, lua_pcall, lit les résultats, pop.
-4. disarm() → luaL_unref sur chaque référence.
-```
+Aujourd'hui l'UI **inclut** chaque feature. On introduit une interface minuscule ;
+l'UI ne connaît plus que le registre.
 
-Conséquences :
+```cpp
+// features/feature.h
+namespace specter::features {
 
-- **aucune clé nommée** dans `_G` ou le registre — donc rien que le code du jeu
-  puisse découvrir par nom ;
-- les fonctions meurent avec l'état Lua, comme tout le reste ;
-- rien à nettoyer en cas de rechargement de scène : les refs sont ré-indexées par
-  `pump::on_new_state`.
+struct Feature {
+    const char* id;            // stable, unique
+    const char* tab;           // section de menu
+    bool (*install)();         // une fois, depuis app::start
+    void (*draw_ui)();         // à chaque frame, thread de rendu
+    void (*on_tick)();         // à chaque tick de la pompe
+};
 
-### Les flags dans l'autre sens (Lua lit l'état du C++)
+// Le registre : le SEUL endroit où une feature est câblée.
+const Feature* const* registry();
+int registry_count();
 
-L'infinite stamina a besoin que le wrapper Lua lise un booléen détenu par le C++
-(menu = source de vérité). On **passe la table en argument du chunk** :
-
-```lua
-local flags = ...        -- upvalue, capturé à la compilation du chunk
-return { teleport = { to = fn, pos = fn } }
+}  // namespace specter::features
 ```
 
-C++ garde une **ref anonyme** sur `flags` et écrit les champs en `lua_rawset`. Le
-wrapper Lua lit `flags.inf_stamina` via son upvalue. **Aucun global, aucune clé
-nommée** — et le wrapper lit une variable locale, ce qui est plus rapide et
-insensible au sandbox (cf. le constat mesuré : les chunks tournent dans un env par
-chunk, un `rawset(_G, …)` n'y survit pas).
+- `registry.cpp` liste les features, **une ligne chacune** (explicite : pas de
+  static initializer, cf. invariant CRT).
+- `render/d3d12_overlay.cpp` itère `registry()` — il n'inclut plus `teleport.h`,
+  `console.h`, `lua_dump.h`.
+- `app/specter.cpp` itère le même registre pour `install()`.
 
-### Forme des échanges
+**Gain** : le coût d'ajout d'une feature tombe à « un dossier + une ligne ».
 
-| Sens | Mécanisme | Pourquoi |
-|---|---|---|
-| C++ → Lua | `lua_getfield` sur la ref anonyme + `lua_pcall` + `lua_tonumber` | typé, sous contrôle, pas d'exception |
-| Lua → C++ | le chunk reçoit une table de callbacks en argument | pas de publication dans l'environnement |
+### 4.2 Extraire la pompe Lua (corrige le n°3)
 
-> **LuaBridge est écarté** sur cette base. Il servait à publier dans `SPECTER`, ce
-> qui est précisément ce qu'on supprime. Il n'y a plus de cas d'usage qui justifie
-> de garder 218 Ko de `third_party/luabridge` et 142 thunks : la résolution de
-> l'API Lua se fait par `GetProcAddress` sur `xlua.dll`, comme aujourd'hui dans
-> `lua_console.cpp`.
+`lua_console.cpp` (808 lignes) fait trois métiers. On les sépare :
+
+- `lua/pump.{h,cpp}` — **infra** : detour de `LuaManager.CommonUpdate`, suivi du
+  `lua_State` (`LuaManager.luaenv(0x18)` → `LuaEnv.rawL(0x10)`), garde SEH, et
+  un point d'extension par tick. Seams : `pump::install()`, `pump::ready()`,
+  `pump::ticks()`.
+- `lua/mailbox.h` — **transport inter-thread** : `Mailbox<Slots, Policy>`,
+  POD à initialisation nulle, verrou créé paresseusement. C'est ce qui remplace
+  l'`ensure_lock()` du n°6, **non thread-safe**.
+- `features/console/*` — **feature** : file de chunks + résultat + canal TP.
+
+Décision figée : le pump ne connaît **aucun canal**. Il draine pour le compte de
+qui s'est enregistré (`on_new_state` / `on_tick`), et chaque feature possède son
+propre transport.
+
+```cpp
+// lua/mailbox.h — exemple d'usage
+lua::Mailbox<1, Replace>  console_q;   // 1 requête : la dernière gagne
+lua::Mailbox<4, Drop>     tp_q;        // quelques requêtes, on abandonne au-delà
+```
+
+### 4.3 Regrouper les constantes RE (corrige le n°5)
+
+`il2cpp/target.h` rassemble les valeurs propres à la cible : offsets de champs
+(`LuaManager.luaenv 0x18`, `LuaEnv.rawL 0x10`), RVA (`CommonUpdate 0x172ADC0`),
+idx de vtable DXGI, RVA `xluaL_loadbuffer`. Un seul endroit à mettre à jour lors
+d'une maj du jeu.
 
 ---
 
-## 5. Les phases
+## 5. Le plan de migration
 
-Chaque phase est **build-intact** et **n'augmente pas l'empreinte Lua**. On vérifie
-le diff de footprint avant de commiter.
+Chaque phase est **build-intact** : la DLL reste injectable, le comportement
+identique, on vérifie, on commit, on avance.
 
-### Phase 0 — Les invariants deviennent exécutables
-- Créer `tools/check-invariants.sh` : grep sur `src/` qui **échoue** si on trouve
-  `lua_setfield(L, LUA_GLOBALSINDEX`, `lua_setglobal`, `raw_setglobal`, un nom
-  `__specter`, `lua_atpanic(`, un `#include` réseau, ou un `CreateThread`.
-- Le rendre bloquant dans `tools/build-dll.sh`.
-- **Critère** : passe sur `2572297` tel quel.
+### Phase 0 — outillage
+- **But** : que les violations se voient. Créer `tools/check-invariants.sh`
+  (échoue si on trouve `CreateThread`, un `#include` réseau, ou une écriture dans
+  l'état Lua du jeu : `lua_setglobal`, `LUA_GLOBALSINDEX`, `lua_atpanic`, un nom
+  `__specter`) et le brancher sur `tools/build-dll.sh`.
+- Créer `tools/gen-compile-commands.sh` + `.clangd` pour l'IntelliSense.
+- **Critère** : le contrôle passe sur `2572297` tel quel.
 
-### Phase 1 — Arbor plat → couches
-- `git mv` selon la table §3, réécriture des includes, mise à jour du `.vcxproj`,
-  `.filters`, `tools/build-dll.sh`.
-- Aucun changement de comportement, aucune ligne touchée hors includes.
-- **Critère** : build vert, binaire de taille équivalente, invariants verts.
+### Phase 1 — déplacement + renommage (mécanique)
+- **Contenu** : la table de correspondance du §3. Uniquement `git mv` +
+  réécriture des `#include` + mise à jour des fichiers projet.
+- **Fichiers à mettre à jour** : `Specter.Internal.vcxproj`,
+  `Specter.Internal.vcxproj.filters` (à réparer au passage), `tools/build-dll.sh`.
+- **Ne change pas** : aucune ligne hors `#include`.
+- **Critère** : build vert, taille de binaire équivalente, contrôles verts.
 
-### Phase 2 — Namespaces par rôle
-- `overlay::detour` → `specter::hook`, `overlay::game_input` → `specter::input`,
-  `overlay` (dxgi) → `specter::dxgi`, `overlay::overlay_worker` → `specter::render`,
-  `features::tp` → `features::teleport`.
-- **Critère** : build vert, aucun symbole de hook changé.
+### Phase 2 — namespaces par rôle
+- `overlay::detour` → `specter::hook`
+- `overlay::game_input` → `specter::input`
+- `overlay` (dxgi) → `specter::dxgi`, et `overlay::overlay_worker` → `specter::render`
+- `features::tp` → `features::teleport`
+- **Critère** : build vert, aucun symbole de hook changé (les hooks sont
+  identifiés par leur cible, pas par leur namespace — mais le vérifier).
 
-### Phase 3 — Pompe + mailbox
-- Extraire `lua/pump.{h,cpp}` (le detour, la découverte du state, la garde SEH) et
-  `lua/mailbox.h` (transport typé, POD, verrou paresseux — qui remplace
-  l'`ensure_lock()` de `lua_console.cpp`, aujourd'hui **non thread-safe**).
-- Le pump ne connaît aucun canal ; chaque feature draine dans son propre `on_tick`.
-- **Critère** : console et téléport se comportent comme avant.
+### Phase 3 — pompe + mailbox
+- **Contenu** : créer `lua/pump.{h,cpp}` et `lua/mailbox.h`, déplacer le detour,
+  la découverte du state et la garde SEH depuis `lua_console.cpp` ; le reste
+  devient `features/console/*`.
+- **Fichiers à mettre à jour** : `Specter.Internal.vcxproj`, `.filters`,
+  `app/specter.cpp` (ordre d'install : **le pump en dernier**).
+- **Critère** : console et téléport se comportent comme avant ; le n°6 est clos
+  (le verrou est désormais initialisé une seule fois, correctement).
 
-### Phase 4 — Suppression de `poll_cli`
-- `poll_cli` exécute `Z:\tmp\specter-lua\cmd.lua` : déclenché par le système de
-  fichiers, sans UI, sans authentification. C'est un canal d'exécution de code, pas
-  seulement un risque de détection. **On le retire**, ainsi que `tools/lua.sh` et le
-  répertoire `Z:\tmp\specter-lua\`.
-- **Critère** : plus aucune référence à `cmd.lua` ; le contrôle de la console passe
-  par la seule UI.
+### Phase 4 — seam « feature »
+- **Contenu** : `features/feature.h` + `features/registry.cpp` ;
+  `render/d3d12_overlay.cpp` itère le registre et **perd** ses `#include` de
+  features ; `app/specter.cpp` itère le registre.
+- **Critère** : chaque onglet s'affiche et se pilote comme avant.
 
-### Phase 5 — Seam « feature » (registre)
-- `features/feature.h` + `features/registry.cpp` (liste **explicite** — invariant 10).
-- `render/d3d12_overlay.cpp` itère le registre et **perd** ses includes de features ;
-  `app/specter.cpp` itère le registre pour l'installation.
-- **Critère** : le coût d'ajout d'une feature tombe à « un dossier + une ligne ».
+### Phase 5 — constantes RE et garde SEH
+- **Contenu** : `il2cpp/target.h` (offsets/RVA/idx regroupés) ; `platform/seh.h`
+  (`seh::Guard`, réutilisable par le pump et par tout detour qui doit survivre à
+  une exception).
+- **Critère** : build vert, comportement identique.
 
-### Phase 6 — Fonctions nommées (`lua/call` + `lua/layer`)
-- Le mécanisme du §4 : chunk qui retourne ses fonctions, refs anonymes.
-- Migrer `features/teleport` : `send_setpos` (qui **fabrique du texte Lua en C++**)
-  devient `SPECTER.teleport.to(x, y, z)` ; `kPosProbe` devient `SPECTER.teleport.pos()`.
-- Migrer l'infinite stamina : `kStaminaInstall` / `kStaminaDisable` disparaissent, la
-  couche Lua installe un patch **de classe** (vérifié : la classe est le metatable
-  partagé, `AC == getmetatable(aca)`) qui lit `flags.inf_stamina`.
-- **Critère** : le C++ ne contient plus une seule chaîne de Lua gameplay.
-
-### Phase 7 — `lua_dump` comme module de premier plan
-- `features/lua_dump` est un **outil de recherche**, pas une feature de jeu. Le
-  documenter comme tel, et trancher une question qu'il faut poser explicitement :
-  `install()` pose le detour sur `xluaL_loadbuffer` **au démarrage, inconditionnellement**.
-  C'est un hook de plus que `2572297` n'avait pas.
-  - Option retenue : le detour part avec le reste de l'armement (§ invariant 7), ou
-    bien il est retiré du chemin d'injection.
-- **Critère** : la décision est écrite, pas implicite.
-
-### Phase 8 — Documentation
-- Réécrire `docs/ARCHITECTURE.md` pour l'arbre réel ; mettre à jour `README.md`,
-  `docs/LUA_CONSOLE.md`, `docs/TELEPORT.md`. Ce plan est absorbé.
+### Phase 6 — documentation
+- **Contenu** : réécrire `docs/ARCHITECTURE.md` pour l'arbre réel ; mettre à jour
+  `README.md` (arborescence), `docs/LUA_CONSOLE.md`, `docs/TELEPORT.md`. Ce plan
+  est absorbé dans `ARCHITECTURE.md`.
+- **Option** : harnais *host-side* pour la logique pure sans jeu — le décodeur
+  x86-64 de `platform/hook/detour`, le parsing de `teleport`.
 
 ---
 
-## 6. Ce que ce plan ne prétend pas
+## 6. Ce que la ré-architecture ne change pas
 
-- **Aucune garantie de non-détection.** §0 établit que le delta Lua est le terrain
-  et que `2572297` tient sur une fenêtre où `HEAD` se déclenche — mais cela ne dit
-  pas *quelle* écriture est en cause, ni si les sanctions peuvent encore arriver en
-  vague au-delà de cette fenêtre. `ANALYSE-DETECTION.md` §7 pose une contradiction
-  non résolue entre O1 et O3 (build **désarmé**, donc n'exécutant rien, signalé
-  quand même), et H4 — un contrôle **natif** capable d'inspecter le registre que
-  Lua ne voit pas — reste la seule hypothèse qui réconcilie les deux. Ce plan
-  **retire** des écritures ; ce n'est pas une preuve de sécurité.
-- Ce plan **corrige H2** (« l'injection seule suffit ») seulement partiellement :
-  les hooks restent identiques à `2572297`, donc ce qui rendait `2572297` propre
-  reste, mais rien n'exclut qu'un jour ce vecteur suffise.
-- H2 (« l'injection seule suffit ») reste ouverte et **ne serait pas corrigée** par
-  ce plan : les hooks restent identiques.
+- Les hooks : detour `LuaManager.CommonUpdate`, vtables DXGI, 7 hooks `user32`.
+- Le mode d'accès au Lua : résolution par `GetProcAddress` sur `xlua.dll`, chunks
+  exécutés sur le thread Lua via la pompe.
+- Le transport d'I/O : pipe hôte, `Z:\tmp\...` (hors prefix), jamais dans le
+  dossier du jeu.
+- Les commandes : `tools/build-dll.sh`, `tools/specter-up.sh`, `tools/dump.sh`.
+- La sortie : `generated/bin/Release/Specter.Internal.dll`, imports
+  `dxgi`/`IMM32`/`KERNEL32`/`SHELL32`/`USER32` uniquement.
+- Les règles de discrétion (manual-map, worker `is_system`, pas d'objet nommé,
+  pas de socket, pas de fichier dans le prefix).
+- Le comportement observé du mod.
 
 ---
 
-## 7. Out of scope
+## 7. Hors périmètre
 
-- Toute feature qui parle aux commandes GM (interdit, invariant 1).
-- Le réseau, l'exfiltration (invariant 2).
-- L'execution de code arbitraire hors de l'UI (invariant 8).
-- Windows natif : `NEPKernel.sys` s'y charge et le minifilter devient réel
-  (`ANTICHEAT.md`). Ne pas jouer avec Specter tel quel hors Wine/Proton.
+- **Pas de changement de comportement.** Aucun correctif fonctionnel n'est
+  introduit par ce plan, hormis le n°6 (verrou non thread-safe), qui est une
+  correction de bug.
+- **Aucune écriture dans l'état Lua du jeu** — invariant n°3 du §2. Cette règle
+  tient tant qu'on garde le mode texte ; toute évolution qui publiés une table
+  depuis le C++ la casserait, et doit être refusée à la revue.
+- **Pas de nouvelle feature**, et pas de feature dérivée d'un mod tiers.
+- **Windows natif** : hors Wine/Proton, `NEPKernel.sys` se charge et le minifilter
+  devient réel. Ne pas jouer avec Specter tel quel hors Wine/Proton.
