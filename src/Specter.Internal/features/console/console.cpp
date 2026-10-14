@@ -114,7 +114,10 @@ void sink(bool ok, const char* text, int n)
 // drains whatever Execute queued and nothing else.
 void on_lua_tick(void* L)
 {
-    Chunk c;
+    // Static, not a local: this runs every frame, and a 32 KB automatic object
+    // would be pushed on the game's Lua-thread stack sixty times a second for
+    // the privilege of usually going unused. Only the Lua thread reaches it.
+    static Chunk c;
     if (!g_channel.take_pending(c)) {
         return;
     }

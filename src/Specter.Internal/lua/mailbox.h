@@ -82,6 +82,12 @@ public:
         }
         if (ok) {
             m_pending[slot] = v;
+            if (Policy::overwrites) {
+                // With Replace there is no head/tail movement to observe, so
+                // this flag IS the "something is waiting" signal. Without it
+                // take_pending() would never see a single-slot submission.
+                m_pending_ready = true;
+            }
         }
         unlock();
         return ok;
