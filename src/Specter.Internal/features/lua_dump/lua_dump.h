@@ -10,7 +10,7 @@
 //
 // So we tap the entry point the game itself uses. The IL2CPP P/Invoke wrapper
 // `XLua::LuaDLL::Lua::xluaL_loadbuffer(IntPtr L, Byte[] buff, int size, String
-// name)` (GameAssembly RVA 0x879010) does no transformation of its own: it
+// name)` (GameAssembly RVA target::kXluaLoadBufferRva) does no transformation of its own: it
 // marshals `name`, then calls `xluaL_loadbuffer(L, buff->vector, size, name)`.
 // xlua.dll exports that symbol (515 exports, `luaJIT_version_2_1_0_beta3`), so we
 // can detour it directly -- no export-table walking needed.

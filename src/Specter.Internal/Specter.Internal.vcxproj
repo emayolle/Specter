@@ -95,6 +95,7 @@
     <ClInclude Include="app\specter.h" />
     <ClInclude Include="il2cpp\runtime.h" />
     <ClInclude Include="il2cpp\api.h" />
+    <ClInclude Include="il2cpp\target.h" />
     <ClInclude Include="platform\nt.h" />
     <ClInclude Include="platform\hostch-rva.h" />
     <ClInclude Include="platform\log.h" />

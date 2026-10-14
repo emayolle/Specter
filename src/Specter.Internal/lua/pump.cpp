@@ -17,18 +17,13 @@
 #include <cstring>
 
 #include "il2cpp/runtime.h"
+#include "il2cpp/target.h"
 #include "platform/hook/detour.h"
 #include "platform/log.h"
 
 namespace specter::lua {
 namespace pump {
 namespace {
-
-// ---- field offsets and RVAs (from generated/dump + appdata) ----------------
-
-constexpr std::size_t kLuaManager_luaenv = 0x18;  // LuaManager.luaenv
-constexpr std::size_t kLuaEnv_rawL = 0x10;        // LuaEnv.rawL
-constexpr std::uintptr_t kCommonUpdateRva = 0x172ADC0;  // LuaManager.CommonUpdate
 
 // ---- Lua C API (xlua.dll, LuaJIT 5.1 ABI) ----------------------------------
 
@@ -153,8 +148,8 @@ void pump_impl(void* self)
     }
 
     char* env = *reinterpret_cast<char**>(reinterpret_cast<char*>(self) +
-                                          kLuaManager_luaenv);
-    char* L = env ? *reinterpret_cast<char**>(env + kLuaEnv_rawL) : nullptr;
+                                          target::kLuaManager_luaenv);
+    char* L = env ? *reinterpret_cast<char**>(env + target::kLuaEnv_rawL) : nullptr;
     if (!L) {
         return;
     }
@@ -274,9 +269,11 @@ bool install()
             log::error("lua: GameAssembly.dll not mapped - no Lua bridge");
             return false;
         }
-        void* target = reinterpret_cast<void*>(base + kCommonUpdateRva);
+        // Not named `target`: that would shadow the target namespace right
+        // where we need to qualify the RVA.
+        void* site = reinterpret_cast<void*>(base + target::kCommonUpdateRva);
         if (specter::hook::install(
-                target, reinterpret_cast<void*>(&common_update_hook),
+                site, reinterpret_cast<void*>(&common_update_hook),
                 reinterpret_cast<void**>(&g_orig_common_update),
                 "LuaManager.CommonUpdate")) {
             g_hook_installed.store(true, std::memory_order_relaxed);
