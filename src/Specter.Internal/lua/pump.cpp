@@ -268,11 +268,54 @@ void probe_globals(lua_State* L)
     for (const char* name : kNeed) {
         p_getglobal(L, name);
         const int t = p_type(L, -1);
-        // Flag anything that is not a function: the preamble calls all of them.
+        // Flag anything that is not a function: the preamble calls all of them
+        // -- except the table library, which is a table we index into.
+        const bool want_fn = (std::strcmp(name, "table") != 0);
         n += std::snprintf(buf + n, sizeof(buf) - n, " %s=%s%s",
-                           name, type_name(t), t == 6 ? "" : " <<< PAS UNE FONCTION");
+                           name, type_name(t),
+                           (want_fn && t != 6) ? " <<< PAS UNE FONCTION" : "");
         p_settop(L, -2);
     }
+    log::info("lua: %s", buf);
+
+    // The library is a table, so its FIELDS are what actually get called. A
+    // framework that replaces `table` can leave remove/concat as anything, and
+    // that is invisible to a type check on the table itself.
+    static const char* kFields[] = {"remove", "concat", "insert"};
+    for (const char* f : kFields) {
+        p_getglobal(L, "table");
+        p_getfield(L, -1, f);
+        const int t = p_type(L, -1);
+        log::info("lua:   table.%s = %s%s", f, type_name(t),
+                  t == 6 ? "" : " <<< PAS UNE FONCTION");
+        p_settop(L, -3);
+    }
+}
+
+// The user's own code, echoed on failure. Three fixes in a row have missed,
+// every time because the failure was reported without the input that caused
+// it. The code is short, and it is the one thing the log was missing.
+void log_chunk(const char* code, int len)
+{
+    char buf[768];
+    int n = 0;
+    n += std::snprintf(buf + n, sizeof(buf) - n, "chunk (%d o) : ", len);
+    for (int i = 0; i < len && n < static_cast<int>(sizeof(buf)) - 8; ++i) {
+        const unsigned char c = static_cast<unsigned char>(code[i]);
+        // Keep it on one log line: newlines become \n, quotes are escaped.
+        if (c == '\n') {
+            buf[n++] = '\\'; buf[n++] = 'n';
+        } else if (c == '\r') {
+            // dropped
+        } else if (c == '"' || c == '\\') {
+            buf[n++] = '\\'; buf[n++] = static_cast<char>(c);
+        } else if (c >= 0x20 && c < 0x7f) {
+            buf[n++] = static_cast<char>(c);
+        } else {
+            n += std::snprintf(buf + n, sizeof(buf) - n, "\\x%02x", c);
+        }
+    }
+    buf[n] = '\0';
     log::info("lua: %s", buf);
 }
 
@@ -489,6 +532,7 @@ void run(void* L, const char* code, int len, result_sink sink)
     if (p_pcall(L, 1, 2, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
+        log_chunk(code, len);
         sink(false, e ? e : "(lua runtime error)", static_cast<int>(n));
         p_settop(L, top);
         return;
