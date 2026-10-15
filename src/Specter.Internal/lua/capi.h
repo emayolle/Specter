@@ -85,7 +85,20 @@ namespace specter::lua::capi {
     X(lua_rawset) X(lua_remove) X(lua_replace) X(lua_setmetatable)           \
     X(lua_settop) X(lua_toboolean) X(lua_tointeger) X(lua_tolstring)          \
     X(lua_tonumber) X(lua_topointer) X(lua_touserdata) X(lua_type)            \
-    X(luaL_checkstack) X(luaL_unref)
+    X(luaL_checkstack) X(luaL_unref)                                           \
+    /* A SECOND, INDEPENDENT LUA UNIVERSE — lua/worker.cpp.                     \
+     * The game's lua_State belongs to the game's Lua thread and may not be  \
+     * touched from anywhere else, so a worker gets its own state instead:    \
+     * no sharing at all, hence no race. That is also why these four are here \
+     * and not in the LuaBridge set: they are not used to register anything,  \
+     * they CREATE the runtime. */                                            \
+    X(lua_newstate) X(lua_close) X(lua_setallocf) X(luaL_openlibs)             \
+    /* Also absent from the list above, and needed by lua/worker.cpp.          \
+     * lua_pcall and luaL_loadbuffer are real functions in 5.1, not macros, so \
+     * they resolve like any other. Note lua_pop / lua_getglobal /            \
+     * lua_setglobal are NOT here and cannot be: they are macros in luaconf.h \
+     * and have no symbol behind them. worker.cpp spells those out. */        \
+    X(lua_pcall) X(luaL_loadbuffer)
 
 #define CAPI_DECLARE(name) extern decltype(&::name) p_##name;
 CAPI_SYMBOLS(CAPI_DECLARE)

@@ -6,6 +6,7 @@
 
 #include "lua/bind.h"
 #include "lua/bridge.h"
+#include "lua/worker.h"
 
 #include "features/inf_stamina/inf_stamina.h"
 #include "platform/log.h"
@@ -186,6 +187,16 @@ bool install(lua_State* L, int specter_idx)
         .addFunction("reset", &api_reset);
 
     lua_pop(L, 1);  // our copy of the table; the bindings live inside it
+
+    // Plain C functions, not LuaBridge: `specter.thread` creates a runtime, it
+    // does not describe one. Registering it through the bridge namespace would
+    // also put it behind specter.var's read-only __newindex, which is for state,
+    // not for handles you spawn.
+    if (!worker::register_api(L, specter_idx)) {
+        log::error("lua: bind -- specter.thread non enregistre");
+        lua_settop(L, depth_before);
+        return false;
+    }
 
     const int depth_after = lua_gettop(L);
     if (depth_after != depth_before) {

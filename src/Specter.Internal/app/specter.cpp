@@ -6,6 +6,7 @@
 #include "features/feature.h"
 #include "features/lua_dump/lua_dump.h"
 #include "lua/pump.h"
+#include "lua/worker.h"
 #include "platform/log.h"
 #include "il2cpp/runtime.h"
 #include "platform/nt.h"
@@ -74,6 +75,11 @@ bool start()
 
 void stop()
 {
+    // Before anything else, and while our code is still mapped. A worker thread
+    // still inside lua_pcall when the image goes away jumps into memory that is
+    // no longer there, so the workers are stopped FIRST and the log line last.
+    lua::worker::shutdown();
+
     log::info("detached");
 }
 

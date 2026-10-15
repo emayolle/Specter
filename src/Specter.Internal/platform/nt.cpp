@@ -29,8 +29,11 @@ static HostchSpawnFn resolve()
 }
 #endif
 
-bool spawn_hidden(DWORD (WINAPI *proc)(LPVOID), void *arg)
+bool spawn_hidden_joined(DWORD (WINAPI *proc)(LPVOID), void *arg, HANDLE *out)
 {
+    if (out) {
+        *out = nullptr;
+    }
     HostchSpawnFn fn = resolve();
     if (!fn) {
         log::error("nt::spawn_hidden: HostchSpawnThread unresolved "
@@ -46,8 +49,17 @@ bool spawn_hidden(DWORD (WINAPI *proc)(LPVOID), void *arg)
                    static_cast<unsigned long>(status));
         return false;
     }
-    if (handle) CloseHandle(handle);
+    if (out) {
+        *out = handle;
+    } else if (handle) {
+        CloseHandle(handle);
+    }
     return true;
+}
+
+bool spawn_hidden(DWORD (WINAPI *proc)(LPVOID), void *arg)
+{
+    return spawn_hidden_joined(proc, arg, nullptr);
 }
 
 }  // namespace specter::nt

@@ -23,4 +23,15 @@ namespace specter::nt {
 //     _CRT_INIT((HMODULE)&__ImageBase, DLL_THREAD_ATTACH, nullptr);
 bool spawn_hidden(DWORD (WINAPI *proc)(LPVOID), void *arg);
 
+// Same, but hands the thread HANDLE back so the caller can WAIT on it.
+//
+// Same contract as spawn_hidden (hidden thread, no CRT, never CreateThread) —
+// the only difference is ownership of the handle, which spawn_hidden closes
+// immediately. Use this one for any worker that has to be JOINED before the
+// image goes away: a thread still running Lua when our code is unmapped jumps
+// into memory that is no longer there.
+//
+// The caller owns the handle and must CloseHandle it.
+bool spawn_hidden_joined(DWORD (WINAPI *proc)(LPVOID), void *arg, HANDLE *out);
+
 }  // namespace specter::nt

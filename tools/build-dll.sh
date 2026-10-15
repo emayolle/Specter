@@ -195,7 +195,8 @@ for spec in \
   "$SRC/lua/pump.cpp:lua-pump" \
   "$SRC/lua/capi.cpp:lua-capi" \
   "$SRC/lua/capi_shim.cpp:lua-capi_shim" \
-  "$SRC/lua/bind.cpp:lua-bind"; do
+  "$SRC/lua/bind.cpp:lua-bind" \
+  "$SRC/lua/worker.cpp:lua-worker"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
   build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
   OUR_OBJS+=("$obj")
