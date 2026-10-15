@@ -50,7 +50,7 @@ namespace specter::lua::worker {
 // xlua.dll, so it is the same version).
 //
 // Returns a handle >= 0, or -1 with last_error() saying why.
-int spawn(const char* code, int len);
+int spawn(const char* code, int len, const char* meta, int meta_len);
 
 // Ask the worker to raise at its next specter.sleep(). Returns false if the
 // handle is unknown or already finished.

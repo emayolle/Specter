@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 // The hidden thread is entered OUTSIDE the loader, so its CRT state is not set
 // up. We use _aligned_malloc, vsnprintf and WriteFile below, all of which are
@@ -36,6 +37,7 @@ namespace {
 // things and small enough that a runaway script cannot starve the machine.
 constexpr int kMaxWorkers = 6;
 constexpr int kMaxCode = 64 * 1024;
+constexpr int kMaxMeta = 16 * 1024;
 constexpr unsigned kShutdownWaitMs = 2000;
 
 enum Flag : int {
@@ -84,6 +86,8 @@ struct Job {
     int slot;
     char* code;
     int len;
+    char* meta;      // upvalue descriptors, or null
+    int meta_len;
     char error[256];
 };
 
@@ -281,6 +285,155 @@ void open_worker_api(lua_State* L, Job* job)
 }
 
 // ---------------------------------------------------------------------------
+// Upvalues.
+//
+// string.dump keeps the SLOTS a closure captured and drops the VALUES. In the
+// sandbox that used to be a wall, because the preamble captures the standard
+// library as locals — so `specter.log('x', table.concat(t))` captured `table`,
+// and on the worker that slot was nil.
+//
+// But the worker calls luaL_openlibs: it has the SAME standard library. So those
+// upvalues are rebound to the worker's own globals, by name, and
+// `table.concat` means exactly what it meant. That is the whole trick, and it is
+// why the function form can work at all.
+//
+// What cannot cross is anything the worker's world does not also have: a game
+// function, a game table, a game userdata. Those are refused by NAME, in the
+// game world, before anything is spawned — so the error names the variable
+// instead of surfacing later as a nil deep inside the body.
+//
+// Wire format, one directive per line, parsed by a pointer walk:
+//
+//     L <index> <name>      bind the worker's global <name>
+//     N <index> <number>    bind a number
+//     S <index> <len>       bind a string; <len> bytes follow on their own line
+//     B <index> <0|1>       bind a boolean
+// ---------------------------------------------------------------------------
+
+// Standard Lua 5.1 names. Only these may be rebound; anything else that is not
+// a primitive is refused.
+const char* const kStdlibNames[] = {
+    "assert", "collectgarbage", "coroutine", "debug", "error", "getfenv",
+    "getmetatable", "io", "ipairs", "loadstring", "math", "module", "next",
+    "os", "pairs", "pcall", "print", "rawequal", "rawget", "rawlen", "rawset",
+    "require", "select", "setfenv", "setmetatable", "string", "table",
+    "tonumber", "tostring", "type", "unpack", "xpcall", "_G",
+};
+
+bool is_stdlib_name(const char* n)
+{
+    for (const char* s : kStdlibNames) {
+        if (std::strcmp(s, n) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Walk `meta` and bind each upvalue on the chunk sitting at `chunk_idx`.
+// Errors propagate as ordinary Lua errors, so a bad descriptor lands in the
+// worker's `error` like anything else.
+void bind_upvalues(lua_State* L, int chunk_idx, const char* meta, int len)
+{
+    const int base = p_lua_gettop(L);
+    p_lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+    p_lua_getfield(L, -1, "setupvalue");  // [ .., debug, setupvalue ]
+    if (p_lua_type(L, -1) != LUA_TFUNCTION) {
+        p_lua_settop(L, base);
+        p_lua_pushstring(L, "le worker n'a pas debug.setupvalue");
+        p_lua_error(L);
+        return;
+    }
+    const int fn_idx = p_lua_gettop(L);
+
+    const char* p = meta;
+    const char* end = meta + len;
+    while (p < end) {
+        const char* nl = static_cast<const char*>(
+            std::memchr(p, '\n', static_cast<std::size_t>(end - p)));
+        if (!nl) {
+            break;
+        }
+
+        const char kind = *p++;
+        while (p < nl && *p == ' ') {
+            ++p;
+        }
+        char* after = nullptr;
+        const long idx = std::strtol(p, &after, 10);
+        while (after < nl && *after == ' ') {
+            ++after;
+        }
+
+        bool pushed = true;
+        switch (kind) {
+        case 'L': {
+            const std::string nm(after, static_cast<std::size_t>(nl - after));
+            p_lua_getfield(L, LUA_GLOBALSINDEX, nm.c_str());
+            if (p_lua_type(L, -1) == LUA_TNIL) {
+                p_lua_settop(L, base);
+                char msg[256];
+                std::snprintf(msg, sizeof(msg),
+                              "le worker n'a pas le global '%s'", nm.c_str());
+                p_lua_pushstring(L, msg);
+                p_lua_error(L);
+                return;
+            }
+            break;
+        }
+        case 'Z':
+            p_lua_pushnil(L);
+            break;
+        case 'N':
+            p_lua_pushnumber(L, std::strtod(after, nullptr));
+            break;
+        case 'B':
+            p_lua_pushboolean(L, after[0] == '1');
+            break;
+        case 'S': {
+            char* sf = nullptr;
+            const long slen = std::strtol(after, &sf, 10);
+            while (sf < nl && *sf == ' ') {
+                ++sf;
+            }
+            const char* bytes = sf;
+            if (slen < 0 || bytes + slen > end) {
+                pushed = false;
+                break;
+            }
+            p_lua_pushlstring(L, bytes, static_cast<std::size_t>(slen));
+            // The payload runs to its own newline, which may contain anything.
+            p = bytes + slen;
+            if (p < end && *p == '\n') {
+                ++p;
+            }
+            break;
+        }
+        default:
+            pushed = false;
+            break;
+        }
+
+        if (!pushed) {
+            p_lua_settop(L, base);
+            p_lua_pushstring(L, "descripteur d'upvalue illisible");
+            p_lua_error(L);
+            return;
+        }
+
+        p_lua_pushvalue(L, fn_idx);
+        p_lua_pushvalue(L, chunk_idx);
+        p_lua_pushinteger(L, idx);
+        p_lua_call(L, 3, 0);
+
+        if (kind != 'S') {
+            p = nl + 1;
+        }
+    }
+    p_lua_settop(L, base);
+}
+
+// ---------------------------------------------------------------------------
 
 DWORD WINAPI worker_main(LPVOID arg)
 {
@@ -304,6 +457,10 @@ DWORD WINAPI worker_main(LPVOID arg)
         if (p_luaL_loadbuffer(L, job->code, job->len, "=specter-worker") != 0) {
             set_error(job, p_lua_tolstring(L, -1, nullptr));
             terminal = kError;
+        } else if (job->meta && job->meta_len > 0 &&
+                   (bind_upvalues(L, p_lua_gettop(L), job->meta,
+                                  job->meta_len), 0)) {
+            terminal = kError;  // bind_upvalues only ever returns via lua_error
         } else if (p_lua_pcall(L, 0, 0, 0) != 0) {
             const char* msg = p_lua_tolstring(L, -1, nullptr);
             set_error(job, msg);
@@ -335,6 +492,7 @@ DWORD WINAPI worker_main(LPVOID arg)
     slot.flag.store(terminal, std::memory_order_release);
 
     std::free(job->code);
+    std::free(job->meta);
     std::free(job);
     return 0;
 }
@@ -402,47 +560,115 @@ void set_last_error(const char* msg)
 
 namespace {
 
-// Upvalues of a function passed to spawn() cannot travel: they are bound to the
-// game's state, and a worker state has never heard of it. string.dump drops them
-// silently, so we look first and refuse loudly.
-bool has_upvalues(lua_State* L, int idx)
+// Describe every upvalue of the closure at `idx` into `meta`, in the wire format
+// bind_upvalues() reads. Returns false, with `refused` set to the variable's
+// name, when something cannot cross.
+//
+// Uses char buffers rather than std::string on the error paths on purpose: a
+// Lua error longjmps straight out of here, skipping every destructor between.
+bool describe_upvalues(lua_State* L, int idx, std::string& meta,
+                       char* refused, std::size_t refused_cap)
 {
     const int base = p_lua_gettop(L);
-    bool result = false;
+
     p_lua_getfield(L, LUA_GLOBALSINDEX, "debug");
-    if (p_lua_type(L, -1) == LUA_TTABLE) {
-        p_lua_getfield(L, -1, "getinfo");
-        if (p_lua_type(L, -1) == LUA_TFUNCTION) {
-            p_lua_pushvalue(L, idx);
-            p_lua_pushstring(L, "u");
-            p_lua_call(L, 2, 1);
-            if (p_lua_type(L, -1) == LUA_TTABLE) {
-                p_lua_getfield(L, -1, "nups");
-                if (p_lua_type(L, -1) == LUA_TNUMBER) {
-                    result = p_lua_tonumber(L, -1) > 0.0;
-                }
+    if (p_lua_type(L, -1) != LUA_TTABLE) {
+        p_lua_settop(L, base);
+        std::snprintf(refused, refused_cap, "debug");
+        return false;
+    }
+    p_lua_getfield(L, -1, "getupvalue");
+    if (p_lua_type(L, -1) != LUA_TFUNCTION) {
+        p_lua_settop(L, base);
+        std::snprintf(refused, refused_cap, "debug.getupvalue");
+        return false;
+    }
+    const int fn = p_lua_gettop(L);  // base+2 : [base+1]=debug [base+2]=getupvalue
+
+    char buf[64];
+    for (int i = 1;; ++i) {
+        p_lua_pushvalue(L, fn);
+        p_lua_pushvalue(L, idx);
+        p_lua_pushinteger(L, i);
+        p_lua_call(L, 2, 2);  // nom, valeur
+
+        if (p_lua_type(L, -2) != LUA_TSTRING) {
+            p_lua_settop(L, base);  // plus d'upvalue
+            return true;
+        }
+        std::size_t nl = 0;
+        const char* raw = p_lua_tolstring(L, -2, &nl);
+        const std::string nm(raw ? raw : "", nl);
+        const int vt = p_lua_type(L, -1);
+
+        if (is_stdlib_name(nm.c_str())) {
+            // The sandbox captures the standard library as locals; the worker
+            // called luaL_openlibs and has the same one. Rebind by name.
+            std::snprintf(buf, sizeof(buf), "L %d ", i);
+            meta += buf;
+            meta += nm;
+            meta += '\n';
+        } else {
+            switch (vt) {
+            case LUA_TNIL:
+                std::snprintf(buf, sizeof(buf), "Z %d\n", i);
+                meta += buf;
+                break;
+            case LUA_TBOOLEAN:
+                std::snprintf(buf, sizeof(buf), "B %d %d\n", i,
+                              p_lua_toboolean(L, -1) ? 1 : 0);
+                meta += buf;
+                break;
+            case LUA_TNUMBER:
+                std::snprintf(buf, sizeof(buf), "N %d %.17g\n", i,
+                              p_lua_tonumber(L, -1));
+                meta += buf;
+                break;
+            case LUA_TSTRING: {
+                std::size_t sl = 0;
+                const char* sv = p_lua_tolstring(L, -1, &sl);
+                std::snprintf(buf, sizeof(buf), "S %d %zu\n", i, sl);
+                meta += buf;
+                meta.append(sv, sl);
+                meta += '\n';
+                break;
+            }
+            default:
+                // A game table, a game function, a C closure. The worker's world
+                // has no equivalent, so naming it is the whole service.
+                std::snprintf(refused, refused_cap, "%s", nm.c_str());
+                p_lua_settop(L, base);
+                return false;
             }
         }
+        p_lua_settop(L, base + 2);  // drop nom+valeur, keep debug/getupvalue
     }
-    p_lua_settop(L, base);
-    return result;
 }
 
 int api_spawn(lua_State* L)
 {
     if (p_lua_gettop(L) < 1) {
-        p_lua_pushstring(L, "specter.thread.spawn attend du code");
+        p_lua_pushstring(L, "specter.thread.spawn attend une fonction ou du code");
         p_lua_error(L);
         return 0;
     }
 
+    std::string meta;
+
     if (p_lua_type(L, 1) == LUA_TFUNCTION) {
-        if (has_upvalues(L, 1)) {
-            p_lua_pushstring(
-                L,
-                "specter.thread.spawn : cette fonction a des upvalues, qui "
-                "n'existent pas sur un worker. Passe le SOURCE : "
-                "specter.thread.spawn([[ while true do ... end ]])");
+        // Descriptors BEFORE the dump: a refusal has to arrive before anything
+        // is spawned, and it has to name the variable. "It did not work" is the
+        // least useful error message there is.
+        char refused[128] = "";
+        if (!describe_upvalues(L, 1, meta, refused, sizeof(refused))) {
+            char msg[512];
+            std::snprintf(msg, sizeof(msg),
+                          "specter.thread.spawn : l'upvalue '%s' ne peut pas "
+                          "passer sur un worker (c'est une donnee du jeu). "
+                          "Passe une fonction qui ne capture rien d'autre, ou "
+                          "le SOURCE en chaine.",
+                          refused);
+            p_lua_pushstring(L, msg);
             p_lua_error(L);
             return 0;
         }
@@ -473,7 +699,9 @@ int api_spawn(lua_State* L)
 
     std::size_t len = 0;
     const char* code = p_lua_tolstring(L, 1, &len);
-    const int h = spawn(code, static_cast<int>(len));
+    const int h = spawn(code, static_cast<int>(len),
+                        meta.empty() ? nullptr : meta.data(),
+                        static_cast<int>(meta.size()));
     if (h < 0) {
         p_lua_pushstring(L, last_error());
         p_lua_error(L);
@@ -550,7 +778,7 @@ bool register_api(lua_State* L, int specter_idx)
     return true;
 }
 
-int spawn(const char* code, int len)
+int spawn(const char* code, int len, const char* meta, int meta_len)
 {
     if (!capi::ready()) {
         set_last_error("la couche C API n'est pas resolue");
@@ -562,6 +790,10 @@ int spawn(const char* code, int len)
     }
     if (len > kMaxCode) {
         set_last_error("code trop long (max 64 Ko)");
+        return -1;
+    }
+    if (meta && meta_len > kMaxMeta) {
+        set_last_error("descripteurs d'upvalues trop longs");
         return -1;
     }
 
@@ -604,9 +836,23 @@ int spawn(const char* code, int len)
     job->len = len;
     job->slot = slot_idx;
 
+    if (meta && meta_len > 0) {
+        job->meta = static_cast<char*>(std::malloc(static_cast<std::size_t>(meta_len)));
+        if (!job->meta) {
+            std::free(job->code);
+            std::free(job);
+            g_slots[slot_idx].flag.store(kFree, std::memory_order_relaxed);
+            set_last_error("memoire epuisee");
+            return -1;
+        }
+        std::memcpy(job->meta, meta, static_cast<std::size_t>(meta_len));
+        job->meta_len = meta_len;
+    }
+
     HANDLE h = nullptr;
     if (!nt::spawn_hidden_joined(&worker_main, job, &h)) {
         std::free(job->code);
+        std::free(job->meta);
         std::free(job);
         g_slots[slot_idx].flag.store(kFree, std::memory_order_relaxed);
         set_last_error("le fil n'a pas demarre");
