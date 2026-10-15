@@ -297,15 +297,27 @@ InitResult init_once(IDXGISwapChain* sc)
 {
     // Game device + swapchain3 (cached across deferred attempts).
     if (!g_dev) {
-        if (FAILED(sc->GetDevice(__uuidof(ID3D12Device), (void**)&g_dev)) ||
-            !g_dev) {
+        HRESULT hr = sc ? sc->GetDevice(__uuidof(ID3D12Device), (void**)&g_dev)
+                        : E_POINTER;
+        if (FAILED(hr) || !g_dev) {
             // Transient, not terminal. The game creates and destroys swapchains
             // while it boots, and the one we hooked can already be gone by the
             // time its first Present reaches us. The next Present offers a live
             // one. Treating this as a failure killed the overlay for the whole
             // session, over a swapchain that happened to die on us.
             g_dev = nullptr;
-            log_once("swapchain sans device -- on retente au prochain Present");
+            // NOT log_once: a repeated defer means the hook fires but the object
+            // is never a usable swapchain, which is a different bug entirely and
+            // needs to be visible. Five lines is enough to tell them apart.
+            static int tries = 0;
+            if (tries < 5) {
+                ++tries;
+                log::error("overlay: swapchain %p sans device (hr=0x%08lx), "
+                           "essai %d/5", (void*)sc, (unsigned long)hr, tries);
+            } else if (tries == 5) {
+                ++tries;
+                log::error("overlay: toujours pas de device -- plus de traces");
+            }
             return InitResult::Defer;
         }
     }
