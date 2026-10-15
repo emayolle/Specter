@@ -160,28 +160,39 @@ transport et se draine elle-même.
 ### Une seule exécution
 
 ```
-lua::pump::run()  <-  1 appelant : features/console.cpp
-console::submit() <-  1 appelant : le bouton « Execute »
+console::submit() <-  2 appelants : le bouton « Execute » et la stamina
+pump::run()       <-  2 appelants : le drain du tick Lua, et le canal shell
 ```
 
-C'est vérifiable en trois lignes de grep, et c'est vérifié à chaque build.
-Il n'y a **ni** polling, **ni** timer, **ni** maintenance, **ni** canal CLI.
+Il n'y a **ni** polling, **ni** timer, **ni** maintenance. Le canal shell est
+arrivé après : il passe par le même `run()`, le même bac à sable et le même tick
+Lua. Il n'y a pas de second exécuteur.
 
-### Trois choses apprises en jeu
+### Cinq choses apprises en jeu
 
 Chacune a coûté plusieurs allers-retours, parce qu'aucune ne se voyait au
 compilateur. Elles sont écrites ici pour que la suivante ne les=redécouvre pas.
 
-**1. Le registre Lua n'est pas utilisé, et c'est délibéré.**
-`LUA_REGISTRYINDEX` n'a pas la même valeur selon les versions : `-10000` en 5.0 et
-5.1, `0xFFF` en 5.2 et après. Se tromper n'est ni erreur de compilation ni erreur
-d'exécution : c'est un index de pile ordinaire, très hors bornes. Mesuré ici,
-`lua_rawgeti(L, -10000, clé)` ne rend pas le registre, et le `lua_rawseti`
-associé écrivait via un pointeur calculé sur cet index. C'est une écriture
-sauvage, faite **avant** que le moindre chunk ne s'exécute — donc aucune
-correction du préambule Lua ne pouvait changer le symptôme. Le store est
-désormais une table ordinaire, recréée à chaque Execute. Le prix : une variable
-créée par un Execute ne survit pas au suivant.
+**1. Le registre Lua est utilisé, et son index est trouvé, pas supposé.**
+`LUA_REGISTRYINDEX` n'a pas la même valeur selon les versions : `-10000` en 5.0
+et 5.1, `0xFFF` en 5.2 et après. Se tromper n'est ni erreur de compilation ni
+erreur d'exécution : c'est un index de pile ordinaire, très hors bornes, et
+écrire à travers lui est une écriture sauvage. `find_registry_index()` teste les
+**deux** valeurs documentées — jamais un index arbitraire — en **lecture seule**,
+et exige deux clés dont une (`FILE*`) n'appartient qu'au registre. Mesuré sur ce
+build : `-10000`.
+
+Ce que le registre ne donne pas, en revanche, c'est les globaux : ici ils sont à
+**registry[9]**, pas `registry[2]`. La règle « registry[2] est `_G` », qui vaut
+pour Lua 5.0 et pour GMod, est **fausse** sur cette cible — mesuré.
+
+**Le prix, écrit plutôt que découvert :** l'environnement du bac à sable est
+ancré dans le registre. Un script disposant de `debug.getregistry()` peut y
+marcher et le trouver. On **ne** hook pas `debug.getregistry` pour le cacher :
+cacher notre empreinte d'une inspection est de la dissimulation, pas de
+l'isolation. Ce qu'on fait à la place, c'est ne pas signer notre travail — la clé
+est dérivée de l'état, pas une constante nommée, et le store pend à l'env à une
+clé entière plutôt qu'à un champ `__store`.
 
 **2. Le préambule ne résout aucun nom depuis l'environnement du chunk.**
 C'est C qui pousse `pcall`, `setfenv`, `setmetatable`, `rawset`, `rawget`,
@@ -204,6 +215,40 @@ quand le statut est faux. Vérifié hors du jeu en cassant volontairement
 sortie (ok=false, etape 04 setfenv)
 PREAMBLE: c1.lua:22: attempt to call upvalue 'setfenv' (a table value)
 ```
+
+
+**4. Une assertion qui ne s'exécute qu'une fois n'est pas une assertion.**
+`build_specter` lisait l'environnement déjà ancré pour en sortir le store, et le
+laissait sur la pile. Au premier Execute il n'y a pas d'environnement, donc une
+valeur ; au deuxième il y en a deux. Un cran de trop, et l'appel visait le store
+au lieu de la fabrique — « attempt to call a table value », sans position.
+
+Le contrôle de profondeur **existait** et disait « correct », parce qu'il ne
+journalisait qu'une fois, au premier Execute — le seul qui allait bien. Alors il
+est devenu **inconditionnel**, à chaque appel, et il **annule l'appel** au lieu
+de le faire :
+
+| condition | action |
+|---|---|
+| profondeur ≠ nb d'arguments + 1 | appel annulé, message explicite |
+| l'appelée n'est pas une fonction | appel annulé |
+| une dépendance a le mauvais type | appel annulé |
+
+Une impasse bruyante vaut mieux qu'un appel silencieux sur la mauvaise valeur.
+(Et la première version de ce contrôle était fausse : il exigeait que `table`
+soit une fonction, alors que c'est une table dont on appelle les champs.)
+
+**5. Un harnais qui substitue la chose réelle ne teste rien.**
+`specter.env()` renvoyait `nil` depuis toujours : la closure C faisait
+`lua_gettable(L, 1)`, et **index 1 dans une fonction C est la fonction**, pas le
+premier argument. Elle « marchait » parce que `specter.env(specter)` passait la
+table en argument. Le harnais hors du jeu ne l'a pas vu — il substituait une
+fermeture Lua à la closure C. Il testait un autre programme.
+
+Règle : le harnais doit exercer **le même code** que celui qui part en jeu, ou il
+ne vaut rien. Corrigé en construisant `env` en Lua, où il n'y a pas d'index à se
+tromper.
+
 
 ---
 
