@@ -585,9 +585,11 @@ void build_specter(lua_State* L, int reg)
     // there is no index to get wrong.
 
     // Hand the store to the preamble under the internal name it reads.
-    p_pushvalue(L, -2);   // [specter, store]
+    p_pushvalue(L, -2);   // [store, specter, store]
     p_setfield(L, -2, "__store");
-    // [specter]
+    // [store, specter]  -- TWO values, and the contract says two. The comment
+    // here used to claim one; the code was never wrong about the count, only the
+    // comment was, and a guard written from that comment refused good calls.
 }
 
 
@@ -734,14 +736,21 @@ void run(void* L, const char* code, int len, result_sink sink)
     // thing tying the two together. Read the names here, not in the chunk: the
     // environment luaL_loadbuffer gives a chunk is not necessarily the game's
     // _G, and resolving them in Lua tied the preamble to whatever that is.
+    const int before_specter = p_gettop(L);
     build_specter(L, reg);
-    // build_specter's contract is "leaves exactly one value". Check it HERE,
-    // at the boundary where a violation is still cheap -- the guard further
-    // down runs too late for anything that crashes inside build_specter
-    // itself, which is exactly where the last three deaths happened.
-    if (p_gettop(L) - top != 1) {
+    // build_specter's contract is "leaves exactly one value". Check it HERE, at
+    // the boundary where a violation is still cheap -- the guard further down
+    // runs too late for anything that crashes inside build_specter itself, and
+    // that is where the deaths were.
+    //
+    // Measured from the stack height taken HERE, not from `top`: `top` predates
+    // p_loadbuffer, which leaves the chunk on the stack, so the delta from
+    // `top` is three, not one. The first version of this check compared
+    // against `top` and refused a perfectly good call.
+    const int left = p_gettop(L) - before_specter;
+    if (left != 1) {
         log::error("lua: build_specter a laisse %d valeur(s) au lieu d'une -- "
-                   "appel annule", p_gettop(L) - top);
+                   "appel annule", left);
         sink(false, "(internal) build_specter broke the stack contract", 45);
         p_settop(L, top);
         return;
