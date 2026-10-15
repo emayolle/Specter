@@ -490,6 +490,23 @@ int specter_log(lua_State* L)
 // hangs off the environment at an integer key rather than a field called
 // __store.
 
+// ---- ANCHORS ----------------------------------------------------------------
+//
+// kEnableAnchors gates the two registry WRITES. Flipping it to false puts the
+// sandbox back exactly as it was before anchoring existed: the environment is
+// built per Execute and the store does not survive between them. Nothing else
+// changes, and the probe still runs — it is read-only.
+//
+// It exists because the anchored path crashed the game ONCE. It did not
+// reproduce: with the anchors off, run() still reads g_registry_index, so it
+// still reads the env and still writes it -- on the first Execute the two
+// settings are the same code path, and three Executes ran clean. So the write
+// is not the culprit, and the crash was not deterministic.
+//
+// Which is worse than a known bug, so the switch stays: it is the cheapest way
+// to isolate anything that comes back.
+constexpr bool kEnableAnchors = true;
+
 // The two anchor keys. Derived from the state pointer, not labelled constants:
 // a key spelled "SPECTER" in a table the game can walk is a signature, and this
 // whole file exists because guessing is how we got here.
@@ -505,6 +522,9 @@ int store_key()
 
 void build_specter(lua_State* L, int reg)
 {
+    if (!kEnableAnchors) {
+        reg = 0;
+    }
     // The store must be the SAME table the environment's __index/__newindex close
     // over, or `specter.store` would name a table nothing actually uses. So it
     // hangs off the environment at an integer key, and only the environment is
