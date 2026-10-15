@@ -337,65 +337,94 @@ bool is_stdlib_name(const char* n)
     return false;
 }
 
-// Push the value described by one directive, and advance `p` past the line.
-// `kind` is the encoding letter, `payload` the text after it, `nl` the line's
-// newline. Errors go through `why`, never through a std::string on the stack --
-// a Lua error longjmps out of here and skips every destructor on the way.
-bool push_desc(lua_State* L, char kind, const char* payload, const char* nl,
-               const char* end, const char*& p, char* why, std::size_t why_cap)
+// Consume one descriptor, optionally pushing its value.
+//
+// `payload` is the text after the index, `nl` the newline that ends the header
+// line. A 'S' payload lives on the lines AFTER that newline and can contain
+// anything, including newlines -- so BOTH paths have to skip it, which is the
+// whole point of having one function instead of two.
+//
+// `p` is advanced past the whole directive, payload included, either way.
+// Errors go through `why`: a Lua error longjmps out of here and skips every
+// destructor between.
+bool take_desc(lua_State* L, char kind, const char* payload, const char* nl,
+               const char* end, bool want, const char*& p, char* why,
+               std::size_t why_cap)
 {
     switch (kind) {
     case 'Z':
-        p_lua_pushnil(L);
-        break;
-    case 'N':
-        p_lua_pushnumber(L, std::strtod(payload, nullptr));
-        break;
+        if (want) {
+            p_lua_pushnil(L);
+        }
+        p = nl + 1;
+        return true;
+
+    case 'N': {
+        if (want) {
+            p_lua_pushnumber(L, std::strtod(payload, nullptr));
+        }
+        p = nl + 1;
+        return true;
+    }
+
     case 'B':
-        p_lua_pushboolean(L, payload[0] == '1');
-        break;
+        if (want) {
+            p_lua_pushboolean(L, payload[0] == '1');
+        }
+        p = nl + 1;
+        return true;
+
     case 'L': {
         const std::string nm(payload, static_cast<std::size_t>(nl - payload));
+        if (!want) {
+            p = nl + 1;
+            return true;
+        }
         p_lua_getfield(L, LUA_GLOBALSINDEX, nm.c_str());
         if (p_lua_type(L, -1) == LUA_TNIL) {
             std::snprintf(why, why_cap, "le worker n'a pas le global '%s'",
                           nm.c_str());
             return false;
         }
-        break;
+        p = nl + 1;
+        return true;
     }
+
     case 'S': {
-        char* sf = nullptr;
-        const long slen = std::strtol(payload, &sf, 10);
-        while (sf < nl && *sf == ' ') {
-            ++sf;
-        }
-        const char* bytes = sf;
+        // `payload` here is the LENGTH, not the text: the bytes live on the
+        // lines after nl. Reading them from `payload` instead would be off by
+        // one -- the header's own newline in, the last byte out.
+        const long slen = std::strtol(payload, nullptr, 10);
+        const char* bytes = nl + 1;
         if (slen < 0 || bytes + slen > end) {
             std::snprintf(why, why_cap, "chaine tronquee dans les descripteurs");
             return false;
         }
-        p_lua_pushlstring(L, bytes, static_cast<std::size_t>(slen));
-        p = bytes + slen;  // the payload runs to its own newline, and may
-        if (p < end && *p == '\n') {  // contain anything at all
+        if (want) {
+            p_lua_pushlstring(L, bytes, static_cast<std::size_t>(slen));
+        }
+        p = bytes + slen;
+        if (p < end && *p == '\n') {
             ++p;
         }
         return true;
     }
+
     default:
         std::snprintf(why, why_cap, "descripteur inconnu '%c'", kind);
         return false;
     }
-    p = nl + 1;
-    return true;
 }
 
 // Apply every descriptor in `meta`.
 //
 // want_upvalues true  -> 'U' directives are bound on the chunk at chunk_idx
 //                        with debug.setupvalue, and nothing is left on the stack.
-// want_upvalues false -> 'A' directives are simply pushed, left for lua_pcall,
-//                        and their count is returned.
+// want_upvalues false -> 'A' directives are pushed, left for lua_pcall, and
+//                        their count is returned.
+//
+// `meta` MUST be NUL-terminated: strtod/strtol are pointed straight at it and
+// have no length to stop at. spawn() allocates one byte more for exactly this.
 //
 // Errors propagate as ordinary Lua errors, so a bad descriptor lands in the
 // worker's `error` like anything else.
@@ -417,7 +446,7 @@ int apply_meta(lua_State* L, int chunk_idx, const char* meta, int len,
     }
 
     char why[192] = "";
-    int pushed = 0;
+    int taken = 0;
     const char* p = meta;
     const char* end = meta + len;
 
@@ -442,15 +471,15 @@ int apply_meta(lua_State* L, int chunk_idx, const char* meta, int len,
         }
 
         const bool is_up = (role == 'U');
-        if (is_up != want_upvalues) {
-            p = nl + 1;  // directive meant for the other role: skip it
-            continue;
-        }
-        if (!push_desc(L, kind, after, nl, end, p, why, sizeof(why))) {
+        const bool want = (is_up == want_upvalues);
+        if (!take_desc(L, kind, after, nl, end, want, p, why, sizeof(why))) {
             p_lua_settop(L, base);
             p_lua_pushstring(L, why);
             p_lua_error(L);
             return 0;
+        }
+        if (!want) {
+            continue;
         }
         if (is_up) {
             p_lua_pushvalue(L, fn_idx);
@@ -458,14 +487,14 @@ int apply_meta(lua_State* L, int chunk_idx, const char* meta, int len,
             p_lua_pushinteger(L, idx);
             p_lua_call(L, 3, 0);
         } else {
-            ++pushed;
+            ++taken;
         }
     }
 
     if (want_upvalues) {
         p_lua_settop(L, base);
     }
-    return pushed;
+    return taken;
 }
 
 // ---------------------------------------------------------------------------
@@ -942,7 +971,9 @@ int spawn(const char* code, int len, const char* meta, int meta_len)
     job->slot = slot_idx;
 
     if (meta && meta_len > 0) {
-        job->meta = static_cast<char*>(std::malloc(static_cast<std::size_t>(meta_len)));
+        // +1 and the terminator: strtod/strtol in apply_meta are pointed at this
+        // buffer and have no length of their own to stop at.
+        job->meta = static_cast<char*>(std::malloc(static_cast<std::size_t>(meta_len) + 1));
         if (!job->meta) {
             std::free(job->code);
             std::free(job);
@@ -951,6 +982,7 @@ int spawn(const char* code, int len, const char* meta, int meta_len)
             return -1;
         }
         std::memcpy(job->meta, meta, static_cast<std::size_t>(meta_len));
+        job->meta[meta_len] = '\0';
         job->meta_len = meta_len;
     }
 
