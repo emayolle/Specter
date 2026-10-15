@@ -211,6 +211,7 @@ constexpr char kPrefix[] =
     "__st='14 setfenv'\n"
     "rawset(__env,'specter',__sp)\n"
     "rawset(__sp,'__global',__g)\n"
+    "rawset(__sp,'env',function() return __g end)\n"
     "setfenv(__f,__env)\n"
     "setfenv(__b,__env)\n"
     "__st='15 code'\n"
@@ -348,31 +349,15 @@ void log_chunk(const char* code, int len)
 // the environment we handed them. No global is created, so there is nothing to
 // collide with and nothing to enumerate out of _G.
 
-int specter_env(lua_State* L)
-{
-    // The real globals are NOT guessed here. The factory reads its own
-    // environment (getfenv(__f)) before switching, and parks the table on the
-    // specter table; this just hands it back.
-    //
-    // The C-side guess -- registry[2] -- is what this replaces. It is right on
-    // most builds and silently wrong on others, and when it is wrong nothing
-    // says so: the sandbox still runs, it just reads and writes a table that is
-    // not _G. Returning the table the sandbox demonstrably read through cannot
-    // have that failure mode.
-    p_pushstring(L, "__global");
-    p_gettable(L, 1);
-    return 1;
-}
-
 int specter_log(lua_State* L)
 {
     const int top = p_gettop(L);
-    if (top < 1) {
+    if (top < 2) {  // index 1 is the function itself, not an argument
         return 0;
     }
     char buf[1024];
     int n = 0;
-    for (int i = 1; i <= top; ++i) {
+    for (int i = 2; i <= top; ++i) {
         std::size_t len = 0;
         const char* s = p_tolstring(L, i, &len);
         if (!s || len == 0) {
@@ -420,11 +405,21 @@ void build_specter(lua_State* L)
     p_pushvalue(L, -2);   // [store, specter, store]
     p_setfield(L, -2, "store");
 
-    p_pushcclosure(L, &specter_env, 0);
-    p_setfield(L, -2, "env");
-
     p_pushcclosure(L, &specter_log, 0);
     p_setfield(L, -2, "log");
+
+    // NOTE: there is no `env` here any more, and there was a bug in it.
+    //
+    // It was a C closure that did lua_gettable(L, 1) to fetch specter.__global.
+    // Index 1 inside a C function is the FUNCTION, not the first argument -- so
+    // specter.env() read `func.__global`, which is nil, always. It only appeared
+    // to work because specter.env(specter) passed the table explicitly.
+    //
+    // The offline harness could not have caught that: it stood a Lua closure in
+    // for the C one, so it tested a different program than the one that ships.
+    //
+    // The factory builds `env` in Lua instead, where it closes over __g and
+    // there is no index to get wrong.
 
     // Hand the store to the preamble under the internal name it reads.
     p_pushvalue(L, -2);   // [specter, store]
