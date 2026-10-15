@@ -55,9 +55,12 @@ before=0
 # entier. Sans ça, il pourrait exécuter un chunk à moitié écrit.
 printf '%s' "$SRC" > "$REQ.tmp" && mv -f "$REQ.tmp" "$REQ"
 
-echo "lua.sh: requete deposee — la fenetre doit etre ouverte (case cochee)." >&2
+echo "lua.sh: requete deposee — en attente que le canal s'ouvre." >&2
 
-for _ in $(seq 1 100); do
+# On attend longtemps, et on ne republie pas. Le fichier reste sur le disque :
+# la DLL le prend des que le canal s'ouvre, meme si c'est apres le depot.
+# Republier risque de faire tourner le chunk plusieurs fois.
+for _ in $(seq 1 600); do
   sleep 0.1
   [ -f "$RES" ] || continue
   now=$(cksum < "$RES")
@@ -68,6 +71,7 @@ for _ in $(seq 1 100); do
   head -1 "$RES" | grep -q '#ok=1' && exit 0 || exit 1
 done
 
-echo "lua.sh: pas de reponse. La fenetre est-elle ouverte ?" >&2
-echo "        (onglet Lua Editor -> case 'Autoriser le shell')" >&2
+echo "lua.sh: pas de reponse apres 60 s." >&2
+echo "        le canal est-il ouvert ? (onglet Lua Editor -> 'Autoriser le shell')" >&2
+echo "        ou le DLL est-il trop vieux ? il doit venir d'apres 15:03." >&2
 exit 4

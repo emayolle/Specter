@@ -109,9 +109,27 @@ constexpr const char* kCliRes = "Z:\\tmp\\specter-cli\\res.txt";
 // once, stays open for the session, closes when you close it.
 constexpr unsigned long long kCliWindowTicks = 0;  // 0 = no expiry
 
-// When the checkbox was ticked, in Lua-thread ticks. Zero = closed, and zero is
-// also the value at load: the channel is shut until a person opens it.
-std::atomic<unsigned long long> g_cli_armed_at = 0;
+// When the channel was opened. Zero = closed.
+//
+// OPEN AT LOAD, and that is a deliberate reversal of the earlier decision.
+// The channel was shipped closed, opened by a checkbox, so that nothing could
+// run Lua without a person having asked. Asked twice, it is now open from the
+// first tick: this is a development channel on the operator's own machine, the
+// operator injects the module by hand, and a checkbox you re-arm every session
+// is a checkbox nobody reads. The checkbox stays, to CLOSE it.
+//
+// What that costs, stated plainly: anything on this machine that can write
+// /tmp/specter-cli/req.lua can run Lua in the game while the module is mapped.
+// No injection, no UI, no intent required. That is true of the checkbox too —
+// it just needed ten seconds of not-touching.
+//
+// Every execution is still mirrored to the host log. That is the guard that
+// survives this decision: not "nobody can use it", but "nothing goes unrecorded".
+std::atomic<unsigned long long> g_cli_armed_at = 1;
+
+// One-shot: says once, the first time the shell is actually used, that the
+// channel was open before anyone touched the checkbox.
+std::atomic<bool> g_cli_first_use{false};
 
 // The chunk taken from the shell, owned by the Lua thread.
 char g_cli_code[kMaxCode];
@@ -210,8 +228,7 @@ bool claim_request()
 }
 
 // Take one shell request, if the channel is open. Returns false when the
-// checkbox is off, or when there is nothing to take — which is the normal case
-// every frame for as long as nobody has opened it.
+// checkbox is off, or when there is nothing to take.
 bool take_cli_request()
 {
     if (g_cli_armed_at.load(std::memory_order_relaxed) == 0) {
@@ -225,6 +242,10 @@ bool take_cli_request()
         g_cli_armed_at.store(0, std::memory_order_relaxed);
         log::info("cli: fenetre expiree, le shell est de nouveau muet");
         return false;
+    }
+    if (g_cli_first_use.exchange(true, std::memory_order_relaxed)) {
+        log::info("cli: canal ouvert par defaut (case 'Autoriser le shell' "
+                  "pour le fermer)");
     }
     return claim_request();
 }
@@ -385,9 +406,9 @@ void draw_ui()
     }
     ImGui::SameLine();
     if (open) {
-        ImGui::Text("ouvert -- tools/lua.sh peut parler");
+        ImGui::Text("ouvert (par defaut) -- decocher pour fermer");
     } else {
-        ImGui::TextDisabled("ferme -- cocher pour ouvrir");
+        ImGui::TextDisabled("ferme");
     }
 
     ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);

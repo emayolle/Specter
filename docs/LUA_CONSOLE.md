@@ -102,29 +102,30 @@ prefixe Wine) :
    `res.txt` ;
 3. le script attend que `res.txt` change et affiche le résultat.
 
-### Pourquoi il y a une case à cocher
+### Ouverture par défaut
 
-Un canal d'exécution déclenché par le système de fichiers est un canal que
-**quiconque peut écrire dans ce dossier** peut utiliser : pas d'UI, pas
-d'intention, pas de trace d'une personne ayant demandé. C'est ce qui avait fait
-retirer le canal à l'origine.
+Le canal est **ouvert au chargement**. La case « Autoriser le shell » ne sert
+plus qu'à le **fermer** — c'est tout.
 
-Le canal est donc revenu **derrière une précondition humaine** :
+C'est l'inverse de ce qui était prévu. Le canal était livré fermé, ouvert par
+une case à cocher, pour que rien ne puisse exécuter du Lua sans qu'une personne
+l'ait demandé. La case a été demandée retirée, puis remise, puis ouverte par
+défaut : sur une machine qui est la nôtre, où le module est injecté à la main,
+une case à re-cocher à chaque session est une case que personne ne lit.
 
-- la case « Autoriser le shell » de l'onglet Lua Editor ouvre le canal ;
-- le canal **reste ouvert** jusqu'à ce qu'on le referme ;
-- fermé, la DLL ne regarde **pas** le fichier — le chemin n'existe pas ;
-- à chaque injection, il est **fermé** ;
-- chaque exécution est **journalisée** dans `specter.log` (`cli: requete
-  traitee`). Un canal qui exécuterait du code dont personne ne peut rendre
-  compte serait pire que pas de canal du tout.
+Ce que ça coûte, dit franchement : tant que le module est chargé, **tout ce qui
+peut écrire `/tmp/specter-cli/req.lua` peut exécuter du Lua dans le jeu**. Pas
+d'injection, pas d'UI, pas d'intention. C'était vrai de la case aussi — il
+fallait juste dix secondes de ne pas y toucher.
 
-`tools/lua.sh` sort en erreur 4 avec le rappel si le canal est fermé.
+Ce qui reste comme garde : chaque exécution est **journalisée** dans
+`specter.log`. Le filet n'est pas « personne ne peut s'en servir », c'est
+« rien ne passe sans trace ».
 
-L'expiration automatique a été retirée après essai : une case à re-cocher toutes
-les dix secondes apprend à cocher sans lire, ce qui est pire que les deux
-extrêmes. Le timeout reste dans le code — `kCliWindowTicks` à 0 — pour que le
+Le timeout automatique reste dans le code (`kCliWindowTicks = 0`) pour que le
 compromis soit visible plutôt qu'oublié.
+
+`tools/lua.sh` sort en erreur 4 après 60 s si le canal est fermé.
 
 ### Identité des chunks
 
