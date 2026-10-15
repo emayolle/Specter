@@ -568,16 +568,23 @@ void run(void* L, const char* code, int len, result_sink sink)
     // Verify what we are about to hand over, once. Pushing a table where the
     // factory expects a function is the exact failure we are fixing, and it
     // must not be able to happen silently again.
+    //
+    // Offsets are DERIVED, never written down. Counting by hand is what caused
+    // the bug in the first place, and then caused a wrong "fix" to the probe
+    // itself: for one build it printed pcall=table, which read like a shadowed
+    // global when it was really the store one slot further down.
     static bool pushed_ok = false;
     if (!pushed_ok) {
         pushed_ok = true;
+        constexpr int kNFn = static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
+        // From the top: fn n-1 .. fn 0 occupy -1 .. -nFns, then _G, then
+        // specter, then store, then the callee.
         char buf[384];
         int n = std::snprintf(buf, sizeof(buf), "pousse a la fabrique : _G=%s",
-                              type_name(p_type(L, -12)));
-        for (std::size_t i = 0; i < sizeof(kPreambleFns) / sizeof(*kPreambleFns); ++i) {
-            const int idx = -11 + static_cast<int>(i);
+                              type_name(p_type(L, -(kNFn + 1))));
+        for (int i = 0; i < kNFn; ++i) {
             n += std::snprintf(buf + n, sizeof(buf) - n, " %s=%s",
-                               kPreambleFns[i], type_name(p_type(L, idx)));
+                               kPreambleFns[i], type_name(p_type(L, -(kNFn - i))));
         }
         log::info("lua: %s", buf);
         // The depth check is the assertion this bug deserved: it would have
