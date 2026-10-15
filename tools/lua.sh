@@ -24,7 +24,12 @@ REQ="$DIR/req.lua"
 RES="$DIR/res.txt"
 
 case "${1:-}" in
-  -f|--file) SRC="${2:?usage: lua.sh -f fichier}"; shift 2 ;;
+  # -f lit le fichier. La premiere version faisait SRC="$2" et expediait donc le
+  # CHEMIN comme si c'etait du code : /tmp/x.lua devenait un chunk, et le jeu
+  # repondait "unexpected symbol near '/'". Trois lignes, et ca n'a marche
+  # qu'a l'usage.
+  -f|--file) [ -r "${2:?usage: lua.sh -f fichier}" ] || { echo "lua.sh: illisible: ${2}" >&2; exit 2; }
+             SRC="$(cat "$2")"; shift 2 ;;
   --help|-h) sed -n '2,25p' "$0"; exit 0 ;;
   "")        if [ -t 0 ]; then
                 echo "usage: lua.sh 'code' | -f fichier | (stdin)" >&2; exit 2
@@ -46,10 +51,11 @@ if ! flock -n 9; then
   exit 3
 fi
 
-# Fingerprint de la réponse courante : on ne veut pas lire celle de la
-# précédente si la nôtre n'est jamais traitée.
-before=0
-[ -f "$RES" ] && before=$(cksum < "$RES")
+# On SUPPRIME la réponse d'avant. Comparer son empreinte ne suffit pas : deux
+# executions qui rendent exactement la même chose ne changent pas le cksum, et le
+# script attend alors indefiniment une reponse deja presente. Ca arrive des que
+# le test est stable -- c'est-a-dire tout le temps.
+rm -f "$RES"
 
 # Publication atomique : le DLL ne renomme `req.lua` que si le fichier est
 # entier. Sans ça, il pourrait exécuter un chunk à moitié écrit.
@@ -63,8 +69,7 @@ echo "lua.sh: requete deposee — en attente que le canal s'ouvre." >&2
 for _ in $(seq 1 600); do
   sleep 0.1
   [ -f "$RES" ] || continue
-  now=$(cksum < "$RES")
-  [ "$now" != "$before" ] || continue
+  [ -s "$RES" ] || continue
   # Première ligne : #ok=<0|1>
   head -1 "$RES"
   tail -n +2 "$RES"

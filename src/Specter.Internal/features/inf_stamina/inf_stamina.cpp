@@ -27,22 +27,32 @@ namespace {
 // The wrapper kept reading run N's store, where the flag was still true. So
 // turning stamina off did nothing at all.
 //
-// A field on the function cannot drift: the wrapper reads the flag off itself,
-// so the only copy that matters lives exactly as long as the patch that reads it.
-// No shared mutable state, nothing to keep in sync across runs.
+// The flag lives on the CLASS TABLE, not on the wrapper function -- and that is
+// not a style choice. Measured in game: this build does NOT ship the standard
+// rawset. The rawset in _G is a wrapper that rejects anything that is not a
+// table ("bad argument #1 to 'raw_rawset' (table expected, got function)"),
+// while every other library function checked -- rawget, setmetatable, pcall,
+// select, tostring, table.concat, table.remove, type -- behaves normally.
+//
+// So the gate is a field on `AC`, the shared class metatable, which is exactly
+// the object the patch is installed on. Putting it anywhere else makes the
+// toggle fail, or throw at patch time.
+//
+// A field on AC cannot drift either: the wrapper closes over AC, so the copy it
+// reads is the copy the toggle writes.
 
 // `w` is referenced inside its own body, so it must be named before assignment.
 constexpr char kEnable[] =
     "local AC = require('Common.Ability.Attribute.ActorCombatAttribute')\n"
-    "if type(rawget(AC, 'changeStamina')) ~= 'function' then\n"
+    "if type(specter.rawget(AC, 'changeStamina')) ~= 'function' then\n"
     "  return 'changeStamina is not a function'\n"
     "end\n"
-    "if not rawget(AC, '__specterStaminaHooked') then\n"
-    "  local orig = rawget(AC, 'changeStamina')\n"
+    "if not specter.rawget(AC, '__specterStaminaHooked') then\n"
+    "  local orig = specter.rawget(AC, 'changeStamina')\n"
     "  local w\n"
     "  w = function(self, delta)\n"
     "    local d = tonumber(delta)\n"
-    "    if d and d < 0 and w.specter_on then\n"
+    "    if d and d < 0 and specter.rawget(AC, '__specterStaminaOn') then\n"
     "      local e = self and self.entity\n"
     "      if e == pg.me or e == pg.pawn or (e and e.isMainPlayer == true) then\n"
     "        return true\n"
@@ -50,17 +60,18 @@ constexpr char kEnable[] =
     "    end\n"
     "    return orig(self, delta)\n"
     "  end\n"
-    "  rawset(AC, '__specterStaminaOrig', orig)\n"
+    "  specter.rawset(AC, '__specterStaminaOrig', orig)\n"
     "  AC.changeStamina = w\n"
-    "  rawset(AC, '__specterStaminaHooked', true)\n"
+    "  specter.rawset(AC, '__specterStaminaHooked', true)\n"
     "end\n"
-    "rawset(AC.changeStamina, 'specter_on', true)\n"
+    "specter.rawset(AC, '__specterStaminaOn', true)\n"
     "return 'stamina hooked'\n";
 
 constexpr char kDisable[] =
     "local AC = require('Common.Ability.Attribute.ActorCombatAttribute')\n"
-    "local w = rawget(AC, 'changeStamina')\n"
-    "if type(w) == 'function' then rawset(w, 'specter_on', false) end\n"
+    "if specter.rawget(AC, '__specterStaminaHooked') then\n"
+    "  specter.rawset(AC, '__specterStaminaOn', false)\n"
+    "end\n"
     "return 'stamina off'\n";
 
 // Cached so the menu can draw the checkbox without going through the Lua thread.
