@@ -35,8 +35,10 @@ namespace {
 // select, tostring, table.concat, table.remove, type -- behaves normally.
 //
 // So the gate is a field on `AC`, the shared class metatable, which is exactly
-// the object the patch is installed on. Putting it anywhere else makes the
-// toggle fail, or throw at patch time.
+// the object the patch is installed on: a TABLE, which this rawset accepts.
+//
+// (An own rawset/rawget in C was tried and withdrawn: two functions whose whole
+// job is to be raw were the most crash-prone thing in the build. See git.)
 //
 // A field on AC cannot drift either: the wrapper closes over AC, so the copy it
 // reads is the copy the toggle writes.
@@ -44,15 +46,15 @@ namespace {
 // `w` is referenced inside its own body, so it must be named before assignment.
 constexpr char kEnable[] =
     "local AC = require('Common.Ability.Attribute.ActorCombatAttribute')\n"
-    "if type(specter.rawget(AC, 'changeStamina')) ~= 'function' then\n"
+    "if type(rawget(AC, 'changeStamina')) ~= 'function' then\n"
     "  return 'changeStamina is not a function'\n"
     "end\n"
-    "if not specter.rawget(AC, '__specterStaminaHooked') then\n"
-    "  local orig = specter.rawget(AC, 'changeStamina')\n"
+    "if not rawget(AC, '__specterStaminaHooked') then\n"
+    "  local orig = rawget(AC, 'changeStamina')\n"
     "  local w\n"
     "  w = function(self, delta)\n"
     "    local d = tonumber(delta)\n"
-    "    if d and d < 0 and specter.rawget(AC, '__specterStaminaOn') then\n"
+    "    if d and d < 0 and rawget(AC, '__specterStaminaOn') then\n"
     "      local e = self and self.entity\n"
     "      if e == pg.me or e == pg.pawn or (e and e.isMainPlayer == true) then\n"
     "        return true\n"
@@ -60,17 +62,17 @@ constexpr char kEnable[] =
     "    end\n"
     "    return orig(self, delta)\n"
     "  end\n"
-    "  specter.rawset(AC, '__specterStaminaOrig', orig)\n"
+    "  rawset(AC, '__specterStaminaOrig', orig)\n"
     "  AC.changeStamina = w\n"
-    "  specter.rawset(AC, '__specterStaminaHooked', true)\n"
+    "  rawset(AC, '__specterStaminaHooked', true)\n"
     "end\n"
-    "specter.rawset(AC, '__specterStaminaOn', true)\n"
+    "rawset(AC, '__specterStaminaOn', true)\n"
     "return 'stamina hooked'\n";
 
 constexpr char kDisable[] =
     "local AC = require('Common.Ability.Attribute.ActorCombatAttribute')\n"
-    "if specter.rawget(AC, '__specterStaminaHooked') then\n"
-    "  specter.rawset(AC, '__specterStaminaOn', false)\n"
+    "if rawget(AC, '__specterStaminaHooked') then\n"
+    "  rawset(AC, '__specterStaminaOn', false)\n"
     "end\n"
     "return 'stamina off'\n";
 
