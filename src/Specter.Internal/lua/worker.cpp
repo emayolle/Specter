@@ -6,6 +6,7 @@
 #include "lua/worker.h"
 
 #include "lua/capi.h"
+#include "lua/worker_meta.h"
 #include "platform/log.h"
 #include "platform/nt.h"
 
@@ -296,208 +297,6 @@ void open_worker_api(lua_State* L, Job* job)
 // upvalues are rebound to the worker's own globals, by name, and
 // `table.concat` means exactly what it meant. That is the whole trick, and it is
 // why the function form can work at all.
-//
-// What cannot cross is anything the worker's world does not also have: a game
-// function, a game table, a game userdata. Those are refused by NAME, in the
-// game world, before anything is spawned — so the error names the variable
-// instead of surfacing later as a nil deep inside the body. The same rule
-// applies to the ARGUMENTS of the call, which cross by the same road.
-//
-// Wire format, one directive per line, parsed by a pointer walk. The role letter
-// says what the value is FOR, so the same encodings serve both upvalues and
-// call arguments:
-//
-//     <role> <kind> <index> [payload]
-//
-// role: U = upvalue slot, A = call argument
-// kind: L <name>  the worker's global <name>
-//       N <num>    number
-//       S <len>    string; <len> bytes follow on their own line
-//       B <0|1>    boolean
-//       Z          nil
-// ---------------------------------------------------------------------------
-
-// Standard Lua 5.1 names. Only these may be rebound; anything else that is not
-// a primitive is refused.
-const char* const kStdlibNames[] = {
-    "assert", "collectgarbage", "coroutine", "debug", "error", "getfenv",
-    "getmetatable", "io", "ipairs", "loadstring", "math", "module", "next",
-    "os", "pairs", "pcall", "print", "rawequal", "rawget", "rawlen", "rawset",
-    "require", "select", "setfenv", "setmetatable", "string", "table",
-    "tonumber", "tostring", "type", "unpack", "xpcall", "_G",
-};
-
-bool is_stdlib_name(const char* n)
-{
-    for (const char* s : kStdlibNames) {
-        if (std::strcmp(s, n) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Consume one descriptor, optionally pushing its value.
-//
-// `payload` is the text after the index, `nl` the newline that ends the header
-// line. A 'S' payload lives on the lines AFTER that newline and can contain
-// anything, including newlines -- so BOTH paths have to skip it, which is the
-// whole point of having one function instead of two.
-//
-// `p` is advanced past the whole directive, payload included, either way.
-// Errors go through `why`: a Lua error longjmps out of here and skips every
-// destructor between.
-bool take_desc(lua_State* L, char kind, const char* payload, const char* nl,
-               const char* end, bool want, const char*& p, char* why,
-               std::size_t why_cap)
-{
-    switch (kind) {
-    case 'Z':
-        if (want) {
-            p_lua_pushnil(L);
-        }
-        p = nl + 1;
-        return true;
-
-    case 'N': {
-        if (want) {
-            p_lua_pushnumber(L, std::strtod(payload, nullptr));
-        }
-        p = nl + 1;
-        return true;
-    }
-
-    case 'B':
-        if (want) {
-            p_lua_pushboolean(L, payload[0] == '1');
-        }
-        p = nl + 1;
-        return true;
-
-    case 'L': {
-        const std::string nm(payload, static_cast<std::size_t>(nl - payload));
-        if (!want) {
-            p = nl + 1;
-            return true;
-        }
-        p_lua_getfield(L, LUA_GLOBALSINDEX, nm.c_str());
-        if (p_lua_type(L, -1) == LUA_TNIL) {
-            std::snprintf(why, why_cap, "le worker n'a pas le global '%s'",
-                          nm.c_str());
-            return false;
-        }
-        p = nl + 1;
-        return true;
-    }
-
-    case 'S': {
-        // `payload` here is the LENGTH, not the text: the bytes live on the
-        // lines after nl. Reading them from `payload` instead would be off by
-        // one -- the header's own newline in, the last byte out.
-        const long slen = std::strtol(payload, nullptr, 10);
-        const char* bytes = nl + 1;
-        if (slen < 0 || bytes + slen > end) {
-            std::snprintf(why, why_cap, "chaine tronquee dans les descripteurs");
-            return false;
-        }
-        if (want) {
-            p_lua_pushlstring(L, bytes, static_cast<std::size_t>(slen));
-        }
-        p = bytes + slen;
-        if (p < end && *p == '\n') {
-            ++p;
-        }
-        return true;
-    }
-
-    default:
-        std::snprintf(why, why_cap, "descripteur inconnu '%c'", kind);
-        return false;
-    }
-}
-
-// Apply every descriptor in `meta`.
-//
-// want_upvalues true  -> 'U' directives are bound on the chunk at chunk_idx
-//                        with debug.setupvalue, and nothing is left on the stack.
-// want_upvalues false -> 'A' directives are pushed, left for lua_pcall, and
-//                        their count is returned.
-//
-// `meta` MUST be NUL-terminated: strtod/strtol are pointed straight at it and
-// have no length to stop at. spawn() allocates one byte more for exactly this.
-//
-// Errors propagate as ordinary Lua errors, so a bad descriptor lands in the
-// worker's `error` like anything else.
-int apply_meta(lua_State* L, int chunk_idx, const char* meta, int len,
-               bool want_upvalues)
-{
-    const int base = p_lua_gettop(L);
-    int fn_idx = 0;
-    if (want_upvalues) {
-        p_lua_getfield(L, LUA_GLOBALSINDEX, "debug");
-        p_lua_getfield(L, -1, "setupvalue");  // [ .., debug, setupvalue ]
-        if (p_lua_type(L, -1) != LUA_TFUNCTION) {
-            p_lua_settop(L, base);
-            p_lua_pushstring(L, "le worker n'a pas debug.setupvalue");
-            p_lua_error(L);
-            return 0;
-        }
-        fn_idx = p_lua_gettop(L);
-    }
-
-    char why[192] = "";
-    int taken = 0;
-    const char* p = meta;
-    const char* end = meta + len;
-
-    while (p < end) {
-        const char* nl = static_cast<const char*>(
-            std::memchr(p, '\n', static_cast<std::size_t>(end - p)));
-        if (!nl) {
-            break;
-        }
-        const char role = *p++;
-        while (p < nl && *p == ' ') {
-            ++p;
-        }
-        const char kind = *p++;
-        while (p < nl && *p == ' ') {
-            ++p;
-        }
-        char* after = nullptr;
-        const long idx = std::strtol(p, &after, 10);
-        while (after < nl && *after == ' ') {
-            ++after;
-        }
-
-        const bool is_up = (role == 'U');
-        const bool want = (is_up == want_upvalues);
-        if (!take_desc(L, kind, after, nl, end, want, p, why, sizeof(why))) {
-            p_lua_settop(L, base);
-            p_lua_pushstring(L, why);
-            p_lua_error(L);
-            return 0;
-        }
-        if (!want) {
-            continue;
-        }
-        if (is_up) {
-            p_lua_pushvalue(L, fn_idx);
-            p_lua_pushvalue(L, chunk_idx);
-            p_lua_pushinteger(L, idx);
-            p_lua_call(L, 3, 0);
-        } else {
-            ++taken;
-        }
-    }
-
-    if (want_upvalues) {
-        p_lua_settop(L, base);
-    }
-    return taken;
-}
-
-// ---------------------------------------------------------------------------
 
 DWORD WINAPI worker_main(LPVOID arg)
 {
@@ -527,12 +326,23 @@ DWORD WINAPI worker_main(LPVOID arg)
             // through lua_error on a bad descriptor, which this pcall catches.
             const int chunk_idx = p_lua_gettop(L);
             int nargs = 0;
+            char why[192] = "";
             if (job->meta && job->meta_len > 0) {
-                apply_meta(L, chunk_idx, job->meta, job->meta_len, true);
-                nargs = apply_meta(L, chunk_idx, job->meta, job->meta_len,
-                                   false);
+                if (meta::apply_meta(L, chunk_idx, job->meta, job->meta_len,
+                                     true, why, sizeof(why)) < 0 ||
+                    (nargs = meta::apply_meta(L, chunk_idx, job->meta,
+                                              job->meta_len, false, why,
+                                              sizeof(why))) < 0) {
+                    // On ne leve ICI. apply_meta retourne son echec, parce
+                    // qu'un raise a cet endroit partirait en longjmp sans
+                    // aucun pcall autour -- le worker n'en a pas encore -- et
+                    // un worker qui fait ca emmene le jeu avec lui.
+                    set_error(job, why);
+                    p_lua_settop(L, base);
+                    terminal = kError;
+                }
             }
-            if (p_lua_pcall(L, nargs, 0, 0) != 0) {
+            if (terminal != kError && p_lua_pcall(L, nargs, 0, 0) != 0) {
                 const char* msg = p_lua_tolstring(L, -1, nullptr);
                 set_error(job, msg);
                 // A raise at sleep() is a kill landing, not a failure: say
@@ -675,7 +485,7 @@ bool describe_upvalues(lua_State* L, int idx, std::string& meta,
         const std::string nm(raw ? raw : "", nl);
         const int vt = p_lua_type(L, -1);
 
-        if (is_stdlib_name(nm.c_str())) {
+        if (meta::is_stdlib_name(nm.c_str())) {
             // The sandbox captures the standard library as locals; the worker
             // called luaL_openlibs and has the same one. Rebind by name.
             std::snprintf(buf, sizeof(buf), "U L %d ", i);
