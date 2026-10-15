@@ -55,7 +55,6 @@ struct Slot {
     std::atomic<int> flag;
     HANDLE thread;
     char error[256];
-    char kind[24];
 };
 Slot g_slots[kMaxWorkers];
 
@@ -195,25 +194,36 @@ void* worker_alloc(void* ud, void* ptr, std::size_t osize, std::size_t nsize)
 
 // specter.log(...) — the same sink as the DLL log, from the worker thread. The
 // logger takes its own critical section, so this is safe cross-thread.
+//
+// Same shape as the sandbox's specter_log (lua/pump.cpp): a space before every
+// part, into the same 1024-byte budget. Two implementations of "print", so
+// they had better print the same thing.
 int l_log(lua_State* L)
 {
-    const int base = p_lua_gettop(L);
-    for (int i = 1; i <= base; ++i) {
-        const int t = p_lua_type(L, i);
-        if (t != LUA_TSTRING && t != LUA_TNUMBER && t != LUA_TBOOLEAN &&
-            t != LUA_TNIL) {
-            // tostring on whatever it is, without disturbing argument 1..n.
-            p_lua_getfield(L, LUA_GLOBALSINDEX, "tostring");
-            p_lua_pushvalue(L, i);
-            p_lua_call(L, 1, 1);
-            p_lua_replace(L, i);
-        }
+    const int top = p_lua_gettop(L);
+    if (top < 1) {
+        return 0;
     }
-    p_lua_concat(L, base);
-    std::size_t len = 0;
-    const char* text = p_lua_tolstring(L, -1, &len);
-    log::info("[worker] %.*s", static_cast<int>(len), text ? text : "");
-    p_lua_settop(L, 0);
+    char buf[1024];
+    int n = 0;
+    for (int i = 1; i <= top; ++i) {
+        std::size_t len = 0;
+        const char* s = p_lua_tolstring(L, i, &len);
+        if (!s || len == 0) {
+            continue;
+        }
+        if (n < static_cast<int>(sizeof(buf)) - 2) {
+            buf[n++] = ' ';
+        }
+        const int room = static_cast<int>(sizeof(buf)) - n - 1;
+        const int c = len < static_cast<std::size_t>(room)
+                          ? static_cast<int>(len)
+                          : room;
+        std::memcpy(buf + n, s, static_cast<std::size_t>(c));
+        n += c;
+    }
+    buf[n] = '\0';
+    log::info("[worker]%s", buf);
     return 0;
 }
 
@@ -350,6 +360,30 @@ bool is_terminal(int f)
     return f == kFree || f == kDone || f == kKilled || f == kError;
 }
 
+// Free the slot of a worker whose body has finished.
+//
+// The thread publishes its terminal flag BEFORE it frees its job and returns,
+// and from that point on it touches neither `slot` nor `error` — so the slot can
+// be reused the moment the flag is seen. Waiting on the handle first is belt and
+// braces: it is what turns "probably exited" into "has exited".
+//
+// Without this, spawn() looked only for kFree, and a slot stayed kDone forever:
+// six spawns in a session, then "pas de slot libre" with nothing running.
+void reclaim(int i)
+{
+    HANDLE t = nullptr;
+    lock();
+    t = g_slots[i].thread;
+    g_slots[i].thread = nullptr;
+    unlock();
+    if (t) {
+        WaitForSingleObject(t, 2000);
+        CloseHandle(t);
+    }
+    g_slots[i].flag.store(kFree, std::memory_order_release);
+    g_slots[i].error[0] = '\0';
+}
+
 char g_last_error[256] = "";
 
 void set_last_error(const char* msg)
@@ -475,6 +509,12 @@ int api_alive(lua_State* L)
     return 1;
 }
 
+int api_error(lua_State* L)
+{
+    p_lua_pushstring(L, error(static_cast<int>(p_lua_tonumber(L, 1))));
+    return 1;
+}
+
 }  // namespace
 
 bool register_api(lua_State* L, int specter_idx)
@@ -496,12 +536,13 @@ bool register_api(lua_State* L, int specter_idx)
         return false;
     }
 
-    p_lua_createtable(L, 0, 5);
+    p_lua_createtable(L, 0, 6);
     set_fn(L, "spawn", api_spawn);
     set_fn(L, "kill", api_kill);
     set_fn(L, "join", api_join);
     set_fn(L, "status", api_status);
     set_fn(L, "alive", api_alive);
+    set_fn(L, "error", api_error);
     p_lua_setfield(L, target, "thread");
 
     p_lua_settop(L, top);
@@ -527,13 +568,17 @@ int spawn(const char* code, int len)
     lock();
     int slot_idx = -1;
     for (int i = 0; i < kMaxWorkers; ++i) {
-        if (g_slots[i].flag.load(std::memory_order_relaxed) == kFree) {
+        const int f = g_slots[i].flag.load(std::memory_order_acquire);
+        if (is_terminal(f)) {
             slot_idx = i;
-            g_slots[i].flag.store(kStarting, std::memory_order_relaxed);
-            g_slots[i].error[0] = '\0';
-            std::snprintf(g_slots[i].kind, sizeof(g_slots[i].kind), "%s", "");
             break;
         }
+    }
+    if (slot_idx >= 0) {
+        reclaim(slot_idx);
+    }
+    if (slot_idx >= 0) {
+        g_slots[slot_idx].flag.store(kStarting, std::memory_order_relaxed);
     }
     unlock();
 
@@ -616,6 +661,14 @@ const char* status(int h)
         return "handshake inconnu";
     }
     return flag_name(g_slots[h].flag.load(std::memory_order_acquire));
+}
+
+const char* error(int h)
+{
+    if (h < 0 || h >= kMaxWorkers) {
+        return "handshake inconnu";
+    }
+    return g_slots[h].error;
 }
 
 const char* last_error()

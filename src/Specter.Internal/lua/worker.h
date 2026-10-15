@@ -64,6 +64,13 @@ bool join(int h, unsigned timeout_ms = 5000);
 // "free" | "starting" | "running" | "kill asked" | "done" | "killed" | "error".
 const char* status(int h);
 
+// Why the worker finished. Empty while it runs, and after a clean return.
+//
+// This exists because a worker's syntax error CANNOT be reported by spawn: the
+// chunk is compiled inside the worker, in the worker state, long after spawn has
+// already returned a handle. Without this, a typo looks exactly like success.
+const char* error(int h);
+
 // Why the last spawn() or kill() refused. Empty when there was no refusal.
 const char* last_error();
 
