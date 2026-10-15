@@ -25,15 +25,23 @@
 // re-applies on demand when the toggle is next used.
 //
 // THE GATE
-// The wrapper reads its flag at call time, so enabling and disabling is instant
-// and costs no Lua at all. The flag lives in the sandbox store, which is ours —
-// not a global of the game's.
+//
+// The flag is a C++ bool, and it is read at call time through the binding layer:
+// `specter.var.stamina`. Enabling and disabling is therefore one store — there is
+// no second copy of the truth in Lua, which is what this used to be.
 //
 //     gate OFF -> the wrapper calls the original, behaviour is identical
 //     gate ON  -> negative deltas for the player return true, cost never applies
 //
 // Disabling leaves the wrapper in place on purpose: it becomes a pass-through,
-// so there is no window where the game is left half-patched.
+// so there is no window where the game is left half-patched. The patch is
+// installed ONCE per lua_State, whatever the flag says, and the flag decides.
+//
+// Why it moved off `AC.__specterStaminaOn`: the toggle used to post a chunk that
+// wrote a flag on the game class, and the checkbox kept a second bool in C++.
+// Two copies of one truth, on two sides of a thread, with a relog able to
+// desynchronise them. The binding layer removes the seam entirely — Lua reads
+// the same bool the checkbox writes.
 
 #pragma once
 
@@ -44,12 +52,19 @@ namespace stamina {
 // flips a flag. Returns true so the registry can treat it uniformly.
 bool install();
 
-// Turn the cheat on or off. Each call runs exactly one small chunk on the Lua
-// thread — a deliberate user action, not a timer. Returns false if the pump is
-// not reachable.
+// The gate itself, as an ADDRESS, for the binding layer to hand to Lua.
+//
+// Not `enabled()`: the checkbox needs a bool, but `specter.var.stamina` needs the
+// variable itself so that reading and writing go to the same storage. A getter
+// plus a setter would reintroduce the two-copies problem this change removes.
+bool* flag();
+
+// Turn the cheat on or off. Writes the flag and nothing else — no chunk, no Lua,
+// no thread hop. Safe to call from the UI thread, which is where the checkbox
+// calls it from.
 bool set_enabled(bool on);
 
-// What set_enabled() last asked for. The menu reads this to draw the checkbox.
+// What the flag says. The menu reads this to draw the checkbox.
 bool enabled();
 
 // Draw the feature's own tab. The overlay does not know this feature exists: it

@@ -7,6 +7,7 @@
 #include "lua/bind.h"
 #include "lua/bridge.h"
 
+#include "features/inf_stamina/inf_stamina.h"
 #include "platform/log.h"
 
 namespace specter::lua::bind {
@@ -169,6 +170,12 @@ bool install(lua_State* L, int specter_idx)
             .addProperty("z", &g_z, &g_z)
             .addProperty("counter", &g_counter, &g_counter)
             .addProperty("speed", &g_speed, &g_speed)
+            // The stamina gate. The address of the C++ bool the checkbox writes,
+            // so `specter.var.stamina` and the checkbox are the SAME storage.
+            // This is the first thing the binding layer is actually FOR: until
+            // now a Lua flag and a C++ bool had to be kept in agreement by hand.
+            .addProperty("stamina", features::stamina::flag(),
+                         features::stamina::flag())
         .endNamespace()
         .addFunction("reset", &api_reset);
 
