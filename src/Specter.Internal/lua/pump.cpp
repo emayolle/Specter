@@ -191,14 +191,13 @@ constexpr int kMaxCode = 32 * 1024;
 // setfenv(f, t) works. So the factory names itself and passes that name.
 constexpr char kPrefix[] =
     "local __f;\n"
-    "__f=function(__sp,__g,pcall,setfenv,setmetatable,rawset,rawget,\n"
+    "__f=function(__store,__sp,__g,pcall,setfenv,setmetatable,rawset,rawget,\n"
     "table,tostring,select,type,getfenv)\n"
     "local __o={}\n"
     "local __st='00 avant'\n"
     "local __t={pcall(function()\n"
     "local __b;__b=function()\n"
     "__st='10 store';\n"
-    "local __store=__sp.__store\n"
     "__st='11 diag';__sp.__diag=tostring(getfenv(__f)==__g)\n"
     "local print=function(...)local t={}for i=1,select('#',...)do\n"
     "  t[#t+1]=tostring((select(i,...)))end\n"
@@ -394,7 +393,15 @@ int specter_log(lua_State* L)
     return 0;
 }
 
-// Build the specter table on top of the stack. Leaves exactly one value.
+// Build the sandbox tables on top of the stack. Leaves exactly TWO values:
+// [store, specter].
+//
+// That count is load-bearing. run() calls the factory with every value sitting
+// between the callee and the top, so if this function's contract is off by one,
+// the call lands on `store` instead of the factory and fails with a bare
+// "attempt to call a table value" -- no position, no step, because no Lua frame
+// is ever entered. The comment here used to claim "leaves exactly one value"
+// while leaving two, and that lie cost a day of wrong fixes.
 //
 // The store is a plain table, created here and held on the Lua stack for the
 // duration of the call. It is NOT kept in the registry: that needed a registry
@@ -553,6 +560,11 @@ void run(void* L, const char* code, int len, result_sink sink)
     for (const char* fn : kPreambleFns) {
         p_getglobal(L, fn);
     }
+    // 3 = store + specter + _G, plus the ten library functions.
+    // build_specter leaves [store, specter]; the argument count must include
+    // BOTH, or the call lands on `store` instead of the factory.
+    constexpr int kStackArgs =
+        3 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
     // Verify what we are about to hand over, once. Pushing a table where the
     // factory expects a function is the exact failure we are fixing, and it
     // must not be able to happen silently again.
@@ -561,16 +573,19 @@ void run(void* L, const char* code, int len, result_sink sink)
         pushed_ok = true;
         char buf[384];
         int n = std::snprintf(buf, sizeof(buf), "pousse a la fabrique : _G=%s",
-                              type_name(p_type(L, -11)));
+                              type_name(p_type(L, -12)));
         for (std::size_t i = 0; i < sizeof(kPreambleFns) / sizeof(*kPreambleFns); ++i) {
-            const int idx = -10 + static_cast<int>(i);
+            const int idx = -11 + static_cast<int>(i);
             n += std::snprintf(buf + n, sizeof(buf) - n, " %s=%s",
                                kPreambleFns[i], type_name(p_type(L, idx)));
         }
         log::info("lua: %s", buf);
+        // The depth check is the assertion this bug deserved: it would have
+        // caught an off-by-one here on the very first run in the game.
+        log::info("lua: profondeur avant l'appel = %d (callee attendu a -%d)",
+                  p_gettop(L) - top, kStackArgs + 1);
     }
-    if (p_pcall(L, 2 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns)),
-                3, 0) != 0) {
+    if (p_pcall(L, kStackArgs, 3, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         log_chunk(code, len);
