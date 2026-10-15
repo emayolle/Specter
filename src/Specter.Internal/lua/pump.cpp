@@ -71,10 +71,13 @@ lua_settable_fn p_settable = nullptr;
 lua_setfenv_fn p_setfenv = nullptr;
 lua_setmetatable_fn p_setmetatable = nullptr;
 
-// This LuaJIT follows the Lua 5.0 convention: LUA_REGISTRYINDEX is -10000 (not
-// the 0xFFF pseudo-index of 5.1), and _G is the registry entry number 2. Reading
-// it the usual 5.1 way, through L->env / LUA_GLOBALSINDEX, can hand back an
-// uninitialised pointer -- so everything here goes through registry[2].
+// This LuaJIT follows the Lua 5.0 convention: LUA_REGISTRYINDEX is -10000, not
+// the 0xFFF pseudo-index of 5.1. So the pseudo-index below is wrong for this
+// build and the real one is spelled out.
+//
+// The registry is used for ONE thing: keying our sandbox store, so a variable
+// set by one Execute survives to the next. It is deliberately NOT used to reach
+// the game's globals -- see specter_env for why guessing there is a trap.
 #ifndef LUA_REGISTRYINDEX
 #define LUA_REGISTRYINDEX (-10000)
 #endif
@@ -167,16 +170,25 @@ bool resolve_xlua()
 constexpr int kMaxCode = 32 * 1024;
 
 // The chunk is a FACTORY: it returns a closure, and C then calls that closure
-// with (real_G, specter).
+// with the specter table. The factory finds the real globals ITSELF, with
+// getfenv(__f), read BEFORE it switches environments.
 //
-// Why not lua_setfenv from C? A Lua 5.1 main chunk is not a vararg function, so
-// the tables cannot arrive through `...`; the only C route is setfenv on the
-// loaded function, and that call refuses the function on this build.
+// Why not hand the globals in from C? Because C can only guess where they are.
+// The usual guess is registry[2]; it is wrong on some builds, and when it is
+// wrong nothing says so -- the sandbox still runs, it just falls through to a
+// table that is not _G, and the suffix (which needs table.concat after the
+// switch) blows up with a bare 'attempt to call a table value'. Reading the
+// factory's own environment cannot be wrong: it IS the environment the chunk
+// loaded into.
 //
 // And why not setfenv(0, env), the idiomatic 5.1 form? Because LuaJIT does not
 // implement it. Measured on this interpreter: setfenv(0, t) leaves the
 // environment untouched (the read comes back nil), while setfenv(f, t) works.
 // So the factory names itself and passes that name.
+//
+// The standard library is captured as LOCALS before the switch. Locals are
+// resolved lexically, so the suffix cannot be broken by whatever __g turns out
+// to be.
 //
 //   read  k      -> our store first, then the game's real _G  (full access)
 //   write k = v  -> the game already owns k, write the GAME's global
@@ -186,7 +198,10 @@ constexpr int kMaxCode = 32 * 1024;
 // nothing has to be restored and the game's print is never disturbed.
 constexpr char kPrefix[] =
     "local __f;\n"
-    "__f=function(__g,__sp)\n"
+    "__f=function(__sp)\n"
+    "local __g=getfenv(__f)\n"
+    "local rawget,rawset,setmetatable,setfenv,table,tostring,pcall,select=\n"
+    "  rawget,rawset,setmetatable,setfenv,table,tostring,pcall,select\n"
     "local __store=__sp.__store\n"
     "local __o={}\n"
     "local print=function(...)local t={}for i=1,select('#',...)do\n"
@@ -198,6 +213,7 @@ constexpr char kPrefix[] =
     "  __newindex=function(_,k,v)if rawget(__g,k)~=nil then\n"
     "    rawset(__g,k,v) else rawset(__store,k,v) end end})\n"
     "rawset(__env,'specter',__sp)\n"
+    "rawset(__sp,'__global',__g)\n"
     "setfenv(__f,__env)\n"
     "local __r={pcall(function()\n";
 
@@ -222,13 +238,17 @@ constexpr int kStoreKey = 0x53505254;  // 'SPRT'
 
 int specter_env(lua_State* L)
 {
-    // The game's real globals, reached the reliable way on this LuaJIT:
-    // registry[2]. NOT LUA_GLOBALSINDEX -- L->env may be uninitialised on some
-    // states and the read silently returns rubbish.
+    // The real globals are NOT guessed here. The factory reads its own
+    // environment (getfenv(__f)) before switching, and parks the table on the
+    // specter table; this just hands it back.
     //
-    // This doubles as the sandbox's escape hatch, and as the way to verify the
-    // assumption: if specter.env().pg resolves, then registry[2] is really _G.
-    p_rawgeti(L, LUA_REGISTRYINDEX, 2);
+    // The C-side guess -- registry[2] -- is what this replaces. It is right on
+    // most builds and silently wrong on others, and when it is wrong nothing
+    // says so: the sandbox still runs, it just reads and writes a table that is
+    // not _G. Returning the table the sandbox demonstrably read through cannot
+    // have that failure mode.
+    p_pushstring(L, "__global");
+    p_gettable(L, 1);
     return 1;
 }
 
@@ -406,10 +426,11 @@ void run(void* L, const char* code, int len, result_sink sink)
         return;
     }
 
-    // Call 2: hand it the game's real globals and our specter table.
-    p_rawgeti(L, LUA_REGISTRYINDEX, 2);  // real _G
-    build_specter(L);                     // specter
-    if (p_pcall(L, 2, 2, 0) != 0) {
+    // Call 2: hand it the specter table. The real globals travel WITH it -- the
+    // factory reads its own environment and keeps the reference, so C never has
+    // to guess where _G lives.
+    build_specter(L);
+    if (p_pcall(L, 1, 2, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         sink(false, e ? e : "(lua runtime error)", static_cast<int>(n));
