@@ -127,9 +127,11 @@ constexpr unsigned long long kCliWindowTicks = 0;  // 0 = no expiry
 // survives this decision: not "nobody can use it", but "nothing goes unrecorded".
 std::atomic<unsigned long long> g_cli_armed_at = 1;
 
-// One-shot: says once, the first time the shell is actually used, that the
-// channel was open before anyone touched the checkbox.
-std::atomic<bool> g_cli_first_use{false};
+// One-shot: says once, the first time the shell actually serves something, that
+// the channel was open before anyone touched the checkbox. An integer atomic
+// with a constant initialiser, like every other global here — nothing runs at
+// load time.
+std::atomic<unsigned long long> g_cli_first_use = 0;
 
 // The chunk taken from the shell, owned by the Lua thread.
 char g_cli_code[kMaxCode];
@@ -243,11 +245,17 @@ bool take_cli_request()
         log::info("cli: fenetre expiree, le shell est de nouveau muet");
         return false;
     }
-    if (g_cli_first_use.exchange(true, std::memory_order_relaxed)) {
-        log::info("cli: canal ouvert par defaut (case 'Autoriser le shell' "
-                  "pour le fermer)");
+    if (!claim_request()) {
+        return false;
     }
-    return claim_request();
+    // Once, and only when something actually came through. exchange() returns
+    // the PREVIOUS value: testing it the other way round logs on every call
+    // from the second onwards, which is every frame.
+    if (g_cli_first_use.exchange(1, std::memory_order_relaxed) == 0) {
+        log::info("cli: premiere requete servie (canal ouvert par defaut, "
+                  "la case 'Autoriser le shell' permet de le fermer)");
+    }
+    return true;
 }
 
 // The console's tick hook. Runs on the Lua thread once per CommonUpdate; it
