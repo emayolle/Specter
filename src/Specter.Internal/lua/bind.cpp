@@ -99,6 +99,23 @@ bool install(lua_State* L, int specter_idx)
     }
     const int depth_before = top;
 
+    // Do not TRUST the caller's index. build_specter leaves [store, specter] on
+    // top of a stack that already holds the chunk, so the two are one slot
+    // apart and -2 names the store. Registering there looks like it worked: the
+    // table still gains the functions, the stack still balances, every check
+    // still passes — and Lua, which looks in `specter`, finds nothing.
+    //
+    // `version` is the marker build_specter sets on specter and never on the
+    // store, so the target can identify itself.
+    lua_getfield(L, specter_idx, "version");
+    const bool bonne_cible = !lua_isnil(L, -1);
+    lua_pop(L, 1);
+    if (!bonne_cible) {
+        log::error("lua: bind -- index %d ne porte pas 'version' : ce n'est pas "
+                   "la table specter. RIEN n'est enregistre.", specter_idx);
+        return false;
+    }
+
     // getNamespaceFromStack, NEVER getGlobalNamespace.
     //
     // This one call is the whole isolation story. getGlobalNamespace puts the
@@ -119,12 +136,19 @@ bool install(lua_State* L, int specter_idx)
     //
     //     specter.var.counter = 7
     //     specter.reset()
-    // MINIMAL ON PURPOSE. One function, no property. The previous full version
-    // registered the same thing and then the game's globals lost `_G`, `pairs`,
-    // `string`, `math` and `require`. addProperty is the only thing it used
-    // that addFunction does not, so it is the first thing to leave out -- one
-    // relaunch instead of a bisect over several.
-    luabridge::getNamespaceFromStack(L).addFunction("reset", &api_reset);
+    luabridge::getNamespaceFromStack(L)
+        .beginNamespace("var")
+            // Read only: Lua can see these, cannot change them. The documented
+            // two-argument form. Writing raises 'x' is read-only.
+            .addProperty("enabled", &g_enabled_flag)
+            .addProperty("position", &g_position)
+            // Read AND write: the SAME address as getter and setter, which is
+            // what the three-argument form means. The two-argument form does
+            // NOT give you this, and the difference is silent until you write.
+            .addProperty("counter", &g_counter, &g_counter)
+            .addProperty("speed", &g_speed, &g_speed)
+        .endNamespace()
+        .addFunction("reset", &api_reset);
 
     lua_pop(L, 1);  // our copy of the table; the bindings live inside it
 

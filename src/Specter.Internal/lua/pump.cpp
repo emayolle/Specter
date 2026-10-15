@@ -626,7 +626,12 @@ void build_specter(lua_State* L, int reg)
     // the leak sweep over the game's globals (0, 0, 0) is what we would lose.
     // install() leaves the stack untouched, so the kSpecValues check in run()
     // still means what it says.
-    bind::install(L, -2);
+    // -1, NOT -2. The stack here is [chunk, store, specter]: p_loadbuffer left
+    // the chunk, build_specter added two values. So -2 is the STORE and -1 is
+    // specter. Passing -2 registered every binding into the store, where Lua
+    // never looks for them — `specter.reset` was nil while `specter.store.reset`
+    // was a function. install() now verifies the target for itself.
+    bind::install(L, -1);
 }
 
 
