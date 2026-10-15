@@ -55,7 +55,7 @@ do
     local V                = Vector3
 
     -- ── RÉGLAGES ─────────────────────────────────────────────────
-    local SEARCH_RADIUS = 80    -- u : au-delà, on TP vers la cible
+    local SEARCH_RADIUS = 150   -- u : au-dela, on TP vers la cible
     local CATCH_RADIUS  = 4     -- u : à portée de capture
     local LERP_STEP     = 5.5   -- u par tick (mêmes valeurs que le menu TP)
     local LERP_SPEED    = 120   -- ticks par seconde (~660 u/s)
@@ -67,7 +67,7 @@ do
     -- Executes comme à la reconnexion, puisque le store est ancré.
     local S = AUTOFARM
     if not S then
-        S = { phase = 'idle', cycles = 0, tps = 0, tp = nil, timerId = nil }
+        S = { cycles = 0, tps = 0, tp = nil, busyUntil = 0 }
         AUTOFARM = S
     end
 
@@ -177,12 +177,12 @@ do
             if st.i >= st.n then
                 st.active = false
                 pcall(function() TimerManager.removeTimer(tid) end)
-                S.phase = 'settle'
-                TimerManager.addTimer(SETTLE, function() S.phase = 'idle' end)
             end
         end)
         st.tid = tid
-        S.phase = 'flying'
+        -- Delai = duree du vol + settle. Le vol dure st.n / LERP_SPEED, qu'on
+        -- lit ici meme plutot que de le deviner.
+        S.busyUntil = Time.realSecondCache + (st.n / LERP_SPEED) + SETTLE
         S.tps = (S.tps or 0) + 1
         return false
     end
@@ -190,7 +190,10 @@ do
     -- ── CAPTURE ──────────────────────────────────────────────────
     local function capture()
         local target = findTarget()
-        if target == nil then return false end
+        if target == nil then
+            S.vide = (S.vide or 0) + 1   -- rien a portée : on le compte plutot
+            return false                 -- que de ne rien dire
+        end
 
         local p = pg.me:getPosition()
         local tp = target:getPosition()
@@ -214,8 +217,31 @@ do
         return true
     end
 
-    -- ── LE TICK ──────────────────────────────────────────────────
-    local function tick()
+    -- ── LA BOUCLE, AVEC NOTRE PROPRE ATTENTE ─────────────────────
+    --
+    -- (Definie APRÈS cycle : en Lua, une fonction locale referencee avant
+    -- sa declaration est un GLOBAL — donc nil. C'est exactement ce qui est
+    -- arrive : loop() faisait pcall(nil), echouait en silence, et la boucle
+    -- mourait avec running = true et zero cycle.)
+    --
+    -- Un `addRepeatTimer` tire selon un cadran fixe, independamment du temps
+    -- qu'a pris le cycle precedent : si un TP dure 2 s, le coup suivant tombe en
+    -- plein vol et le gaspille.
+    --
+    -- Ici c'est un timer UNIQUE qui se rearme apres le travail. L'attente
+    -- commence quand le cycle est fini, donc le temps passe en vol est un temps
+    -- qu'on ne paye pas deux fois.
+    --
+    -- UN SEUL EN VOL, GARDI PAR UN DRAPEAU ET NON PAR L'ABSENCE DE TIMER.
+    --
+    -- La premiere version testait `S.wait == nil`. Ca ne marche pas : `loop()`
+    -- met S.wait a nil EN ENTRANT, donc pendant qu'une boucle travaille, le
+    -- test passe et une deuxieme boucle s'arme. Mesure : 1,8 cycle/s avec une
+    -- attente de 0,8 s, donc deuxboucles empilees.
+    --
+    -- S.running est pose AVANT d'armer et baisse seulement a l'arret reel.
+    -- ── LE CYCLE ──────────────────────────────────────────────────
+    local function cycle()
         if not wanted() then
             S.timerId = nil
             return
@@ -225,7 +251,17 @@ do
            or pg.game.controller == nil then
             return
         end
-        if S.phase ~= 'idle' then return end
+        -- PAS DE PHASE, UN DELAI HORODATE.
+        --
+        -- La version d'avant avait S.phase = 'idle' | 'flying' | 'settle', et le
+        -- cycle sortait des que la phase n'etait pas 'idle'. Or la phase
+        -- redevenait 'idle' par un TimerManager.addTimer... que le JEU SUPPRIME
+        -- quand il change de contexte. Le statut restait donc bloque, et la
+        -- boucle etait morte : running = true, zero cycle, sans erreur.
+        --
+        -- Un delai en temps du jeu ne peut pas rester bloque : il expire tout
+        -- seul, meme si le timer qui devait le remettre a zero a disparu.
+        if Time.realSecondCache < (S.busyUntil or 0) then return end
         -- PAS DE GARDE D'ANIMATION.
         --
         -- On ne demande plus « la capture précédente est-elle finie ? ». Le FSM
@@ -244,18 +280,63 @@ do
         capture()
     end
 
-    S.tick = tick
+    local WAIT = 0.8      -- s d'attente entre la fin d'un cycle et le suivant
 
-    -- ── DÉMARRAGE ────────────────────────────────────────────────
-    if S.timerId == nil then
-        S.timerId = TimerManager.addRepeatTimer(0.8, tick)
+    local WAIT_OFF = 2.0   -- s : sondage quand le bouton est faux
+
+    local function loop()
+        S.wait = nil
+        if not wanted() then
+            -- ON NE S'ARRETE PAS, ON SONDE.
+            --
+            -- La boucle s'arretait des que le bouton etait faux, et rien ne la
+            -- relancait : poser `specter.autofarm = true` apres coup ne faisait
+            -- rien, et ca semblait etre un bug du tick. En realite la boucle
+            -- etait morte.
+            --
+            -- Une position d'attente toutes les WAIT_OFF secondes rend le
+            -- bouton vrai : il n'y a rien a relancer, et ce que le joueur lit
+            -- dans le script reste exact.
+            S.wait = TimerManager.addTimer(WAIT_OFF, loop)
+            return
+        end
+        if MAX_CYCLES > 0 and S.cycles >= MAX_CYCLES then
+            specter.autofarm = false
+            S.running = false
+            print('[AUTOFARM] MAX_CYCLES atteint, arret')
+            return
+        end
+        -- ENCADRE. Sans ca, une exception dans cycle() est avalee par le
+        -- TimerManager du jeu : aucun log, S.wait jamais rearme, et la boucle
+        -- mourait en silence avec running = true et zero cycle. Exactement ce
+        -- qui a passe.
+        local ok, err = pcall(cycle)
+        if not ok then
+            S.running = false
+            S.erreur = tostring(err)
+            print('[AUTOFARM] ERREUR : ' .. tostring(err))
+            return
+        end
+        S.erreur = nil
+        if wanted() then
+            S.wait = TimerManager.addTimer(WAIT, loop)
+        else
+            S.running = false
+        end
     end
 
-    print('[AUTOFARM] pret. rayon ' .. SEARCH_RADIUS .. ' u, tick 0.8 s')
+    -- ── DÉMARRAGE ────────────────────────────────────────────────
+    S.loop = loop
+    if not S.running then
+        S.running = true
+        S.wait = TimerManager.addTimer(0.1, loop)
+    end
+
+    print('[AUTOFARM] pret. rayon ' .. SEARCH_RADIUS .. ' u, attente 0.8 s')
     print('[AUTOFARM] demarrer : specter.autofarm = true')
     print('[AUTOFARM] etat : cycles', tostring(S.cycles),
           '| tp', tostring(S.tps))
-    print('[AUTOFARM] relire : print(AUTOFARM.cycles, AUTOFARM.tps)')
+    print('[AUTOFARM] relire : print(AUTOFARM.cycles, AUTOFARM.tps, AUTOFARM.vide, AUTOFARM.erreur)')
     print('[AUTOFARM] cache  :', tostring(S.doneOrder and #S.doneOrder or 0), 'entites vues')
     print('[AUTOFARM] note   : le jeu impose', GAME_COOLDOWN, 's par entite')
 end

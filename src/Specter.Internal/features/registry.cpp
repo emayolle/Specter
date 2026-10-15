@@ -12,6 +12,7 @@
 
 #include "features/console/console.h"
 #include "features/inf_stamina/inf_stamina.h"
+#include "features/init/init.h"
 #include "features/lua_dump/lua_dump.h"
 #include "features/teleport/teleport.h"
 #include "features/teleport/teleport_ui.h"
@@ -40,14 +41,22 @@ const Feature kStamina{
     "inf_stamina", "Movement", &stamina::install, &stamina::draw_ui, nullptr,
 };
 
+// Runs scripts/init.lua once per new lua_State. No tab: it is a bootstrap, not
+// something a person interacts with.
+const Feature kInit{
+    "init", nullptr, &init::install, nullptr, nullptr,
+};
+
 // A tool, not a gameplay feature: it installs and runs in the background, but it
 // has no tab of its own, so the menu does not grow for it.
 const Feature kLuaDump{"lua_dump", nullptr, &lua_dump::install, nullptr,
                           nullptr};
 
 // The list, in menu order.
-const Feature* const kFeatures[] = {&kConsole, &kTeleport, &kWaypoints,
-                                     &kStamina, &kLuaDump};
+// kInit comes FIRST on purpose: it re-arms the per-session patches, and those
+// want to be in place before anything else runs on a fresh state.
+const Feature* const kFeatures[] = {&kInit,    &kConsole, &kTeleport,
+                                    &kWaypoints, &kStamina, &kLuaDump};
 
 }  // namespace
 

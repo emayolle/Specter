@@ -66,7 +66,7 @@ FLAGS=(
   /imsvc "$SDK_INC/ucrt"
   /imsvc "$SDK_INC/shared"
   /imsvc "$SDK_INC/um"
-  /I "$GEN/framework" /I "$GEN/appdata" /I "$SRC" \
+  /I "$GEN/framework" /I "$GEN/appdata" /I "$SRC" /I "$ROOT/generated" \
   /I "$IMGUI" /I "$IMGUI/backends" \
   /I "$ROOT/third_party/lua51" /I "$ROOT/third_party/luabridge" \
   /DNOMINMAX
@@ -167,6 +167,10 @@ fi
 
 # --- [3/5] Specter internals (the part we iterate on) ------------------------
 
+# Le bootstrap Lua est embarque dans la DLL. On le regenere si le script a
+# change, sinon la DLL tournerait avec un init.lua perime.
+"$ROOT/tools/embed-lua.sh" >/dev/null
+
 echo "== [3/5] Specter internals =="
 OUR_OBJS=()
 for spec in \
@@ -187,6 +191,7 @@ for spec in \
   "$SRC/features/teleport/teleport_ui.cpp:features-teleport_ui" \
   "$SRC/features/inf_stamina/inf_stamina.cpp:features-inf_stamina" \
   "$SRC/features/registry.cpp:features-registry" \
+  "$SRC/features/init/init.cpp:features-init" \
   "$SRC/lua/pump.cpp:lua-pump" \
   "$SRC/lua/capi.cpp:lua-capi" \
   "$SRC/lua/capi_shim.cpp:lua-capi_shim" \

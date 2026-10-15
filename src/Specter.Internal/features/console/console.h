@@ -30,7 +30,8 @@ enum Channel {
     kChannelTeleport = 1, // position probe + move
     kChannelStamina = 2, // install / restore the cost hook
     kChannelCli = 3,      // shell requests, only inside an armed window
-    kChannelCount = 4,
+    kChannelInit = 4,     // scripts/init.lua, once per new lua_State
+    kChannelCount = 5,
 };
 
 // Register the drain hooks with the Lua pump. Called once from specter::start().
