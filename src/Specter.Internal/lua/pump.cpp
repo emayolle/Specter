@@ -40,6 +40,9 @@ using lua_type_fn = int(__cdecl*)(lua_State*, int);
 using lua_tolstring_fn = const char*(__cdecl*)(lua_State*, int, size_t*);
 using lua_toboolean_fn = int(__cdecl*)(lua_State*, int);
 using lua_createtable_fn = void(__cdecl*)(lua_State*, int, int);
+using lua_rawgeti_fn = void(__cdecl*)(lua_State*, int, int);
+using lua_rawseti_fn = void(__cdecl*)(lua_State*, int, int);
+using lua_pushlstring_fn = void(__cdecl*)(lua_State*, const char*, unsigned long long);
 using lua_setfield_fn = void(__cdecl*)(lua_State*, int, const char*);
 using lua_pushcclosure_fn = void(__cdecl*)(lua_State*, int(__cdecl*)(lua_State*), int);
 using lua_pushstring_fn = void(__cdecl*)(lua_State*, const char*);
@@ -58,6 +61,14 @@ lua_type_fn p_type = nullptr;
 lua_tolstring_fn p_tolstring = nullptr;
 lua_toboolean_fn p_toboolean = nullptr;
 lua_createtable_fn p_createtable = nullptr;
+// Back for the registry anchors. They cost two exports and they are the only
+// way the C API offers to say "keep this object alive" -- see the sandbox
+// environment note above.
+lua_rawgeti_fn p_rawgeti = nullptr;
+lua_rawseti_fn p_rawseti = nullptr;
+// lua_pushnil is a MACRO in Lua 5.1 (pushlstring of length 0), so there is no
+// such export to look up.
+lua_pushlstring_fn p_pushlstring = nullptr;
 lua_setfield_fn p_setfield = nullptr;
 lua_pushcclosure_fn p_pushcclosure = nullptr;
 lua_pushstring_fn p_pushstring = nullptr;
@@ -151,6 +162,9 @@ bool resolve_xlua()
     bind(m, "lua_tolstring", p_tolstring);
     bind(m, "lua_toboolean", p_toboolean);
     bind(m, "lua_createtable", p_createtable);
+    bind(m, "lua_rawgeti", p_rawgeti);
+    bind(m, "lua_rawseti", p_rawseti);
+    bind(m, "lua_pushlstring", p_pushlstring);
     bind(m, "lua_setfield", p_setfield);
     bind(m, "lua_pushcclosure", p_pushcclosure);
     bind(m, "lua_pushstring", p_pushstring);
@@ -198,8 +212,8 @@ constexpr int kMaxCode = 32 * 1024;
 // setfenv(f, t) works. So the factory names itself and passes that name.
 constexpr char kPrefix[] =
     "local __f;\n"
-    "__f=function(__store,__sp,__g,pcall,setfenv,setmetatable,rawset,rawget,\n"
-    "table,tostring,select,type,getfenv)\n"
+    "__f=function(__store,__sp,__g,__env,pcall,setfenv,setmetatable,rawset,\n"
+    "rawget,table,tostring,select,type,getfenv)\n"
     "local __o={}\n"
     "local __st='00 avant'\n"
     "local __t={pcall(function()\n"
@@ -210,15 +224,18 @@ constexpr char kPrefix[] =
     "  t[#t+1]=tostring((select(i,...)))end\n"
     "  __o[#__o+1]=table.concat(t,'\\t')end\n"
     "__st='13 env'\n"
-    "local __env=setmetatable({},{\n"
-    "  __index=function(_,k)local v=rawget(__store,k)\n"
-    "    if v~=nil then return v end return __g[k] end,\n"
-    "  __newindex=function(_,k,v)if rawget(__g,k)~=nil then\n"
-    "    rawset(__g,k,v) else rawset(__store,k,v) end end})\n"
+    "if __env==nil then\n"
+    "  __env=setmetatable({},{\n"
+    "    __index=function(_,k)local v=rawget(__store,k)\n"
+    "      if v~=nil then return v end return __g[k] end,\n"
+    "    __newindex=function(_,k,v)if rawget(__g,k)~=nil then\n"
+    "      rawset(__g,k,v) else rawset(__store,k,v) end end})\n"
+    "  rawset(__env,'specter',__sp)\n"
+    "  rawset(__env,'env',function() return __g end)\n"
+    "  rawset(__env,'__global',__g)\n"
+    "end\n"
     "__st='14 setfenv'\n"
-    "rawset(__env,'specter',__sp)\n"
     "rawset(__sp,'__global',__g)\n"
-    "rawset(__sp,'env',function() return __g end)\n"
     "setfenv(__f,__env)\n"
     "setfenv(__b,__env)\n"
     "__st='15 code'\n"
@@ -240,13 +257,13 @@ constexpr char kSuffix[] =
     "  return table.concat(__o,'\\n'),false,__st\n"
     "end\n"
     "__st='30 fini'\n"
-    "return table.concat(__o,'\\n'),true,__st\n"
+    "return table.concat(__o,'\\n'),true,__st,__env\n"
     "end)}\n"
     "local __fin=__st\n"
     "if not __t[1] then\n"
-    "  return 'PREAMBLE: '..tostring(__t[2]),false,__fin\n"
+    "  return 'PREAMBLE: '..tostring(__t[2]),false,__fin,__env\n"
     "end\n"
-    "return __t[2],__t[3],__t[4]\n"
+    "return __t[2],__t[3],__t[4],__env\n"
     "end\nreturn __f\n";
 
 // ---- diagnostics ------------------------------------------------------------
@@ -382,7 +399,7 @@ void log_chunk(const char* code, int len)
 // Candidates are the two registry constants, never the globals ones (-10002 /
 // 2): those are different indices, so finding _LOADED at a candidate means the
 // candidate IS the registry, not the globals.
-int find_registry(lua_State* L)
+int find_registry_index(lua_State* L)
 {
     static const int kCandidates[] = {-10000, 0xFFF};
     char buf[640];
@@ -473,9 +490,47 @@ int specter_log(lua_State* L)
 // hangs off the environment at an integer key rather than a field called
 // __store.
 
-void build_specter(lua_State* L)
+// The two anchor keys. Derived from the state pointer, not labelled constants:
+// a key spelled "SPECTER" in a table the game can walk is a signature, and this
+// whole file exists because guessing is how we got here.
+int env_key(const void* L)
 {
-    p_createtable(L, 0, 8);  // [store]
+    return static_cast<int>(0x53505245u ^
+           (static_cast<unsigned long long>(reinterpret_cast<unsigned long long>(L)) >> 4));
+}
+int store_key()
+{
+    return 0x53505254;  // 'SPRT', an integer field on the environment
+}
+
+void build_specter(lua_State* L, int reg)
+{
+    // The store must be the SAME table the environment's __index/__newindex close
+    // over, or `specter.store` would name a table nothing actually uses. So it
+    // hangs off the environment at an integer key, and only the environment is
+    // anchored in the registry.
+    if (reg != 0) {
+        p_rawgeti(L, reg, env_key(L));     // [env]
+        if (p_type(L, -1) == 5) {
+            p_rawgeti(L, -1, store_key());  // [env, store]
+            if (p_type(L, -1) != 5) {
+                p_createtable(L, 0, 8);     // [env, new store]
+                p_pushvalue(L, -1);         // [env, store, store]
+                p_rawseti(L, -3, store_key());
+            }
+            // The env is SCRATCH here: it is re-pushed from the registry in
+            // run(). Leaving it on the stack would put one value more than the
+            // argument count, and the call would land on it instead of the
+            // factory. Same class of bug as the store/specter offset before.
+            p_settop(L, -2);                // [store]
+        } else {
+            p_settop(L, -2);
+            p_createtable(L, 0, 8);         // [store]
+        }
+    } else {
+        p_createtable(L, 0, 8);             // [store]
+    }
+    // [store]
 
     p_createtable(L, 0, 4);  // [store, specter]
 
@@ -608,11 +663,14 @@ void run(void* L, const char* code, int len, result_sink sink)
     if (!probed) {
         probed = true;
         probe_globals(L);
-        const int reg = find_registry(L);
+        const int reg = find_registry_index(L);
         g_registry_index.store(reg, std::memory_order_relaxed);
     }
 
     const int top = p_gettop(L);
+    // 0 when the probe found no registry: there is nowhere to anchor anything,
+    // so the environment is rebuilt per Execute and the store does not survive.
+    const int reg = g_registry_index.load(std::memory_order_relaxed);
     if (!suppressed &&
         p_loadbuffer(L, src, static_cast<size_t>(plen + len + slen),
                      kChunkName) != 0) {
@@ -648,44 +706,65 @@ void run(void* L, const char* code, int len, result_sink sink)
     // thing tying the two together. Read the names here, not in the chunk: the
     // environment luaL_loadbuffer gives a chunk is not necessarily the game's
     // _G, and resolving them in Lua tied the preamble to whatever that is.
-    build_specter(L);
+    build_specter(L, reg);
     p_getglobal(L, "_G");  // the real globals, via the path the probe verified
+    // The environment from a previous run, or nil so the factory builds one.
+    if (reg != 0) {
+        p_rawgeti(L, reg, env_key(L));
+    } else {
+        p_pushlstring(L, nullptr, 0);  // pushnil is a macro in 5.1
+    }
     for (const char* fn : kPreambleFns) {
         p_getglobal(L, fn);
     }
-    // 3 = store + specter + _G, plus the ten library functions.
+    // 4 = store + specter + _G + env, plus the ten library functions.
     // build_specter leaves [store, specter]; the argument count must include
     // BOTH, or the call lands on `store` instead of the factory.
     constexpr int kStackArgs =
-        3 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
-    // Verify what we are about to hand over, once. Pushing a table where the
-    // factory expects a function is the exact failure we are fixing, and it
-    // must not be able to happen silently again.
+        4 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
+    // Verify what we are about to hand over, EVERY call, not once. Offsets are
+    // DERIVED, never written down -- counting by hand caused this bug, and then
+    // caused a wrong "fix" to this probe itself.
     //
-    // Offsets are DERIVED, never written down. Counting by hand is what caused
-    // the bug in the first place, and then caused a wrong "fix" to the probe
-    // itself: for one build it printed pcall=table, which read like a shadowed
-    // global when it was really the store one slot further down.
-    static bool pushed_ok = false;
-    if (!pushed_ok) {
-        pushed_ok = true;
+    // This used to be gated behind a `probed` flag. That was the second time
+    // the same class of bug got past it: a helper that leaves one value more on
+    // the first call than on the later ones shifts the callee by one, and the
+    // only run whose depth was ever checked was the one that was fine.
+    //
+    // So: check every time, and if the depth is not what the argument count
+    // says it must be, DO NOT CALL. A loud refusal beats a silent mis-call.
+    {
         constexpr int kNFn = static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
-        // From the top: fn n-1 .. fn 0 occupy -1 .. -nFns, then _G, then
-        // specter, then store, then the callee.
-        char buf[384];
-        int n = std::snprintf(buf, sizeof(buf), "pousse a la fabrique : _G=%s",
-                              type_name(p_type(L, -(kNFn + 1))));
-        for (int i = 0; i < kNFn; ++i) {
-            n += std::snprintf(buf + n, sizeof(buf) - n, " %s=%s",
-                               kPreambleFns[i], type_name(p_type(L, -(kNFn - i))));
+        const int depth = p_gettop(L) - top;
+        if (depth != kStackArgs + 1) {
+            log::error("lua: profondeur %d, callee attendu a -%d -- appel "
+                       "annule, la pile ne tient pas son contrat",
+                       depth, kStackArgs + 1);
+            sink(false, "(internal) stack depth mismatch before the call", 46);
+            p_settop(L, top);
+            return;
         }
-        log::info("lua: %s", buf);
-        // The depth check is the assertion this bug deserved: it would have
-        // caught an off-by-one here on the very first run in the game.
-        log::info("lua: profondeur avant l'appel = %d (callee attendu a -%d)",
-                  p_gettop(L) - top, kStackArgs + 1);
+        // The callee must be a function. Everything else must not be callable.
+        if (p_type(L, -kStackArgs - 1) != 6) {
+            log::error("lua: l'appelee n'est pas une fonction (type %d) a -%d",
+                       p_type(L, -kStackArgs - 1), kStackArgs + 1);
+            sink(false, "(internal) callee is not a function", 34);
+            p_settop(L, top);
+            return;
+        }
+        // Types of the ten library functions, every call: cheap, and the only
+        // thing that has ever caught a shifted stack in this file.
+        for (int i = 0; i < kNFn; ++i) {
+            if (p_type(L, -(kNFn - i)) != 6) {
+                log::error("lua: %s n'est pas une fonction (type %d) a -%d",
+                           kPreambleFns[i], p_type(L, -(kNFn - i)), kNFn - i);
+                sink(false, "(internal) a dependency is not a function", 39);
+                p_settop(L, top);
+                return;
+            }
+        }
     }
-    if (p_pcall(L, kStackArgs, 3, 0) != 0) {
+    if (p_pcall(L, kStackArgs, 4, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         log_chunk(code, len);
@@ -694,13 +773,20 @@ void run(void* L, const char* code, int len, result_sink sink)
         return;
     }
 
-    // Stack: [text, ok, step]. The factory catches its own failures, so reaching
-    // here means it returned normally; `step` is simply where it got to.
+    // Stack: [text, ok, step, env]. The factory catches its own failures, so
+    // reaching here means it returned normally; `step` is simply where it got
+    // to, and `env` is the environment it used -- built on this run, or reused
+    // from a previous one.
     std::size_t n = 0;
-    const char* text = p_tolstring(L, -3, &n);
-    const bool ok = p_toboolean(L, -2) != 0;
+    const char* text = p_tolstring(L, -4, &n);
+    const bool ok = p_toboolean(L, -3) != 0;
     std::size_t sn = 0;
-    const char* step = p_tolstring(L, -1, &sn);
+    const char* step = p_tolstring(L, -2, &sn);
+    if (reg != 0 && p_type(L, -1) == 5) {
+        // Anchor it. Idempotent: on later runs this re-anchors the same table,
+        // so there is no "first run" special case to get wrong.
+        p_rawseti(L, reg, env_key(L));
+    }
     if (!ok) {
         log::info("lua: le bac a sable a echoue a l'etape '%.*s'",
                   static_cast<int>(sn), step ? step : "?");
