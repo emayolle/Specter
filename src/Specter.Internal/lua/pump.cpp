@@ -228,6 +228,54 @@ constexpr char kSuffix[] =
 // the globals. Ours, under a key we chose, holding only our scratch variables.
 constexpr int kStoreKey = 0x53505254;  // 'SPRT'
 
+// ---- diagnostics ------------------------------------------------------------
+//
+// Every name the sandbox preamble uses is read out of the game's globals, and
+// the preamble CALLS several of them (getfenv, setmetatable, rawset, setfenv,
+// pcall, table.*, tostring, select). A game is free to shadow any of those, and
+// when one of them is not a function the preamble dies with a bare
+// "attempt to call a table value" -- no position, because the raise happens
+// inside a C function.
+//
+// Guessing has already cost two wrong fixes. So: ask. This reads each name the
+// preamble depends on, reports its type once per state, and names the offenders.
+// The whole cost is one log line, paid once.
+const char* type_name(int t)
+{
+    switch (t) {
+    case 0: return "nil";
+    case 1: return "boolean";
+    case 2: return "lightuserdata";
+    case 3: return "number";
+    case 4: return "string";
+    case 5: return "table";       // <-- the one that breaks a call
+    case 6: return "function";
+    case 7: return "userdata";
+    case 8: return "thread";
+    default: return "?";
+    }
+}
+
+void probe_globals(lua_State* L)
+{
+    static const char* kNeed[] = {
+        "getfenv", "setfenv", "setmetatable", "rawset", "rawget",
+        "pcall",   "table",   "tostring",     "select", "print",
+    };
+    char buf[512];
+    int n = 0;
+    n += std::snprintf(buf + n, sizeof(buf) - n, "globals requis :");
+    for (const char* name : kNeed) {
+        p_getglobal(L, name);
+        const int t = p_type(L, -1);
+        // Flag anything that is not a function: the preamble calls all of them.
+        n += std::snprintf(buf + n, sizeof(buf) - n, " %s=%s%s",
+                           name, type_name(t), t == 6 ? "" : " <<< PAS UNE FONCTION");
+        p_settop(L, -2);
+    }
+    log::info("lua: %s", buf);
+}
+
 // ---- the `specter` namespace ------------------------------------------------
 //
 // Built per run and injected into the sandbox env, NEVER into the game's _G.
@@ -395,6 +443,14 @@ void run(void* L, const char* code, int len, result_sink sink)
     constexpr char kChunkName[] = "@specter";
     const bool suppressed =
         g_chunk_filter != nullptr && g_chunk_filter(kChunkName);
+
+    // Once per process: report what the game's globals actually are, since a
+    // shadowed name there is silent until it kills a chunk.
+    static bool probed = false;
+    if (!probed) {
+        probed = true;
+        probe_globals(L);
+    }
 
     const int top = p_gettop(L);
     if (!suppressed &&
