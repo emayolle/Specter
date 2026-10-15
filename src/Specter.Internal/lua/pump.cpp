@@ -169,39 +169,38 @@ bool resolve_xlua()
 
 constexpr int kMaxCode = 32 * 1024;
 
-// The chunk is a FACTORY: it returns a closure, and C then calls that closure
-// with the specter table. The factory finds the real globals ITSELF, with
-// getfenv(__f), read BEFORE it switches environments.
+// The chunk is a FACTORY. C hands it everything it needs, by value:
+// the specter table, the real globals, and the standard library functions.
 //
-// Why not hand the globals in from C? Because C can only guess where they are.
-// The usual guess is registry[2]; it is wrong on some builds, and when it is
-// wrong nothing says so -- the sandbox still runs, it just falls through to a
-// table that is not _G, and the suffix (which needs table.concat after the
-// switch) blows up with a bare 'attempt to call a table value'. Reading the
-// factory's own environment cannot be wrong: it IS the environment the chunk
-// loaded into.
+// Everything comes from C on purpose. The preamble used to resolve those
+// names itself, and that silently tied it to whatever environment
+// luaL_loadbuffer gave the chunk -- which is NOT necessarily the game's _G
+// (a loader is free to give a chunk its own environment, and this one
+// clearly does). The result was a name that resolved to a table where a
+// function was expected, and a bare 'attempt to call a table value' with no
+// position, because the raise happens inside a C function.
 //
-// And why not setfenv(0, env), the idiomatic 5.1 form? Because LuaJIT does not
-// implement it. Measured on this interpreter: setfenv(0, t) leaves the
-// environment untouched (the read comes back nil), while setfenv(f, t) works.
-// So the factory names itself and passes that name.
-//
-// The standard library is captured as LOCALS before the switch. Locals are
-// resolved lexically, so the suffix cannot be broken by whatever __g turns out
-// to be.
+// C reads each name through lua_getglobal, which the probe confirmed reaches
+// the real globals on this build. So the values that arrive here are the
+// game's own functions, verified, and the chunk's environment is irrelevant
+// to the preamble.
 //
 //   read  k      -> our store first, then the game's real _G  (full access)
 //   write k = v  -> the game already owns k, write the GAME's global
 //   write k = v  -> otherwise keep it in our store
 //
-// `print` is captured through a LOCAL rather than by overwriting the global, so
-// nothing has to be restored and the game's print is never disturbed.
+// `print` is a LOCAL, so the game's print is never touched and there is
+// nothing to restore.
+//
+// And why not setfenv(0, env), the idiomatic 5.1 form? Because LuaJIT does not
+// implement it. Measured on this interpreter: setfenv(0, t) leaves the
+// environment untouched (the read comes back nil), while setfenv(f, t) works.
+// So the factory names itself and passes that name.
 constexpr char kPrefix[] =
     "local __f;\n"
-    "__f=function(__sp)\n"
-    "local __g=getfenv(__f)\n"
-    "local rawget,rawset,setmetatable,setfenv,table,tostring,pcall,select=\n"
-    "  rawget,rawset,setmetatable,setfenv,table,tostring,pcall,select\n"
+    "__f=function(__sp,__g,pcall,setfenv,setmetatable,rawset,rawget,\n"
+    "table,tostring,select,type,getfenv)\n"
+    "__sp.__diag=tostring(getfenv(__f)==__g)\n"
     "local __store=__sp.__store\n"
     "local __o={}\n"
     "local print=function(...)local t={}for i=1,select('#',...)do\n"
@@ -284,13 +283,21 @@ void probe_globals(lua_State* L)
     static const char* kFields[] = {"remove", "concat", "insert"};
     for (const char* f : kFields) {
         p_getglobal(L, "table");
-        p_getfield(L, -1, f);
+        p_pushstring(L, f);
+        p_gettable(L, -2);
         const int t = p_type(L, -1);
         log::info("lua:   table.%s = %s%s", f, type_name(t),
                   t == 6 ? "" : " <<< PAS UNE FONCTION");
         p_settop(L, -3);
     }
 }
+
+// The standard library the preamble calls, pushed by C and taken by the factory
+// as parameters. Same order as kPrefix's parameter list.
+constexpr const char* kPreambleFns[] = {
+    "pcall", "setfenv", "setmetatable", "rawset", "rawget",
+    "table", "tostring", "select", "type", "getfenv",
+};
 
 // The user's own code, echoed on failure. Three fixes in a row have missed,
 // every time because the failure was reported without the input that caused
@@ -525,11 +532,35 @@ void run(void* L, const char* code, int len, result_sink sink)
         return;
     }
 
-    // Call 2: hand it the specter table. The real globals travel WITH it -- the
-    // factory reads its own environment and keeps the reference, so C never has
-    // to guess where _G lives.
+    // Call 2: hand it everything the preamble needs, by value.
+    //
+    // The order below is the factory's parameter order, and it is the ONLY
+    // thing tying the two together. Read the names here, not in the chunk: the
+    // environment luaL_loadbuffer gives a chunk is not necessarily the game's
+    // _G, and resolving them in Lua tied the preamble to whatever that is.
     build_specter(L);
-    if (p_pcall(L, 1, 2, 0) != 0) {
+    p_getglobal(L, "_G");  // the real globals, via the path the probe verified
+    for (const char* fn : kPreambleFns) {
+        p_getglobal(L, fn);
+    }
+    // Verify what we are about to hand over, once. Pushing a table where the
+    // factory expects a function is the exact failure we are fixing, and it
+    // must not be able to happen silently again.
+    static bool pushed_ok = false;
+    if (!pushed_ok) {
+        pushed_ok = true;
+        char buf[384];
+        int n = std::snprintf(buf, sizeof(buf), "pousse a la fabrique : _G=%s",
+                              type_name(p_type(L, -11)));
+        for (std::size_t i = 0; i < sizeof(kPreambleFns) / sizeof(*kPreambleFns); ++i) {
+            const int idx = -10 + static_cast<int>(i);
+            n += std::snprintf(buf + n, sizeof(buf) - n, " %s=%s",
+                               kPreambleFns[i], type_name(p_type(L, idx)));
+        }
+        log::info("lua: %s", buf);
+    }
+    if (p_pcall(L, 2 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns)),
+                2, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         log_chunk(code, len);
