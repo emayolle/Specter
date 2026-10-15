@@ -6,6 +6,8 @@
 
 #include "pch-il2cpp.h"
 
+#include "lua/bind.h"
+#include "lua/capi.h"
 #include "lua/pump.h"
 
 #include <Windows.h>
@@ -27,8 +29,12 @@ namespace pump {
 namespace {
 
 // ---- Lua C API (xlua.dll, LuaJIT 5.1 ABI) ----------------------------------
-
-using lua_State = void;
+//
+// `lua_State` comes from capi.h now, which includes the vendored LuaJIT headers
+// inside extern "C". It used to be `using lua_State = void;` here, written by
+// hand because this file had no headers — and that is how two DIFFERENT types
+// ended up sharing one name across the DLL. One declaration, from the header,
+// everywhere.
 
 using luaL_loadbuffer_fn = int(__cdecl*)(lua_State*, const char*, size_t,
                                          const char*);
@@ -141,6 +147,16 @@ void bind(HMODULE m, const char* name, T& out)
     out = reinterpret_cast<T>(::GetProcAddress(m, name));
 }
 
+// One answer to "are the pump's own symbols bound?", so the binding layer's
+// check and the pump's check cannot drift apart.
+bool pump_api_ready()
+{
+    return p_loadbuffer && p_pcall && p_gettop && p_settop && p_tolstring &&
+           p_toboolean && p_getglobal && p_type && p_createtable &&
+           p_setfield && p_pushcclosure && p_pushstring && p_pushvalue &&
+           p_gettable && p_settable && p_setfenv && p_setmetatable;
+}
+
 bool resolve_xlua()
 {
     if (g_api_ready.load(std::memory_order_relaxed)) {
@@ -182,6 +198,13 @@ bool resolve_xlua()
     }
     g_api_ready.store(true, std::memory_order_relaxed);
     log::info("lua: LuaJIT C API resolved from xlua.dll (%p)", (void*)m);
+
+    // The binding layer runs INSIDE the sandbox this module builds, so it is
+    // only usable if the pump's own resolution succeeded — which, at this point
+    // in the function, it has. Asking keeps the two answers in one place: if
+    // either table is ever short a symbol, the binding layer refuses instead of
+    // registering trampolines onto null pointers.
+    capi::resolve(m, &pump_api_ready);
     return true;
 }
 
@@ -596,9 +619,14 @@ void build_specter(lua_State* L, int reg)
     // Hand the store to the preamble under the internal name it reads.
     p_pushvalue(L, -2);   // [store, specter, store]
     p_setfield(L, -2, "__store");
-    // [store, specter]  -- TWO values, and the contract says two. The comment
-    // here used to claim one; the code was never wrong about the count, only the
-    // comment was, and a guard written from that comment refused good calls.
+    // [store, specter]  -- TWO values, and the contract says two.
+
+    // Install the binding layer INTO `specter`, which is at -2. Never into _G:
+    // getGlobalNamespace is the one LuaBridge call that would put it there, and
+    // the leak sweep over the game's globals (0, 0, 0) is what we would lose.
+    // install() leaves the stack untouched, so the kSpecValues check in run()
+    // still means what it says.
+    bind::install(L, -2);
 }
 
 
@@ -661,7 +689,7 @@ void common_update_hook(void* self, void* method)
 
 // ---- public API ------------------------------------------------------------
 
-void run(void* L, const char* code, int len, result_sink sink)
+void run(lua_State* L, const char* code, int len, result_sink sink)
 {
     if (!L || !code || len <= 0 || !sink) {
         return;

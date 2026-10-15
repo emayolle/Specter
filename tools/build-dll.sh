@@ -68,6 +68,7 @@ FLAGS=(
   /imsvc "$SDK_INC/um"
   /I "$GEN/framework" /I "$GEN/appdata" /I "$SRC" \
   /I "$IMGUI" /I "$IMGUI/backends" \
+  /I "$ROOT/third_party/lua51" /I "$ROOT/third_party/luabridge" \
   /DNOMINMAX
 )
 
@@ -186,7 +187,10 @@ for spec in \
   "$SRC/features/teleport/teleport_ui.cpp:features-teleport_ui" \
   "$SRC/features/inf_stamina/inf_stamina.cpp:features-inf_stamina" \
   "$SRC/features/registry.cpp:features-registry" \
-  "$SRC/lua/pump.cpp:lua-pump"; do
+  "$SRC/lua/pump.cpp:lua-pump" \
+  "$SRC/lua/capi.cpp:lua-capi" \
+  "$SRC/lua/capi_shim.cpp:lua-capi_shim" \
+  "$SRC/lua/bind.cpp:lua-bind"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
   build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
   OUR_OBJS+=("$obj")

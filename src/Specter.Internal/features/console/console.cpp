@@ -272,11 +272,15 @@ void on_lua_tick(void* L)
             continue;
         }
         g_sink_channel = static_cast<Channel>(i);
-        lua::pump::run(L, c.code, c.len, &sink);
+        // The one boundary where IL2CPP's void* becomes the real lua_State*.
+        // pump.h now takes the typed pointer because the DLL has ONE
+        // declaration of that type (capi.h) instead of a hand-written
+        // `using lua_State = void` in one file and the header's in another.
+        lua::pump::run(static_cast<lua_State*>(L), c.code, c.len, &sink);
     }
     if (take_cli_request()) {
         g_sink_channel = kChannelCli;
-        lua::pump::run(L, g_cli_code, g_cli_len, &sink);
+        lua::pump::run(static_cast<lua_State*>(L), g_cli_code, g_cli_len, &sink);
     }
 }
 

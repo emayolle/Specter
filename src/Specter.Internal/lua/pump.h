@@ -21,6 +21,11 @@
 
 #pragma once
 
+// For `lua_State`. Including it here is what makes the type come from ONE
+// declaration across the whole DLL: capi.h wraps the vendored LuaJIT headers in
+// extern "C" and nothing else may include them directly.
+#include "lua/capi.h"
+
 namespace specter::lua {
 namespace pump {
 
@@ -50,7 +55,7 @@ void set_chunk_filter(chunk_filter_fn fn);
 // called with the captured output, or with nullptr to discard it (the "silent"
 // path). Always leaves the stack as it found it.
 using result_sink = void (*)(bool ok, const char* text, int len);
-void run(void* L, const char* code, int len, result_sink sink);
+void run(lua_State* L, const char* code, int len, result_sink sink);
 
 // Resolve the Lua C API and install the CommonUpdate detour. Called once from
 // specter::start(). Idempotent; a missing xlua.dll is retried from the pump.
