@@ -300,14 +300,21 @@ void open_worker_api(lua_State* L, Job* job)
 // What cannot cross is anything the worker's world does not also have: a game
 // function, a game table, a game userdata. Those are refused by NAME, in the
 // game world, before anything is spawned — so the error names the variable
-// instead of surfacing later as a nil deep inside the body.
+// instead of surfacing later as a nil deep inside the body. The same rule
+// applies to the ARGUMENTS of the call, which cross by the same road.
 //
-// Wire format, one directive per line, parsed by a pointer walk:
+// Wire format, one directive per line, parsed by a pointer walk. The role letter
+// says what the value is FOR, so the same encodings serve both upvalues and
+// call arguments:
 //
-//     L <index> <name>      bind the worker's global <name>
-//     N <index> <number>    bind a number
-//     S <index> <len>       bind a string; <len> bytes follow on their own line
-//     B <index> <0|1>       bind a boolean
+//     <role> <kind> <index> [payload]
+//
+// role: U = upvalue slot, A = call argument
+// kind: L <name>  the worker's global <name>
+//       N <num>    number
+//       S <len>    string; <len> bytes follow on their own line
+//       B <0|1>    boolean
+//       Z          nil
 // ---------------------------------------------------------------------------
 
 // Standard Lua 5.1 names. Only these may be rebound; anything else that is not
@@ -330,31 +337,100 @@ bool is_stdlib_name(const char* n)
     return false;
 }
 
-// Walk `meta` and bind each upvalue on the chunk sitting at `chunk_idx`.
+// Push the value described by one directive, and advance `p` past the line.
+// `kind` is the encoding letter, `payload` the text after it, `nl` the line's
+// newline. Errors go through `why`, never through a std::string on the stack --
+// a Lua error longjmps out of here and skips every destructor on the way.
+bool push_desc(lua_State* L, char kind, const char* payload, const char* nl,
+               const char* end, const char*& p, char* why, std::size_t why_cap)
+{
+    switch (kind) {
+    case 'Z':
+        p_lua_pushnil(L);
+        break;
+    case 'N':
+        p_lua_pushnumber(L, std::strtod(payload, nullptr));
+        break;
+    case 'B':
+        p_lua_pushboolean(L, payload[0] == '1');
+        break;
+    case 'L': {
+        const std::string nm(payload, static_cast<std::size_t>(nl - payload));
+        p_lua_getfield(L, LUA_GLOBALSINDEX, nm.c_str());
+        if (p_lua_type(L, -1) == LUA_TNIL) {
+            std::snprintf(why, why_cap, "le worker n'a pas le global '%s'",
+                          nm.c_str());
+            return false;
+        }
+        break;
+    }
+    case 'S': {
+        char* sf = nullptr;
+        const long slen = std::strtol(payload, &sf, 10);
+        while (sf < nl && *sf == ' ') {
+            ++sf;
+        }
+        const char* bytes = sf;
+        if (slen < 0 || bytes + slen > end) {
+            std::snprintf(why, why_cap, "chaine tronquee dans les descripteurs");
+            return false;
+        }
+        p_lua_pushlstring(L, bytes, static_cast<std::size_t>(slen));
+        p = bytes + slen;  // the payload runs to its own newline, and may
+        if (p < end && *p == '\n') {  // contain anything at all
+            ++p;
+        }
+        return true;
+    }
+    default:
+        std::snprintf(why, why_cap, "descripteur inconnu '%c'", kind);
+        return false;
+    }
+    p = nl + 1;
+    return true;
+}
+
+// Apply every descriptor in `meta`.
+//
+// want_upvalues true  -> 'U' directives are bound on the chunk at chunk_idx
+//                        with debug.setupvalue, and nothing is left on the stack.
+// want_upvalues false -> 'A' directives are simply pushed, left for lua_pcall,
+//                        and their count is returned.
+//
 // Errors propagate as ordinary Lua errors, so a bad descriptor lands in the
 // worker's `error` like anything else.
-void bind_upvalues(lua_State* L, int chunk_idx, const char* meta, int len)
+int apply_meta(lua_State* L, int chunk_idx, const char* meta, int len,
+               bool want_upvalues)
 {
     const int base = p_lua_gettop(L);
-    p_lua_getfield(L, LUA_GLOBALSINDEX, "debug");
-    p_lua_getfield(L, -1, "setupvalue");  // [ .., debug, setupvalue ]
-    if (p_lua_type(L, -1) != LUA_TFUNCTION) {
-        p_lua_settop(L, base);
-        p_lua_pushstring(L, "le worker n'a pas debug.setupvalue");
-        p_lua_error(L);
-        return;
+    int fn_idx = 0;
+    if (want_upvalues) {
+        p_lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+        p_lua_getfield(L, -1, "setupvalue");  // [ .., debug, setupvalue ]
+        if (p_lua_type(L, -1) != LUA_TFUNCTION) {
+            p_lua_settop(L, base);
+            p_lua_pushstring(L, "le worker n'a pas debug.setupvalue");
+            p_lua_error(L);
+            return 0;
+        }
+        fn_idx = p_lua_gettop(L);
     }
-    const int fn_idx = p_lua_gettop(L);
 
+    char why[192] = "";
+    int pushed = 0;
     const char* p = meta;
     const char* end = meta + len;
+
     while (p < end) {
         const char* nl = static_cast<const char*>(
             std::memchr(p, '\n', static_cast<std::size_t>(end - p)));
         if (!nl) {
             break;
         }
-
+        const char role = *p++;
+        while (p < nl && *p == ' ') {
+            ++p;
+        }
         const char kind = *p++;
         while (p < nl && *p == ' ') {
             ++p;
@@ -365,72 +441,31 @@ void bind_upvalues(lua_State* L, int chunk_idx, const char* meta, int len)
             ++after;
         }
 
-        bool pushed = true;
-        switch (kind) {
-        case 'L': {
-            const std::string nm(after, static_cast<std::size_t>(nl - after));
-            p_lua_getfield(L, LUA_GLOBALSINDEX, nm.c_str());
-            if (p_lua_type(L, -1) == LUA_TNIL) {
-                p_lua_settop(L, base);
-                char msg[256];
-                std::snprintf(msg, sizeof(msg),
-                              "le worker n'a pas le global '%s'", nm.c_str());
-                p_lua_pushstring(L, msg);
-                p_lua_error(L);
-                return;
-            }
-            break;
+        const bool is_up = (role == 'U');
+        if (is_up != want_upvalues) {
+            p = nl + 1;  // directive meant for the other role: skip it
+            continue;
         }
-        case 'Z':
-            p_lua_pushnil(L);
-            break;
-        case 'N':
-            p_lua_pushnumber(L, std::strtod(after, nullptr));
-            break;
-        case 'B':
-            p_lua_pushboolean(L, after[0] == '1');
-            break;
-        case 'S': {
-            char* sf = nullptr;
-            const long slen = std::strtol(after, &sf, 10);
-            while (sf < nl && *sf == ' ') {
-                ++sf;
-            }
-            const char* bytes = sf;
-            if (slen < 0 || bytes + slen > end) {
-                pushed = false;
-                break;
-            }
-            p_lua_pushlstring(L, bytes, static_cast<std::size_t>(slen));
-            // The payload runs to its own newline, which may contain anything.
-            p = bytes + slen;
-            if (p < end && *p == '\n') {
-                ++p;
-            }
-            break;
-        }
-        default:
-            pushed = false;
-            break;
-        }
-
-        if (!pushed) {
+        if (!push_desc(L, kind, after, nl, end, p, why, sizeof(why))) {
             p_lua_settop(L, base);
-            p_lua_pushstring(L, "descripteur d'upvalue illisible");
+            p_lua_pushstring(L, why);
             p_lua_error(L);
-            return;
+            return 0;
         }
-
-        p_lua_pushvalue(L, fn_idx);
-        p_lua_pushvalue(L, chunk_idx);
-        p_lua_pushinteger(L, idx);
-        p_lua_call(L, 3, 0);
-
-        if (kind != 'S') {
-            p = nl + 1;
+        if (is_up) {
+            p_lua_pushvalue(L, fn_idx);
+            p_lua_pushvalue(L, chunk_idx);
+            p_lua_pushinteger(L, idx);
+            p_lua_call(L, 3, 0);
+        } else {
+            ++pushed;
         }
     }
-    p_lua_settop(L, base);
+
+    if (want_upvalues) {
+        p_lua_settop(L, base);
+    }
+    return pushed;
 }
 
 // ---------------------------------------------------------------------------
@@ -457,20 +492,30 @@ DWORD WINAPI worker_main(LPVOID arg)
         if (p_luaL_loadbuffer(L, job->code, job->len, "=specter-worker") != 0) {
             set_error(job, p_lua_tolstring(L, -1, nullptr));
             terminal = kError;
-        } else if (job->meta && job->meta_len > 0 &&
-                   (bind_upvalues(L, p_lua_gettop(L), job->meta,
-                                  job->meta_len), 0)) {
-            terminal = kError;  // bind_upvalues only ever returns via lua_error
-        } else if (p_lua_pcall(L, 0, 0, 0) != 0) {
-            const char* msg = p_lua_tolstring(L, -1, nullptr);
-            set_error(job, msg);
-            // A raise at sleep() is a kill landing, not a failure: say which,
-            // because "killed" and "crashed" are very different to a reader.
-            terminal = (slot.flag.load(std::memory_order_acquire) == kKillAsked)
-                           ? kKilled
-                           : kError;
-        } else if (slot.flag.load(std::memory_order_acquire) == kKillAsked) {
-            terminal = kKilled;
+        } else {
+            // Upvalues first (they replace slots on the chunk), then the call
+            // arguments (they are pushed for lua_pcall). apply_meta raises
+            // through lua_error on a bad descriptor, which this pcall catches.
+            const int chunk_idx = p_lua_gettop(L);
+            int nargs = 0;
+            if (job->meta && job->meta_len > 0) {
+                apply_meta(L, chunk_idx, job->meta, job->meta_len, true);
+                nargs = apply_meta(L, chunk_idx, job->meta, job->meta_len,
+                                   false);
+            }
+            if (p_lua_pcall(L, nargs, 0, 0) != 0) {
+                const char* msg = p_lua_tolstring(L, -1, nullptr);
+                set_error(job, msg);
+                // A raise at sleep() is a kill landing, not a failure: say
+                // which, because "killed" and "crashed" are very different to
+                // a reader.
+                terminal =
+                    (slot.flag.load(std::memory_order_acquire) == kKillAsked)
+                        ? kKilled
+                        : kError;
+            } else if (slot.flag.load(std::memory_order_acquire) == kKillAsked) {
+                terminal = kKilled;
+            }
         }
         p_lua_settop(L, base);
 
@@ -604,30 +649,30 @@ bool describe_upvalues(lua_State* L, int idx, std::string& meta,
         if (is_stdlib_name(nm.c_str())) {
             // The sandbox captures the standard library as locals; the worker
             // called luaL_openlibs and has the same one. Rebind by name.
-            std::snprintf(buf, sizeof(buf), "L %d ", i);
+            std::snprintf(buf, sizeof(buf), "U L %d ", i);
             meta += buf;
             meta += nm;
             meta += '\n';
         } else {
             switch (vt) {
             case LUA_TNIL:
-                std::snprintf(buf, sizeof(buf), "Z %d\n", i);
+                std::snprintf(buf, sizeof(buf), "U Z %d\n", i);
                 meta += buf;
                 break;
             case LUA_TBOOLEAN:
-                std::snprintf(buf, sizeof(buf), "B %d %d\n", i,
+                std::snprintf(buf, sizeof(buf), "U B %d %d\n", i,
                               p_lua_toboolean(L, -1) ? 1 : 0);
                 meta += buf;
                 break;
             case LUA_TNUMBER:
-                std::snprintf(buf, sizeof(buf), "N %d %.17g\n", i,
+                std::snprintf(buf, sizeof(buf), "U N %d %.17g\n", i,
                               p_lua_tonumber(L, -1));
                 meta += buf;
                 break;
             case LUA_TSTRING: {
                 std::size_t sl = 0;
                 const char* sv = p_lua_tolstring(L, -1, &sl);
-                std::snprintf(buf, sizeof(buf), "S %d %zu\n", i, sl);
+                std::snprintf(buf, sizeof(buf), "U S %d %zu\n", i, sl);
                 meta += buf;
                 meta.append(sv, sl);
                 meta += '\n';
@@ -645,6 +690,54 @@ bool describe_upvalues(lua_State* L, int idx, std::string& meta,
     }
 }
 
+// Describe the call arguments sitting at `first`..top. Same encodings as the
+// upvalues, role 'A'. A game table or function is refused with its POSITION,
+// because an argument has no name to quote.
+bool describe_args(lua_State* L, int first, std::string& meta, char* refused,
+                   std::size_t refused_cap)
+{
+    const int top = p_lua_gettop(L);
+    char buf[64];
+    for (int idx = first; idx <= top; ++idx) {
+        const int n = idx - first + 1;
+        switch (p_lua_type(L, idx)) {
+        case LUA_TNIL:
+            std::snprintf(buf, sizeof(buf), "A Z %d\n", n);
+            meta += buf;
+            break;
+        case LUA_TBOOLEAN:
+            std::snprintf(buf, sizeof(buf), "A B %d %d\n", n,
+                          p_lua_toboolean(L, idx) ? 1 : 0);
+            meta += buf;
+            break;
+        case LUA_TNUMBER:
+            std::snprintf(buf, sizeof(buf), "A N %d %.17g\n", n,
+                          p_lua_tonumber(L, idx));
+            meta += buf;
+            break;
+        case LUA_TSTRING: {
+            std::size_t sl = 0;
+            const char* sv = p_lua_tolstring(L, idx, &sl);
+            std::snprintf(buf, sizeof(buf), "A S %d %zu\n", n, sl);
+            meta += buf;
+            meta.append(sv, sl);
+            meta += '\n';
+            break;
+        }
+        default: {
+            const int t = p_lua_type(L, idx);
+            const char* nom = (t == LUA_TTABLE)     ? "une table du jeu"
+                              : (t == LUA_TFUNCTION) ? "une fonction du jeu"
+                              : (t == LUA_TUSERDATA) ? "un userdata du jeu"
+                                                     : "une valeur du jeu";
+            std::snprintf(refused, refused_cap, "l'argument %d est %s", n, nom);
+            return false;
+        }
+        }
+    }
+    return true;
+}
+
 int api_spawn(lua_State* L)
 {
     if (p_lua_gettop(L) < 1) {
@@ -654,6 +747,18 @@ int api_spawn(lua_State* L)
     }
 
     std::string meta;
+    // Arguments first: a refusal has to land before anything is spawned.
+    char refused_args[160] = "";
+    if (!describe_args(L, 2, meta, refused_args, sizeof(refused_args))) {
+        char msg[512];
+        std::snprintf(msg, sizeof(msg),
+                      "specter.thread.spawn : %s, elle ne peut pas passer sur "
+                      "un worker. Passe une valeur simple.",
+                      refused_args);
+        p_lua_pushstring(L, msg);
+        p_lua_error(L);
+        return 0;
+    }
 
     if (p_lua_type(L, 1) == LUA_TFUNCTION) {
         // Descriptors BEFORE the dump: a refusal has to arrive before anything
