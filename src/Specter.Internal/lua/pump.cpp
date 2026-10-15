@@ -520,6 +520,15 @@ int store_key()
     return 0x53505254;  // 'SPRT', an integer field on the environment
 }
 
+// What build_specter() leaves on the stack: [store, specter]. Both are
+// arguments to the factory, so this number belongs to BOTH the contract check
+// and the call's argument count -- kStackArgs is derived from it below.
+//
+// It is one constant because those two used to be written out separately, and
+// they disagreed twice in a row: the check expected one value, the call expected
+// two, and each version of the guard refused work that was fine.
+constexpr int kSpecValues = 2;
+
 void build_specter(lua_State* L, int reg)
 {
     if (!kEnableAnchors) {
@@ -738,19 +747,20 @@ void run(void* L, const char* code, int len, result_sink sink)
     // _G, and resolving them in Lua tied the preamble to whatever that is.
     const int before_specter = p_gettop(L);
     build_specter(L, reg);
-    // build_specter's contract is "leaves exactly one value". Check it HERE, at
-    // the boundary where a violation is still cheap -- the guard further down
-    // runs too late for anything that crashes inside build_specter itself, and
-    // that is where the deaths were.
+    // build_specter's contract, checked HERE at the boundary where a violation is
+    // still cheap: the guard further down runs too late for anything that
+    // crashes inside build_specter itself, and that is where the deaths were.
     //
-    // Measured from the stack height taken HERE, not from `top`: `top` predates
-    // p_loadbuffer, which leaves the chunk on the stack, so the delta from
-    // `top` is three, not one. The first version of this check compared
-    // against `top` and refused a perfectly good call.
+    // TWO values, not one: [store, specter]. Both are arguments to the factory.
+    // The number lives in kSpecValues because kStackArgs is built from it --
+    // one constant, so the check and the call can never disagree again. The two
+    // previous versions of this guard disagreed with the code (once by measuring
+    // from `top`, which predates the chunk, and once by expecting one) and both
+    // refused good calls.
     const int left = p_gettop(L) - before_specter;
-    if (left != 1) {
-        log::error("lua: build_specter a laisse %d valeur(s) au lieu d'une -- "
-                   "appel annule", left);
+    if (left != kSpecValues) {
+        log::error("lua: build_specter a laisse %d valeur(s) au lieu de %d -- "
+                   "appel annule", left, kSpecValues);
         sink(false, "(internal) build_specter broke the stack contract", 45);
         p_settop(L, top);
         return;
@@ -765,11 +775,13 @@ void run(void* L, const char* code, int len, result_sink sink)
     for (const char* fn : kPreambleFns) {
         p_getglobal(L, fn);
     }
-    // 4 = store + specter + _G + env, plus the ten library functions.
-    // build_specter leaves [store, specter]; the argument count must include
-    // BOTH, or the call lands on `store` instead of the factory.
-    constexpr int kStackArgs =
-        4 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
+    // build_specter leaves [store, specter] (kSpecValues), then _G and env, plus
+    // the ten library functions. The argument count must include the store AND
+    // specter, or the call lands on `store` instead of the factory.
+    constexpr int kNFn =
+        static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
+    // kSpecValues + _G + env + the functions.
+    constexpr int kStackArgs = kSpecValues + 2 + kNFn;
     // Verify what we are about to hand over, EVERY call, not once. Offsets are
     // DERIVED, never written down -- counting by hand caused this bug, and then
     // caused a wrong "fix" to this probe itself.
@@ -782,7 +794,6 @@ void run(void* L, const char* code, int len, result_sink sink)
     // So: check every time, and if the depth is not what the argument count
     // says it must be, DO NOT CALL. A loud refusal beats a silent mis-call.
     {
-        constexpr int kNFn = static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns));
         const int depth = p_gettop(L) - top;
         if (depth != kStackArgs + 1) {
             log::error("lua: profondeur %d, callee attendu a -%d -- appel "
