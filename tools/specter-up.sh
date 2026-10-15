@@ -50,6 +50,20 @@ if [ -z "$PID" ]; then
 fi
 echo "Aniimo.exe détecté (pid $PID)"
 
+# 2b. attendre la pile graphique. Injecter trop tôt échoue (dxgi pas chargé) ;
+# trop tard, le jeu a déjà recréé son swapchain et l'overlay ne s'arme pas.
+GW=0
+while [ "$GW" -lt 60 ]; do
+  specter_graphics_ready "$PID" && break
+  [ "$GW" -eq 0 ] && echo "en attente de la pile graphique (dxgi.dll)..."
+  sleep 1; GW=$((GW + 1))
+done
+if specter_graphics_ready "$PID"; then
+  echo "pile graphique chargée"
+else
+  echo "avertissement: dxgi.dll toujours absent, l'injection peut échouer"
+fi
+
 # 3. injection
 echo "== injection Specter.Internal =="
 python3 "$HOSTCH_CLIENT" --pid "$PID" --token "$TOKEN" \

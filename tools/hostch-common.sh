@@ -47,6 +47,17 @@ specter_game_pid() {
   pgrep -x Aniimo.exe 2>/dev/null | head -1 || true
 }
 
+# Le processus est pret quand la pile graphique est chargee. Injecter avant donne
+# "dxgi.dll: module not loaded in guest" ; injecter apres que le jeu ait
+# recree son swapchain donne un overlay qui ne s'arme jamais. Wine charge les
+# DLL Windows comme des .so Linux, donc /proc/<pid>/maps les montre.
+specter_graphics_ready() {
+  local pid="$1"
+  [ -n "$pid" ] || return 1
+  [ -r "/proc/$pid/maps" ] || return 1
+  grep -qi 'dxgi.dll' "/proc/$pid/maps"
+}
+
 # Preconditions communes : python3 + client hostch + DLL construite.
 specter_require_client() {
   command -v python3 >/dev/null 2>&1 \
