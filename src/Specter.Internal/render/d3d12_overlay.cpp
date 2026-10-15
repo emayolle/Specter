@@ -299,7 +299,14 @@ InitResult init_once(IDXGISwapChain* sc)
     if (!g_dev) {
         if (FAILED(sc->GetDevice(__uuidof(ID3D12Device), (void**)&g_dev)) ||
             !g_dev) {
-            return InitResult::Fail;
+            // Transient, not terminal. The game creates and destroys swapchains
+            // while it boots, and the one we hooked can already be gone by the
+            // time its first Present reaches us. The next Present offers a live
+            // one. Treating this as a failure killed the overlay for the whole
+            // session, over a swapchain that happened to die on us.
+            g_dev = nullptr;
+            log_once("swapchain sans device -- on retente au prochain Present");
+            return InitResult::Defer;
         }
     }
     if (!g_sc3 &&
