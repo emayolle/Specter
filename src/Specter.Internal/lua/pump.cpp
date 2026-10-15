@@ -174,53 +174,61 @@ constexpr int kMaxCode = 32 * 1024;
 //
 // Everything comes from C on purpose. The preamble used to resolve those
 // names itself, and that silently tied it to whatever environment
-// luaL_loadbuffer gave the chunk -- which is NOT necessarily the game's _G
-// (a loader is free to give a chunk its own environment, and this one
-// clearly does). The result was a name that resolved to a table where a
-// function was expected, and a bare 'attempt to call a table value' with no
-// position, because the raise happens inside a C function.
+// luaL_loadbuffer gave the chunk -- which is not necessarily the game's _G.
+// A name could then resolve to a table where a function was expected, and the
+// call died with a bare 'attempt to call a table value' and no position,
+// because the raise happens inside a C function.
 //
-// C reads each name through lua_getglobal, which the probe confirmed reaches
-// the real globals on this build. So the values that arrive here are the
-// game's own functions, verified, and the chunk's environment is irrelevant
-// to the preamble.
+// The preamble also writes __step into the store after every stage. The store
+// outlives the failure (it lives in the registry), so when the factory dies C
+// can read back exactly which statement killed it. Guessing has cost four
+// wrong fixes; this costs one string write per stage.
 //
 //   read  k      -> our store first, then the game's real _G  (full access)
 //   write k = v  -> the game already owns k, write the GAME's global
 //   write k = v  -> otherwise keep it in our store
 //
-// `print` is a LOCAL, so the game's print is never touched and there is
-// nothing to restore.
+// `print` is a LOCAL, so the game's print is never touched.
 //
 // And why not setfenv(0, env), the idiomatic 5.1 form? Because LuaJIT does not
-// implement it. Measured on this interpreter: setfenv(0, t) leaves the
-// environment untouched (the read comes back nil), while setfenv(f, t) works.
-// So the factory names itself and passes that name.
+// implement it: measured, setfenv(0, t) leaves the environment untouched while
+// setfenv(f, t) works. So the factory names itself and passes that name.
 constexpr char kPrefix[] =
     "local __f;\n"
     "__f=function(__sp,__g,pcall,setfenv,setmetatable,rawset,rawget,\n"
     "table,tostring,select,type,getfenv)\n"
-    "__sp.__diag=tostring(getfenv(__f)==__g)\n"
     "local __store=__sp.__store\n"
+    "__store.__step='01 entree'\n"
+    "__store.__diag=tostring(getfenv(__f)==__g)\n"
+    "__store.__step='02 diag'\n"
     "local __o={}\n"
+    "__store.__step='03 print'\n"
     "local print=function(...)local t={}for i=1,select('#',...)do\n"
     "  t[#t+1]=tostring((select(i,...)))end\n"
     "  __o[#__o+1]=table.concat(t,'\\t')end\n"
+    "__store.__step='04 env'\n"
     "local __env=setmetatable({},{\n"
     "  __index=function(_,k)local v=rawget(__store,k)\n"
     "    if v~=nil then return v end return __g[k] end,\n"
     "  __newindex=function(_,k,v)if rawget(__g,k)~=nil then\n"
     "    rawset(__g,k,v) else rawset(__store,k,v) end end})\n"
+    "__store.__step='05 rawset'\n"
     "rawset(__env,'specter',__sp)\n"
     "rawset(__sp,'__global',__g)\n"
+    "__store.__step='06 setfenv'\n"
     "setfenv(__f,__env)\n"
+    "__store.__step='07 corps'\n"
     "local __r={pcall(function()\n";
 
 constexpr char kSuffix[] =
-    "\nend)};local __ok=table.remove(__r,1);"
+    "\nend)};"
+    "__store.__step='08 collecte'\n"
+    "local __ok=table.remove(__r,1);"
     "if not __ok then __o[#__o+1]='ERROR: '..tostring(__r[1])else if #__r>0 "
     "then local t={}for i=1,#__r do t[i]=tostring(__r[i])end __o[#__o+1]="
-    "table.concat(t,'\\t')end end;return table.concat(__o,'\\n'),__ok\n"
+    "table.concat(t,'\\t')end end;"
+    "__store.__step='09 fini'\n"
+    "return table.concat(__o,'\\n'),__ok\n"
     "end\nreturn __f\n";
 // Registry key for the sandbox store: an anonymous integer slot in the game's
 // registry. Not an entry in _G, and not a name anybody can look up by walking
@@ -564,6 +572,28 @@ void run(void* L, const char* code, int len, result_sink sink)
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         log_chunk(code, len);
+        // The store outlives the failure, so the factory's last stage marker is
+        // still there. It names the statement that killed it.
+        char step[64] = "?";
+        char diag[16] = "?";
+        p_settop(L, top);
+        p_rawgeti(L, LUA_REGISTRYINDEX, kStoreKey);
+        if (p_type(L, -1) == 5) {  // LUA_TTABLE
+            static const char* kKeys[] = {"__step", "__diag"};
+            char* dst[] = {step, diag};
+            for (int i = 0; i < 2; ++i) {
+                p_pushstring(L, kKeys[i]);
+                p_gettable(L, -2);
+                if (p_type(L, -1) == 4) {  // LUA_TSTRING
+                    std::size_t sn = 0;
+                    const char* sv = p_tolstring(L, -1, &sn);
+                    std::snprintf(dst[i], i == 0 ? sizeof(step) : sizeof(diag),
+                                  "%.*s", static_cast<int>(sn), sv ? sv : "?");
+                }
+                p_settop(L, -2);
+            }
+        }
+        log::info("lua: MORT a l'etape '%s' (env du chunk == _G : %s)", step, diag);
         sink(false, e ? e : "(lua runtime error)", static_cast<int>(n));
         p_settop(L, top);
         return;
