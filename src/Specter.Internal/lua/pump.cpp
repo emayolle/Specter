@@ -532,9 +532,16 @@ void build_specter(lua_State* L, int reg)
     if (reg != 0) {
         p_rawgeti(L, reg, env_key(L));     // [env]
         if (p_type(L, -1) == 5) {
-            p_rawgeti(L, -1, store_key());  // [env, store]
+            p_rawgeti(L, -1, store_key());  // [env, store | nil]
             if (p_type(L, -1) != 5) {
-                p_createtable(L, 0, 8);     // [env, new store]
+                // Drop the nil BEFORE creating the new store. It used to stay
+                // on the stack, which put the env two slots down instead of
+                // three -- so lua_rawseti was handed the NIL and wrote through
+                // hvalue(nil). That is a wild write, and it killed the game on
+                // the second Execute of every session: the first one builds the
+                // environment, the second one is the first to take this branch.
+                p_settop(L, -2);             // [env]
+                p_createtable(L, 0, 8);     // [env, store]
                 p_pushvalue(L, -1);         // [env, store, store]
                 p_rawseti(L, -3, store_key());
             }
@@ -728,6 +735,17 @@ void run(void* L, const char* code, int len, result_sink sink)
     // environment luaL_loadbuffer gives a chunk is not necessarily the game's
     // _G, and resolving them in Lua tied the preamble to whatever that is.
     build_specter(L, reg);
+    // build_specter's contract is "leaves exactly one value". Check it HERE,
+    // at the boundary where a violation is still cheap -- the guard further
+    // down runs too late for anything that crashes inside build_specter
+    // itself, which is exactly where the last three deaths happened.
+    if (p_gettop(L) - top != 1) {
+        log::error("lua: build_specter a laisse %d valeur(s) au lieu d'une -- "
+                   "appel annule", p_gettop(L) - top);
+        sink(false, "(internal) build_specter broke the stack contract", 45);
+        p_settop(L, top);
+        return;
+    }
     p_getglobal(L, "_G");  // the real globals, via the path the probe verified
     // The environment from a previous run, or nil so the factory builds one.
     if (reg != 0) {
