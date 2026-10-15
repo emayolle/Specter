@@ -29,13 +29,30 @@ constexpr char kInstall[] =
     "if type(rawget(AC, 'changeStamina')) ~= 'function' then\n"
     "  return 'changeStamina is not a function'\n"
     "end\n"
-    "if not rawget(AC, '__specterStaminaHooked') then\n"
-    "  local orig = rawget(AC, 'changeStamina')\n"
-    "  local w\n"
+    // AUCUN MARQUEUR SUR LES TABLES DU JEU.
+    //
+    // L'ecrasement de changeStamina, lui, ne peut pas eviter d'etre sur la
+    // classe : on ne modifie pas le jeu sans le modifier. Mais le SUIVI, si. Il
+    // vivait en __specterStaminaHooked et __specterStaminaOrig, poses SUR LA
+    // CLASSE — deux noms a nous dans une table du jeu, visibles a quiconque en
+    // parcourt les champs, et susceptibles d'entrer en collision avec un jour ou
+    // le jeu definirait un __specter* de son cote.
+    //
+    // Il est donc dans notre store, indexe par la classe. Notre store est une
+    // table sans metatable : aucune metamethode ne peut s'y meler.
+    "local P = specter.store.staminaPatch\n"
+    "if P == nil then\n"
+    "  P = {}\n"
+    "  specter.store.staminaPatch = P\n"
+    "end\n"
+    "if P[AC] ~= nil then\n"
+    "  return 'already hooked'\n"
+    "end\n"
+    "local orig = rawget(AC, 'changeStamina')\n"
+    "local w\n"
     "w = function(self, delta)\n"
     "  local d = tonumber(delta)\n"
-    // The gate, read at CALL time from C++. This one line is the whole change:
-    // no field on the class, no chunk to toggle, no second copy of the flag.
+    // Le drapeau, lu a chaque appel, vient du C++.
     "  if d and d < 0 and specter.var.stamina then\n"
     "    local e = self and self.entity\n"
     "    if e == pg.me or e == pg.pawn or (e and e.isMainPlayer == true) then\n"
@@ -44,10 +61,8 @@ constexpr char kInstall[] =
     "  end\n"
     "  return orig(self, delta)\n"
     "end\n"
-    "rawset(AC, '__specterStaminaOrig', orig)\n"
     "AC.changeStamina = w\n"
-    "rawset(AC, '__specterStaminaHooked', true)\n"
-    "end\n"
+    "P[AC] = orig\n"
     "return 'stamina hooked'\n";
 
 // Cached so the menu can draw the checkbox without going through the Lua thread.
@@ -59,7 +74,7 @@ bool g_enabled = false;
 // and nothing else: the flag is a C++ bool that survives the relog by itself, so
 // there is nothing to copy across and nothing that can disagree.
 //
-// Idempotent on the Lua side: `__specterStaminaHooked` guards it.
+// Idempotent on the Lua side: our store, keyed by the class, guards it.
 void on_new_lua_state(void* L)
 {
     if (L == nullptr) {
