@@ -96,7 +96,10 @@ bool resolve(void* lua_module, bool (*pump_ready)())
 
     // The binding layer is only usable if the pump's own symbols are bound too —
     // it runs inside the sandbox the pump builds. Ask rather than assume.
-    ++g_total;
+    //
+    // NOT counted in g_total: it is not a symbol, it is a question. Counting it
+    // made a healthy run report "46/47", which reads exactly like one symbol
+    // missing — the worst possible way to say "everything is fine".
     if (pump_ready == nullptr || !pump_ready()) {
         note_missing("pump: au moins un symbole de base manque");
         ++missing;

@@ -47,12 +47,18 @@ bool install(lua_State* L, int specter_idx)
     // a depth comparison — a binding layer that leaked one value would shift
     // every index above it, and the symptom would be the factory being called
     // with the wrong argument rather than anything to do with bindings.
-    const int depth_before = lua_gettop(L);
-
-    if (specter_idx <= 0) {
-        log::error("lua: bind -- index de table invalide (%d)", specter_idx);
+    // Validity the way Lua defines it. The previous test was `specter_idx <= 0`,
+    // which rejects every NEGATIVE index — and negative indices are exactly the
+    // ones a caller with values on the stack hands over. There is no index 0 at
+    // all, so the test rejected the only form that works and accepted nothing.
+    // It fired on every single run and nothing was ever registered.
+    const int top = lua_gettop(L);
+    if (specter_idx == 0 || specter_idx > top || specter_idx < -top) {
+        log::error("lua: bind -- index %d hors pile (profondeur %d)",
+                   specter_idx, top);
         return false;
     }
+    const int depth_before = top;
 
     // getNamespaceFromStack, NEVER getGlobalNamespace.
     //
