@@ -752,13 +752,22 @@ void run(void* L, const char* code, int len, result_sink sink)
             p_settop(L, top);
             return;
         }
-        // Types of the ten library functions, every call: cheap, and the only
-        // thing that has ever caught a shifted stack in this file.
+        // Types of the ten dependencies, every call: cheap, and the only thing
+        // that has ever caught a shifted stack in this file.
+        //
+        // Nine are functions; `table` is the library, a TABLE, and what the
+        // preamble calls is its `remove`/`concat` fields. A uniform "must be a
+        // function" test rejects it -- which is what the first version of this
+        // check did, and the guard then refused a perfectly good call.
         for (int i = 0; i < kNFn; ++i) {
-            if (p_type(L, -(kNFn - i)) != 6) {
-                log::error("lua: %s n'est pas une fonction (type %d) a -%d",
-                           kPreambleFns[i], p_type(L, -(kNFn - i)), kNFn - i);
-                sink(false, "(internal) a dependency is not a function", 39);
+            const bool is_lib = std::strcmp(kPreambleFns[i], "table") == 0;
+            const int want = is_lib ? 5 : 6;  // LUA_TTABLE / LUA_TFUNCTION
+            const int got = p_type(L, -(kNFn - i));
+            if (got != want) {
+                log::error("lua: %s devrait etre de type %d, est de type %d, "
+                           "a -%d -- appel annule", kPreambleFns[i], want, got,
+                           kNFn - i);
+                sink(false, "(internal) a dependency has the wrong type", 44);
                 p_settop(L, top);
                 return;
             }
