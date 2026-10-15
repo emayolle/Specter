@@ -66,7 +66,7 @@ int api_reset()
 //
 // The switch exists so the answer can be found with a rebuild instead of a
 // bisect over launches.
-constexpr bool kEnableBinding = false;
+constexpr bool kEnableBinding = true;
 
 bool install(lua_State* L, int specter_idx)
 {
@@ -119,19 +119,12 @@ bool install(lua_State* L, int specter_idx)
     //
     //     specter.var.counter = 7
     //     specter.reset()
-    luabridge::getNamespaceFromStack(L)
-        .beginNamespace("var")
-            // Read only: Lua can see these, cannot change them. The documented
-            // two-argument form. Writing raises 'x' is read-only.
-            .addProperty("enabled", &g_enabled_flag)
-            .addProperty("position", &g_position)
-            // Read AND write: the SAME address as getter and setter, which is
-            // what the three-argument form means. The two-argument form does
-            // NOT give you this, and the difference is silent until you write.
-            .addProperty("counter", &g_counter, &g_counter)
-            .addProperty("speed", &g_speed, &g_speed)
-        .endNamespace()
-        .addFunction("reset", &api_reset);
+    // MINIMAL ON PURPOSE. One function, no property. The previous full version
+    // registered the same thing and then the game's globals lost `_G`, `pairs`,
+    // `string`, `math` and `require`. addProperty is the only thing it used
+    // that addFunction does not, so it is the first thing to leave out -- one
+    // relaunch instead of a bisect over several.
+    luabridge::getNamespaceFromStack(L).addFunction("reset", &api_reset);
 
     lua_pop(L, 1);  // our copy of the table; the bindings live inside it
 
@@ -143,8 +136,35 @@ bool install(lua_State* L, int specter_idx)
         return false;
     }
 
-    log::info("lua: couche de binding installee dans specter "
-              "(%d/%d symboles)", capi::bound_count(), capi::required_count());
+    // THE GAME IS THE ONLY ORACLE for the shim. LuaBridge calls the C API by
+    // NAME: in a DLL, xlua.dll resolves its own internal calls to itself, while
+    // in a static link our thunks would interpose everywhere. So there is no
+    // faithful host test -- the honest move is to ask the question here, now,
+    // while the stack still looks like it did before registration.
+    //
+    // If these are intact HERE, the damage happens later (in the factory, in the
+    // preamble, on the next Execute). If they are already gone, registration is
+    // the culprit and the log says exactly which call did it.
+    const char* kWatch[] = {"_G", "pairs", "string", "math", "require"};
+    int perdus = 0;
+    for (const char* nom : kWatch) {
+        lua_getglobal(L, nom);
+        if (lua_isnil(L, -1)) {
+            ++perdus;
+        }
+        lua_pop(L, 1);
+    }
+    if (perdus == 0) {
+        log::info("lua: binding installee -- controles d'integrite OK "
+                  "(%d/%d symboles)", capi::bound_count(), capi::required_count());
+    } else {
+        log::error("lua: binding INSTALLEE MAIS %d/%d globales du jeu ont "
+                   "DISPARU AU MOMENT DE L'ENREGISTREMENT. Le shim est "
+                   "coupable ; la couche est coupee pour ce run.",
+                   perdus, static_cast<int>(sizeof(kWatch) / sizeof(kWatch[0])));
+        lua_settop(L, depth_before);
+        return false;
+    }
     return true;
 }
 
