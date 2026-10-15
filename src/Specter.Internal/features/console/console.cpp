@@ -91,10 +91,76 @@ void log_result(bool ok, const char* text, int n)
     }
 }
 
+// ---- the armed shell -------------------------------------------------------
+//
+// Guest-side paths. /tmp on the host is Z:\tmp to the game, which is what the
+// shell scripts write to. Nothing here exists unless the checkbox was ticked:
+// the files only ever appear inside an armed window.
+constexpr const char* kCliDir = "Z:\\tmp\\specter-cli";
+constexpr const char* kCliReq = "Z:\\tmp\\specter-cli\\req.lua";
+constexpr const char* kCliRes = "Z:\\tmp\\specter-cli\\res.txt";
+
+// How long the checkbox opens the window, in Lua-thread ticks. Long enough to
+// run a test loop, short enough that a forgotten window is not a standing door.
+constexpr unsigned long long kCliWindowTicks = 600;  // ~10 s at 60 fps
+
+// When the checkbox was ticked, in Lua-thread ticks. Zero = disarmed, and zero
+// is also the value at load: the window is shut until a person opens it.
+std::atomic<unsigned long long> g_cli_armed_at = 0;
+
+// The chunk taken from the shell, owned by the Lua thread.
+char g_cli_code[kMaxCode];
+int g_cli_len = 0;
+
+// Read a whole file, or fail. Returns false if it is absent or unreadable —
+// which is the normal case, every frame, for the whole time the window is shut.
+bool read_file(const char* path, char* out, int cap, int* out_len)
+{
+    HANDLE h = ::CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                             nullptr, OPEN_EXISTING,
+                             FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    DWORD got = 0;
+    const BOOL ok = ::ReadFile(h, out, static_cast<DWORD>(cap - 1), &got, nullptr);
+    ::CloseHandle(h);
+    if (!ok) {
+        return false;
+    }
+    out[got] = '\0';
+    *out_len = static_cast<int>(got);
+    return true;
+}
+
+void write_file(const char* path, const char* text, int len)
+{
+    HANDLE h = ::CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ,
+                             nullptr, CREATE_ALWAYS,
+                             FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    DWORD put = 0;
+    ::WriteFile(h, text, static_cast<DWORD>(len), &put, nullptr);
+    ::CloseHandle(h);
+}
+
 // The pump's result sink. Runs on the Lua thread, inside pump::run.
 // One sink per channel. The pump takes a plain function pointer, so it cannot be
 // told "which channel" any other way.
 Channel g_sink_channel = kChannelConsole;
+
+// Where the shell reads its answer. Written only for kChannelCli, and only
+// because the window is open — otherwise the file is never touched.
+void publish_cli_result(bool ok, const char* text, int n)
+{
+    char buf[kMaxOut + 64];
+    const int len = std::snprintf(buf, sizeof(buf), "#ok=%d\n%s",
+                                  ok ? 1 : 0, text ? text : "");
+    write_file(kCliRes, buf, len);
+    log::info("cli: requete traitee (ok=%d, %d o de sortie)", ok ? 1 : 0, n);
+}
 
 void sink(bool ok, const char* text, int n)
 {
@@ -114,10 +180,49 @@ void sink(bool ok, const char* text, int n)
     g_channels[g_sink_channel].publish(out);
     ++g_out_seq;
     log_result(ok, text, n);
+    if (g_sink_channel == kChannelCli) {
+        publish_cli_result(ok, text, n);
+    }
+}
+
+// Claim the request: rename it away so the same chunk cannot run twice. If the
+// shell is still writing, the rename fails and we leave it for the next tick.
+bool claim_request()
+{
+    char claimed[64];
+    std::snprintf(claimed, sizeof(claimed), "%s\\claimed.lua", kCliDir);
+    if (!::MoveFileA(kCliReq, claimed)) {
+        return false;
+    }
+    int n = 0;
+    const bool ok = read_file(claimed, g_cli_code, kMaxCode, &n);
+    ::DeleteFileA(claimed);
+    if (!ok) {
+        return false;
+    }
+    g_cli_len = n;
+    return true;
+}
+
+// Take one shell request, if the window is open. Returns false when it is not
+// armed, when the window has expired, or when there is nothing to take.
+bool take_cli_request()
+{
+    const unsigned long long armed = g_cli_armed_at.load(std::memory_order_relaxed);
+    if (armed == 0) {
+        return false;
+    }
+    if (lua::pump::ticks() - armed > kCliWindowTicks) {
+        g_cli_armed_at.store(0, std::memory_order_relaxed);
+        log::info("cli: fenetre expiree, le shell est de nouveau muet");
+        return false;
+    }
+    return claim_request();
 }
 
 // The console's tick hook. Runs on the Lua thread once per CommonUpdate; it
-// drains whatever Execute queued and nothing else.
+// drains whatever Execute queued, and the shell's requests while a window is
+// open. Nothing else.
 void on_lua_tick(void* L)
 {
     // Static, not a local: this runs every frame, and a 32 KB automatic object
@@ -130,6 +235,10 @@ void on_lua_tick(void* L)
         }
         g_sink_channel = static_cast<Channel>(i);
         lua::pump::run(L, c.code, c.len, &sink);
+    }
+    if (take_cli_request()) {
+        g_sink_channel = kChannelCli;
+        lua::pump::run(L, g_cli_code, g_cli_len, &sink);
     }
 }
 
@@ -194,6 +303,16 @@ const char* status()
     return lua::pump::status();
 }
 
+// Open the shell window for `ticks` Lua-thread ticks. Called from the checkbox,
+// on the render thread; the deadline itself is read on the Lua thread, so this
+// only ever writes one atomic.
+void arm_cli(unsigned int ticks)
+{
+    g_cli_armed_at.store(lua::pump::ticks(), std::memory_order_relaxed);
+    log::info("cli: fenetre ouverte pour %u ticks -- tools/lua.sh peut parler",
+              ticks);
+}
+
 // Drain whatever the Lua thread produced since the last frame. Called from
 // draw_ui, because that is the only place the result is shown.
 void drain_result()
@@ -243,6 +362,31 @@ void draw_ui()
     }
     ImGui::SameLine();
     ImGui::TextDisabled("(an infinite loop freezes the game)");
+
+    // The shell window. Ticking this is the only thing that lets anything run
+    // Lua without the Execute button, which is the whole point: the precondition
+    // stays a human action, and it lapses on its own.
+    ImGui::Separator();
+    const unsigned long long armed =
+        g_cli_armed_at.load(std::memory_order_relaxed);
+    const unsigned long long now = lua::pump::ticks();
+    bool open = armed != 0 && (now - armed) <= kCliWindowTicks;
+    if (ImGui::Checkbox("Autoriser le shell", &open)) {
+        if (open) {
+            arm_cli(kCliWindowTicks);
+        } else {
+            g_cli_armed_at.store(0, std::memory_order_relaxed);
+            log::info("cli: fenetre fermee");
+        }
+    }
+    ImGui::SameLine();
+    if (open) {
+        const unsigned long long left = kCliWindowTicks - (now - armed);
+        ImGui::Text("ouvert, ~%llu s", (left + 59) / 60);
+    } else {
+        ImGui::TextDisabled("ferme -- cocher pour ouvrir %llu s",
+                            (kCliWindowTicks + 59) / 60);
+    }
 
     ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);
     ImGui::TextUnformatted(g_log.c_str());

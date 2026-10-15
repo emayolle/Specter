@@ -1,30 +1,73 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# RETIRE — ce script ne peut plus rien faire.
+# lua.sh — exécute un chunk Lua dans l'instance Aniimo en cours, depuis le shell.
 #
-# Il deposait un chunk dans /tmp/specter-lua/cmd.lua et attendait que la DLL le
-# relise. Cette lecture automatique n'existe plus : la pompe Lua n'a plus de
-# canal CLI.
+# PRÉCONDITION : la case « Autoriser le shell » doit être cochée dans l'onglet
+# Lua Editor de l'overlay. Sans elle, ce script ne fait rien et le DLL ne
+# regarde même pas le fichier — la fenêtre est fermée au chargement.
 #
-# Pourquoi elle a ete retiree, et pas simplement fermee : un canal d'execution
-# declenche par la presence d'un fichier est declenche par TOUT ce qui peut
-# ecrire ce fichier - pas d'UI, pas d'authentification, pas d'intention. C'etait
-# aussi le chemin par lequel du code entrait dans le jeu sans que personne ait
-# appuye sur quoi que ce soit.
+# Pourquoi il y a une case : un canal d'exécution déclenché par le système de
+# fichiers est un canal que quiconque peut écrire dans ce dossier peut utiliser.
+# Pas d'UI, pas d'intention, pas de trace d'une personne ayant demandé. La case
+# garde cette précondition, et la fenêtre expire d'elle-même (~10 s).
 #
-# Pour executer du Lua, c'est le bouton Execute de l'onglet "Lua Editor" de
-# l'overlay. Chaque execution part dans un environnement construit pour elle
-# (voir lua/pump.cpp).
+# Usage :
+#   tools/lua.sh 'print(1+1)'
+#   tools/lua.sh -f script.lua
+#   echo '…' | tools/lua.sh
 #
-# Si un jour le shell doit pouvoir piloter Lua, la seule voie acceptable est une
-# action explicite et authentifiee - pas un fichier pose sur un disque.
+# Env : SPECTER_CLI_DIR (défaut /tmp/specter-cli)
 # ---------------------------------------------------------------------------
-cat >&2 <<'EOF'
-tools/lua.sh : RETIRE.
+set -uo pipefail
+DIR="${SPECTER_CLI_DIR:-/tmp/specter-cli}"
+REQ="$DIR/req.lua"
+RES="$DIR/res.txt"
 
-Le canal CLI n'existe plus. Le deposer de fichier etait un canal d'execution de
-code declenche par le systeme de fichiers, sans UI ni authentification.
+case "${1:-}" in
+  -f|--file) SRC="${2:?usage: lua.sh -f fichier}"; shift 2 ;;
+  --help|-h) sed -n '2,25p' "$0"; exit 0 ;;
+  "")        if [ -t 0 ]; then
+                echo "usage: lua.sh 'code' | -f fichier | (stdin)" >&2; exit 2
+              else
+                SRC="$(cat)"
+              fi ;;
+  *)         SRC="$1" ;;
+esac
 
-Utilisez le bouton "Execute" de l'onglet "Lua Editor" de l'overlay.
-EOF
-exit 2
+[ -n "$SRC" ] || { echo "usage: lua.sh 'code' | -f fichier | (stdin)" >&2; exit 2; }
+
+mkdir -p "$DIR" || exit 1
+
+# Une seule requête à la fois : sans ce verrou, deux terminaux pourraient se
+# voler la réponse l'un de l'autre.
+exec 9>"$DIR/.lock" || exit 1
+if ! flock -n 9; then
+  echo "lua.sh: une requete est deja en cours (attendez la fin de l'autre)" >&2
+  exit 3
+fi
+
+# Fingerprint de la réponse courante : on ne veut pas lire celle de la
+# précédente si la nôtre n'est jamais traitée.
+before=0
+[ -f "$RES" ] && before=$(cksum < "$RES")
+
+# Publication atomique : le DLL ne renomme `req.lua` que si le fichier est
+# entier. Sans ça, il pourrait exécuter un chunk à moitié écrit.
+printf '%s' "$SRC" > "$REQ.tmp" && mv -f "$REQ.tmp" "$REQ"
+
+echo "lua.sh: requete deposee — la fenetre doit etre ouverte (case cochee)." >&2
+
+for _ in $(seq 1 100); do
+  sleep 0.1
+  [ -f "$RES" ] || continue
+  now=$(cksum < "$RES")
+  [ "$now" != "$before" ] || continue
+  # Première ligne : #ok=<0|1>
+  head -1 "$RES"
+  tail -n +2 "$RES"
+  head -1 "$RES" | grep -q '#ok=1' && exit 0 || exit 1
+done
+
+echo "lua.sh: pas de reponse. La fenetre est-elle ouverte ?" >&2
+echo "        (onglet Lua Editor -> case 'Autoriser le shell')" >&2
+exit 4

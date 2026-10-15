@@ -29,7 +29,8 @@ enum Channel {
     kChannelConsole = 0,  // the Execute button
     kChannelTeleport = 1, // position probe + move
     kChannelStamina = 2, // install / restore the cost hook
-    kChannelCount = 3,
+    kChannelCli = 3,      // shell requests, only inside an armed window
+    kChannelCount = 4,
 };
 
 // Register the drain hooks with the Lua pump. Called once from specter::start().
@@ -56,6 +57,19 @@ void note(const char* text);
 
 // One-line, human-readable bridge status for the UI.
 const char* status();
+
+// The armed-shell window, in ticks. The checkbox in the Lua Editor tab opens a
+// short window; inside it, a file the shell writes is executed like any other
+// chunk. Outside it, the CLI path does not exist at all.
+//
+// Why it is not just a file the shell writes: a channel triggered by the
+// filesystem is a channel anyone who can write that file can use — no UI, no
+// intent, no trace of a person having asked. Arming stays a checkbox, so the
+// precondition is still a human action, and it expires on its own.
+//
+// Every execution is mirrored to the host log, armed or not. A window that runs
+// code nobody can account for would be worse than no window at all.
+void arm_cli(unsigned int ticks);
 
 // Draw the console's tab. Called every frame from inside the tab the registry
 // gave us, on the render thread.

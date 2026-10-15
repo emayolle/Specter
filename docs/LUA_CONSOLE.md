@@ -85,22 +85,50 @@ Chaque chunk exécuté est mirroré sur le **pipe de logs** (`/tmp/specter.pipe`
 donc `specter.log`) ligne par ligne sous la forme `[specter] lua| …`
 (200 lignes max), et affiché dans l'onglet **Lua Editor** de l'overlay.
 
-## Canal CLI (`tools/lua.sh`) — **retiré**
+## Canal shell (`tools/lua.sh`) — **armé, et fermé par défaut**
 
-Le canal n'existe plus. `tools/lua.sh` explique pourquoi et sort en erreur.
+```
+tools/lua.sh 'print(1+1)'      # chunk en argument
+tools/lua.sh -f script.lua     # depuis un fichier
+echo '…' | tools/lua.sh        # depuis stdin
+```
 
-Il déposait un chunk dans `/tmp/specter-lua/cmd.lua` et la pompe le relisait
-toutes les 200 ms. C'était un **canal d'exécution de code déclenché par le
-système de fichiers** : sans UI, sans authentification, et sans qu'aucune action
-humaine soit nécessaire. Tout processus capable d'écrire ce fichier y entrait.
+Protocole (fichiers uniquement, **dans `/tmp`** — jamais le dossier du jeu ni le
+prefixe Wine) :
 
-La seule voie d'exécution est maintenant le bouton **Execute** de l'onglet Lua
-Editor. Chaque exécution part dans un environnement construit pour elle — voir
-`docs/ARCHITECTURE.md` §4.
+1. le script publie le chunk de façon **atomique** (`req.tmp` → `req.lua`) ;
+2. la pompe le **réclame** de façon atomique (`req.lua` → `claimed.lua`), donc
+   elle ne lit jamais un fichier à moitié écrit, puis l'exécute et écrit
+   `res.txt` ;
+3. le script attend que `res.txt` change et affiche le résultat.
 
-> Le module ne s'active qu'**en jeu** : la pompe n'existe que si
-> `LuaManager.CommonUpdate` est appelée. Un chunk déposé avant l'entrée en jeu
-> reste en attente.
+### Pourquoi il y a une case à cocher
+
+Un canal d'exécution déclenché par le système de fichiers est un canal que
+**quiconque peut écrire dans ce dossier** peut utiliser : pas d'UI, pas
+d'intention, pas de trace d'une personne ayant demandé. C'est ce qui avait fait
+retirer le canal à l'origine.
+
+Le canal est donc revenu **derrière une précondition humaine** :
+
+- la case « Autoriser le shell » de l'onglet Lua Editor ouvre une fenêtre ;
+- la fenêtre dure ~10 s et **expire d'elle-même** ;
+- hors fenêtre, la DLL ne regarde **pas** le fichier — le chemin n'existe pas ;
+- à chaque injection, la fenêtre est fermée ;
+- chaque exécution est **journalisée** dans `specter.log` (`cli: requete
+  traitee`), armé ou non. Une fenêtre qui exécuterait du code dont personne ne
+  peut rendre compte serait pire que pas de fenêtre du tout.
+
+`tools/lua.sh` sort en erreur 4 avec le rappel si la fenêtre est fermée.
+
+### Identité des chunks
+
+Nos chunks portent le nom `@specter\client\LuaScripts\Core\Timer\SpecterManager.lua` :
+la forme d'un chemin de script du jeu, avec `specter` en premier segment. Ce
+n'est pas un chemin du jeu et ça ne prétend pas l'être — c'est un choix assumé.
+ Emprunter le chemin d'un vrai script serait du camouflage, et cela ne tiendrait
+pas face à un dumper : le **texte source** est le nôtre, et la fabrique a
+12 paramètres là où un script du jeu en a un.
 
 ## Notes pratique (entrée texte dans l'overlay)
 

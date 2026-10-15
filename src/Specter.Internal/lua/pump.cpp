@@ -507,7 +507,20 @@ void run(void* L, const char* code, int len, result_sink sink)
     std::memcpy(src + plen, code, static_cast<std::size_t>(len));
     std::memcpy(src + plen + len, kSuffix, static_cast<std::size_t>(slen));
 
-    constexpr char kChunkName[] = "@specter";
+    // The name our chunks carry. Lua's '@' prefix means "this is a file name",
+    // so errors read `specter\client\...\:12:` instead of `[string "..."]:12:`,
+    // and debug.getinfo reports a source rather than an opaque marker.
+    //
+    // It is shaped like the game's own script paths — drive, client, LuaScripts,
+    // Core — so that anything reading a chunk name sees the same KIND of string
+    // it sees all day. It is not one of the game's paths, and it does not claim
+    // to be: the first segment says specter, and it stays there whatever else we
+    // do. Borrowing a real script's path would be camouflage, and it would not
+    // survive contact with a dumper anyway: the source text is ours, and the
+    // factory's shape (12 parameters, vararg-free) is not any game script's.
+    // The first segment is the honest part, so it is the part we keep.
+    constexpr char kChunkName[] =
+        "@specter\\client\\LuaScripts\\Core\\Timer\\SpecterManager.lua";
     const bool suppressed =
         g_chunk_filter != nullptr && g_chunk_filter(kChunkName);
 
