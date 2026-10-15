@@ -45,6 +45,7 @@ using lua_rawseti_fn = void(__cdecl*)(lua_State*, int, int);
 using lua_pushlstring_fn = void(__cdecl*)(lua_State*, const char*, unsigned long long);
 using lua_tointeger_fn = long long(__cdecl*)(lua_State*, int);
 using lua_error_fn = int(__cdecl*)(lua_State*);
+using lua_getmetatable_fn = int(__cdecl*)(lua_State*, int);
 using lua_setfield_fn = void(__cdecl*)(lua_State*, int, const char*);
 using lua_pushcclosure_fn = void(__cdecl*)(lua_State*, int(__cdecl*)(lua_State*), int);
 using lua_pushstring_fn = void(__cdecl*)(lua_State*, const char*);
@@ -73,6 +74,7 @@ lua_rawseti_fn p_rawseti = nullptr;
 lua_pushlstring_fn p_pushlstring = nullptr;
 lua_tointeger_fn p_tointeger = nullptr;
 lua_error_fn p_error = nullptr;
+lua_getmetatable_fn p_getmetatable = nullptr;
 lua_setfield_fn p_setfield = nullptr;
 lua_pushcclosure_fn p_pushcclosure = nullptr;
 lua_pushstring_fn p_pushstring = nullptr;
@@ -171,6 +173,7 @@ bool resolve_xlua()
     bind(m, "lua_pushlstring", p_pushlstring);
     bind(m, "lua_tointeger", p_tointeger);
     bind(m, "lua_error", p_error);
+    bind(m, "lua_getmetatable", p_getmetatable);
     bind(m, "lua_setfield", p_setfield);
     bind(m, "lua_pushcclosure", p_pushcclosure);
     bind(m, "lua_pushstring", p_pushstring);
@@ -467,25 +470,39 @@ int raise(lua_State* L, const char* msg)
 // built from lua_setfield and lua_rawseti, both of which are unconditionally
 // raw -- no metamethod can intercept them, and no game-provided wrapper can
 // refuse the argument.
+// The only unconditionally raw primitive for an INTEGER key is lua_rawseti.
+// For a string key there is none -- and lua_setfield is not one either: in
+// LuaJIT it goes through luaV_settable, so it FIRES __newindex. Measured, with
+// a table whose __newindex raises: our "rawset" raised.
+//
+// So: lift the metatable off, do the assignment, put it back. Then nothing can
+// intercept it, whatever the interpreter thinks of lua_setfield.
+// Arguments are t=1, k=2, v=3; the stack is restored on every path.
 int specter_rawset(lua_State* L)
 {
     if (p_type(L, 1) != 5) {  // LUA_TTABLE
         return raise(L, "specter.rawset: first argument must be a table");
     }
-    if (p_type(L, 2) == 3) {  // integer key -> lua_rawseti
+    if (p_type(L, 2) == 3) {  // integer key: the primitive really is raw
         p_pushvalue(L, 1);
         p_pushvalue(L, 3);
         p_rawseti(L, -2, p_tointeger(L, 2));
         return 0;
     }
     std::size_t len = 0;
-    const char* name = p_tolstring(L, 2, &len);
-    if (!name) {
+    if (!p_tolstring(L, 2, &len)) {
         return raise(L, "specter.rawset: key must be a string or an integer");
     }
-    p_pushvalue(L, 1);   // copy of t   ... -2
-    p_pushvalue(L, 3);   // copy of v   ... -1
-    p_setfield(L, -2, name);
+    const int top = p_gettop(L);
+    p_getmetatable(L, 1);    // [.., mt]
+    p_pushvalue(L, -1);      // [.., mt, mt]  keep a copy to restore
+    p_setmetatable(L, 1);    // [.., mt]      t has no metatable now
+    p_pushvalue(L, 2);       // [.., mt, k]
+    p_pushvalue(L, 3);       // [.., mt, k, v]
+    p_settable(L, 1);        // [.., mt]      plain set, nothing to intercept
+    p_pushvalue(L, -1);      // [.., mt, mt]
+    p_setmetatable(L, 1);    // [.., mt]      restored
+    p_settop(L, top);
     return 0;
 }
 
@@ -499,14 +516,18 @@ int specter_rawget(lua_State* L)
         return 1;
     }
     std::size_t len = 0;
-    const char* name = p_tolstring(L, 2, &len);
-    if (!name) {
+    if (!p_tolstring(L, 2, &len)) {
         p_pushlstring(L, nullptr, 0);  // lua_pushnil is a macro in 5.1
         return 1;
     }
-    p_pushvalue(L, 1);    // copy of t   ... -2
-    p_pushstring(L, name);
-    p_gettable(L, -2);
+    const int top = p_gettop(L);
+    p_getmetatable(L, 1);    // [.., mt]
+    p_pushvalue(L, -1);
+    p_setmetatable(L, 1);    // [.., mt]
+    p_pushvalue(L, 2);
+    p_gettable(L, 1);        // [.., mt, value]
+    p_pushvalue(L, -2);      // [.., mt, value, mt]
+    p_settop(L, -2);         // [.., mt, value]  drop the saved metatable
     return 1;
 }
 
