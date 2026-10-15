@@ -339,9 +339,24 @@ Les liaisons vivent dans `specter`, qui vit dans notre environnement ancre.
 env :    0   |  specter :    0     -- sur les 236 globales du jeu
 ```
 
-Le balayage compare des **identites**. Lire un champ dans chaque table declenche
-les metamethodes du jeu : un test de fuite qui indexe n'est pas une lecture seule,
-et fait echouer `BddDataMgr.lua` de facon reproductible.
+Le balayage compare des **identites** — `v == env`, `v == specter` — et rien
+d'autre.
+
+Ce n'est pas une precaution theorique. Le jeu pose dans son `_G` des proxies a
+metamethode `__index` (`Core/Framework/BddDataMgr.lua:64`,
+`rawset(_G, "__BDD_addr2str", addr2str)`) :
+
+    local function addr2strIndex(tbl, key)
+        local val = getStrByAddr(key)   -- attend une ADRESSE, un nombre
+        return val
+    end
+    setmetatable(addr2str, { __index = addr2strIndex })
+
+Lire `v.var` sur cette table appelle `getStrByAddr("var")` et echoue —
+reproductiblement, avec le message exact. Le `_G` du jeu n'est donc pas une
+structure de donnees passive : le toucher avec une cle arbitraire, c'est appeler
+une fonction. Le meme fichier fait `AppProfiler.addIgnore(addr2strIndex)` : le
+jeu sait que ce chemin est sensible.
 
 ### Une installation par environnement
 
