@@ -32,8 +32,47 @@ int api_reset()
 
 }  // namespace
 
+// OFF. Do not flip this on without reading the note below.
+//
+// 2026-10-15, in game: with the layer ON, the sandbox lost most of the game's
+// globals. `specter` survived, `specter.version` survived, `table`/`tostring`/
+// `rawget`/`setmetatable`/`getfenv` survived -- and `_G`, `pairs`, `ipairs`,
+// `string`, `math` and `require` were all nil. `require` being gone takes the
+// stamina toggle with it.
+//
+// The survivors are exactly the ten library functions the sandbox preamble
+// captures as parameters, so those never needed the globals table. Everything
+// else resolved through the env's __index and found nothing. That says the
+// globals table became unreachable or empty from the sandbox's side; it does NOT
+// say why.
+//
+// What was RULED OUT, both measured in a second rather than argued:
+//
+//   - the registration itself. Run offline with real LuaJIT, the identical
+//     chain leaves pairs/string/math/require/_G intact AND specter.var works.
+//   - the shim. The offline shim test crashed in luaL_newstate(), before our
+//     code runs: defining lua_gettop globally INTERPOSES the library's symbol,
+//     so p_lua_gettop points at our own shim and recurses forever. The DLL does
+//     not have that defect -- it resolves through GetProcAddress on xlua.dll,
+//     where the name finds the real function -- but it means the offline harness
+//     cannot be the oracle for this class of question.
+//   - lua_Debug. 120 bytes in the vendored headers and in the system ones.
+//
+// What was NOT ruled out, and is where to look: whatever LuaBridge calls while
+// registering that touches the globals table, or the stack, through our shim --
+// luaL_unref and the backtrace helpers (lua_getstack/lua_getinfo) are the
+// obvious suspects, because the first frees registry references and the other
+// two take a lua_Debug* from the game's LuaJIT.
+//
+// The switch exists so the answer can be found with a rebuild instead of a
+// bisect over launches.
+constexpr bool kEnableBinding = false;
+
 bool install(lua_State* L, int specter_idx)
 {
+    if (!kEnableBinding) {
+        return false;
+    }
     // REFUSE FIRST. Registering with unbound pointers means every binding is a
     // trap waiting for a call, and the failure would be a crash in the game with
     // no log line pointing here.
