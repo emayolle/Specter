@@ -145,25 +145,87 @@ Les deux derniers enregistrent des **hooks d'état permanents** qui s'exécutent
 
 ## 6. Ce que le build écrit dans l'état Lua du jeu
 
-Inventaire exact, tout trouvé dans **notre** code :
+Réécrit le 15 octobre : l'ancienne version de cette section décrivait un build
+qui n'existe plus. Inventaire exact du build courant, tout trouvé dans **notre**
+code :
 
 | Écriture | Emplacement | Nécessaire ? |
 |---|---|---|
-| `_G.SPECTER` (global foreign, via raw) | `lua_console.cpp` `raw_setglobal(L, "SPECTER")` | **non** — confort de dev |
-| `registry["__specter_ns"]` | `lua_console.cpp` `install_layer()` | **non** — confort de dev |
-| `rawset(_G, "SPECTER", M)`, `rawset(_G, "__specterLayer", 1)` | `specter_init.lua` | **non** |
-| `lua_atpanic` **remplacé** | `lua_console.cpp` `install_layer()` | **non** — diagnostique |
-| flags/options écrits dans `SPECTER` / `SPECTER.opts` | `lua/native.cpp` (`lua_rawset`) | oui, si les features existent |
+| `registry[<clé dérivée>] = <env>` | `lua/pump.cpp` `run()` | **oui** — c'est l'ancre GC du bac à sable |
+| `<env>[0x53505254] = <store>` | `lua/pump.cpp` `build_specter()` | oui — le store doit être celui que l'env referme |
+| `ActorCombatAttribute.changeStamina` (**classe**, pas instance) | chunk `kEnable` | oui — la stamina |
+| rien du tout dans `_G` | — | — |
 
-À l'inverse, l'ancienne version ne faisait **que** :
-- exécuter des chunks en **lecture** sur les globals ;
-- patcher un **objet du jeu** (`aca.changeStamina` sur l'instance du joueur).
+Mesuré en jeu le 15 octobre :
 
-Elle ne touchait **ni aux globals, ni au registre, ni au panic handler**.
+```
+E1  un global du jeu pointe sur nous ?        NON
+E2  un global du jeu voit notre store ?       NON
+E3  le registre contient notre env ?          OUI — clé 1436213885
+E4  notre env est un global ?                 false
+```
 
----
+### Ce que ça coûte, en une phrase
+
+**Une promenade dans le registre suffit à nous trouver.** Six lignes de Lua :
+
+```lua
+local reg = debug.getregistry()
+for k, v in pairs(reg) do
+  if type(v) == 'table' and rawget(v, '__global') then
+    -- c'est notre bac à sable
+  end
+end
+```
+
+La clé est un entier **dérivé de l'état**, pas une constante nommée : on ne signe
+pas notre travail. Mais un entier dans un registre se remarque aussi
+aisément qu'un nom, et le registre a 13 277 entrées ici — dont 497 chaînes du
+genre `FunPlus.WorldX.*` : on s'y perdrait presque.
+
+### Ce qu'on ne fait pas, délibérément
+
+Nova (GMod) ancre son `genv` de la même façon, et **le cache** : il installe un
+hook sur `debug.getregistry` (`EnsureHookAPI`) pour que la promenade ci-dessus ne
+trouve rien.
+
+On ne fait pas ça. Cacher sa présence d'une inspection est de la **dissimulation**,
+pas de l'isolation — et ça ne servirait de toute façon qu'à Lua : le module mappé,
+les sept crochets `user32` et le détour `dxgi` ne changent pas. Un hook posé sur
+une bibliothèque du jeu serait en outre **plus** visible que la table qu'on cherche
+à masquer.
+
+Si ce document sert à décider quoi que ce soit, la décision à prendre n'est donc
+pas « masquer mieux » mais « est-ce que l'ancre vaut ce qu'elle coûte ».
+
+### Le patch de stamina est, lui, bien plus lisible
+
+`ActorCombatAttribute.changeStamina` est remplacé sur la **classe**. Tout script
+qui fait :
+
+```lua
+local e = pg.me
+print(getmetatable(e.actorCombatAttribute).changeStamina == e.actorCombatAttribute.changeStamina)
+```
+
+voit `false` et sait qu'il y a un patch. C'est sans doute l'empreinte Lua la plus
+directe du build — et elle est **nécessaire** : sans patch, pas de stamina infinie.
 
 ## 7. Hypothèses classées
+
+**H0 — Notre propre ancre dans le registre est un vecteur, et nous l'avons
+ajoutée nous-mêmes.** *(nouveau, 15 octobre)*
+*Preuves :* mesuré en jeu — `debug.getregistry()` rend notre environnement, clé
+1436213885. Six lignes de Lua suffisent (§6). La clé est un entier dérivé de
+l'état, donc non signé, mais un entier foreign dans 13 277 entrées reste
+remarquable.
+*Statut :* **accepté en connaissance de cause.** L'ancre est ce qui fait tenir
+une variable entre deux Execute ; sans elle, le store meurt à chaque run.
+L'alternative — un store sur fichier — donne la même persistance **sans rien
+écrire dans l'état Lua**. Elle n'a pas été retenue parce que les variables
+wanted were Lua variables.
+*Ce qui a été refusé :* hooker `debug.getregistry` pour la cacher, comme fait
+Nova. C'est de la dissimulation, et ça ne change rien au reste de l'empreinte.
 
 **H1 — Le vecteur est l'écriture dans l'état Lua du jeu.**
 *Preuves :* delta fonctionnel isolé côté Lua (§5) ; O1 vs O2 ; O3 (aucune
