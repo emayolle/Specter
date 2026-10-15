@@ -561,9 +561,14 @@ void build_specter(lua_State* L, int reg)
     // over, or `specter.store` would name a table nothing actually uses. So it
     // hangs off the environment at an integer key, and only the environment is
     // anchored in the registry.
+    // Did we just create the environment, or is it the one a previous Execute
+    // anchored? Decided HERE, once, and the binding layer keys off it.
+    bool env_is_new = true;
+
     if (reg != 0) {
         p_rawgeti(L, reg, env_key(L));     // [env]
         if (p_type(L, -1) == 5) {
+            env_is_new = false;
             p_rawgeti(L, -1, store_key());  // [env, store | nil]
             if (p_type(L, -1) != 5) {
                 // Drop the nil BEFORE creating the new store. It used to stay
@@ -631,7 +636,21 @@ void build_specter(lua_State* L, int reg)
     // specter. Passing -2 registered every binding into the store, where Lua
     // never looks for them — `specter.reset` was nil while `specter.store.reset`
     // was a function. install() now verifies the target for itself.
-    bind::install(L, -1);
+    //
+    // ONLY WHEN THE ENVIRONMENT IS NEW.
+    //
+    // The preamble does `rawset(__env,'specter',__sp)` inside `if __env==nil`,
+    // so on a later Execute the environment keeps the specter table from the
+    // FIRST one — while this specter is a brand new table nobody will ever look
+    // at. Registering into it is work thrown away, and it is what made the game
+    // die on the second Execute: the second registration ran while Lua was about
+    // to use the first table's metatable.
+    //
+    // One registration per environment. The bindings live in the anchored table,
+    // which is exactly the thing persistence relies on.
+    if (env_is_new) {
+        bind::install(L, -1);
+    }
 }
 
 
