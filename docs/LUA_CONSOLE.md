@@ -61,9 +61,75 @@ Le chunk de l'utilisateur est enveloppé puis compilé/PCall afin que :
   restauré, même en cas d'erreur) ;
 - les erreurs de compilation **et** d'exécution soient attrapées et rapportées ;
 - les valeurs de `return` du chunk soient ajoutées à la sortie ;
-- le wrapper renvoie `(texte, ok)` — deux résultats lus par le C.
+- le wrapper renvoie `(texte, ok, étape, env)` — quatre résultats lus par le C.
 
-Aucun bac à sable : une boucle infinie gèle le jeu. C'est un outil de dev.
+Une boucle infinie gèle toujours le jeu : il n'y a pas de garde-fou temporel.
+C'est un outil de dev, et le bac à sable ci-dessous est une isolation
+**d'espace de noms**, pas de temps.
+
+### Le bac à sable, et ce qu'il a été mesuré de lui
+
+L'environnement (`__newindex` / `__index`) est construit **en Lua**, dans la
+fabrique, et ancré dans le registre sous une clé dérivée du `lua_State*`.
+L'environnement est donc **réutilisé d'un Execute à l'autre** : c'est ce qui fait
+survivre le store.
+
+Trois règles, mesurées en jeu :
+
+| écriture | destination |
+|---|---|
+| nom **déjà présent** dans le `_G` du jeu | le **vrai** global du jeu |
+| nom **neuf** | notre store, invisible depuis `_G` |
+| aucune | le nom n'est écrit nulle part |
+
+```
+N1 nom neuf      store : A  | _G : nil
+N2 nom existant  _G   : B  | store : nil
+N3 restaure      _G   : Lua 5.1
+E1 _G contient env/store/specter : 0 0 0
+E2 souvenir  store : 777  | _G : nil
+```
+
+`E1` est le test de fuite : on balaie les ~236 globals du jeu et on cherche si
+l'un d'eux **est** notre env, notre store, ou la table `specter`. Zéro.
+
+### Pourquoi il n'y a pas de `specter.rawset` / `specter.rawget`
+
+Il y en a eu, en C. Ils ont été retirés parce qu'ils tuaient le jeu, et la
+question revenue depuis est : est-ce qu'on les réimporte ?
+
+**Non, et c'est mesuré.** Ce build ne livre pas le `rawset` standard : celui de
+`_G` est un wrapper (`Common/Functions.lua:84`) qui appelle `raw_rawset`. Il
+refuse une table en **argument 1** :
+
+```
+bad argument #1 to 'raw_rawset' (table expected, got function)
+```
+
+C'est ce qui a forcé la porte de stamina à vivre sur la classe `AC` et pas sur
+la fonction enveloppée. Mais l'**argument 3** — la valeur — accepte n'importe
+quoi, une fonction comprise :
+
+```
+specter.store.f1 = function() return 42 end   -> function
+f2 = function() return 43 end                 -> function
+```
+
+Il n'y a donc **aucun trou** : le `__newindex` appelle `rawset(__store, k, v)`
+avec une table en argument 1, et cela marche. `specter.rawget` non plus n'apporte
+rien : le store n'a pas de métatable, donc `specter.store.absent` est déjà `nil`
+sans rien chercher dans `_G`.
+
+Deux classes de crash distinctes ont coexisté ici, et il ne faut pas les
+confondre :
+
+1. `lua_rawseti` sur un `nil` dans `build_specter` — un index écrit à la main,
+   `-3` qui tombait sur le `nil` au lieu de l'env ;
+2. un `p_settop` de fin de fonction **sauté** par le `longjmp` de LuaJIT quand
+   `__newindex` levait — la pile Lua restait sale au milieu du traitement.
+
+La deuxième est celle qui a tué les fonctions C. La première est celle qui tuait
+le jeu au **deuxième** Execute de chaque session.
 
 ---
 
@@ -85,7 +151,7 @@ Chaque chunk exécuté est mirroré sur le **pipe de logs** (`/tmp/specter.pipe`
 donc `specter.log`) ligne par ligne sous la forme `[specter] lua| …`
 (200 lignes max), et affiché dans l'onglet **Lua Editor** de l'overlay.
 
-## Canal shell (`tools/lua.sh`) — **armé, et fermé par défaut**
+## Canal shell (`tools/lua.sh`) — **ouvert par défaut**, la case le ferme
 
 ```
 tools/lua.sh 'print(1+1)'      # chunk en argument

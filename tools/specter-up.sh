@@ -72,8 +72,9 @@ python3 "$HOSTCH_CLIENT" --pid "$PID" --token "$TOKEN" \
 # 4. suivre le tap au premier plan (Ctrl-C quitte le tap, pas le jeu)
 echo
 echo "== tap actif — Ctrl-C pour quitter (le jeu continue) =="
-echo "   Lua : onglet 'Lua Editor' de l'overlay -> bouton Execute."
-echo "         (le canal CLI a ete retire : c'etait une execution de code"
-echo "          declenchee par un fichier, sans UI ni authentification)"
+echo "   Lua : deux chemins, tous les deux dans l'overlay ou dans tools/lua.sh."
+echo "         - onglet 'Lua Editor' -> bouton Execute"
+echo "         - tools/lua.sh       -> canal OUVERT par defaut (case a decocher"
+echo "           dans l'overlay pour le fermer). Toute execution est dans le log."
 trap - EXIT
 wait "$TAP_PID"
