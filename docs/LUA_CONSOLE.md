@@ -286,3 +286,83 @@ print(getmetatable(e.actorCombatAttribute).changeStamina
 ```
 
 `false` = le hook de classe est en place. `true` = il ne l'est pas.
+
+---
+
+## La couche de liaison — `specter.var.*`
+
+Pont C++ vers Lua, construit sur LuaBridge3 (commit `eaafdf00`, forme amalgamee
+officielle). Ce qui suit est **mesure en jeu**, pas deduit.
+
+```lua
+specter.var.counter = 42      -- ecrit dans la variable C++
+print(specter.var.counter)    -- 42
+specter.var.x = 9
+specter.reset()
+```
+
+Toutes les proprietes sont en **lecture et ecriture**. Ce n'est pas un defaut :
+la forme lecture seule fait lever « attempt to write a read-only field », et cette
+levee se produit dans le metamethode C++ de LuaBridge. LuaJIT implemente une
+erreur Lua comme un longjmp hors du cadre C : **aucun destructeur C++ ne tourne**,
+LuaBridge abandonne sa comptabilite de pile, et le processus meurt. Mesure : le
+jeu a disparu sur cette seule affectation, journal arrete sans une ligne.
+
+### Resolution, ou refus
+
+`lua/capi.cpp` resout **46 symboles** de l'API C Lua depuis `xlua.dll`. Si un seul
+manque, `resolve()` rend faux, journalise le nom de chacun, et
+`bind::install()` n'enregistre rien. Enregistrer contre des pointeurs nuls
+construirait des liaisons qui piegent a l'appel.
+
+`lua/capi_shim.cpp` **definit** les fonctions globales que LuaBridge appelle,
+chacune renvoyant vers son pointeur. La redirection par `#define` ne marche pas :
+LuaBridge fait `using ::luaL_unref;` et une using-declaration ne peut pas nommer
+une variable. Ecrire les 46 signatures a la main n'est pas le risque que c'a
+l'airs : chacune est une redeclaration de `lua.h`, donc une signature fausse est
+une erreur de compilation. Le compilateur en a attrape onze d'un coup, dont deux
+inversees (`lua_setmetatable` renvoie `int`, `luaL_unref` renvoie `void` et prend
+trois arguments ; en 5.1 `lua_gettable`/`lua_setfield` renvoient `void`).
+
+**Un oracle hors-jeu du shim est impossible.** LuaBridge appelle l'API par nom.
+Dans une DLL, `xlua.dll` resout ses propres appels dans sa propre table d'imports ;
+dans une liaison statique, nos thunks s'interposeraient partout. Le jeu est le
+seul banc d'essai.
+
+### Isolation
+
+`bind::install()` utilise `getNamespaceFromStack`, **jamais**
+`getGlobalNamespace` — le seul appel qui mettrait la table dans le `_G` du jeu.
+Les liaisons vivent dans `specter`, qui vit dans notre environnement ancre.
+
+```
+env :    0   |  specter :    0     -- sur les 236 globales du jeu
+```
+
+Le balayage compare des **identites**. Lire un champ dans chaque table declenche
+les metamethodes du jeu : un test de fuite qui indexe n'est pas une lecture seule,
+et fait echouer `BddDataMgr.lua` de facon reproductible.
+
+### Une installation par environnement
+
+Le preamble fait `rawset(__env,'specter',__sp)` **dans** `if __env==nil`. Aux
+Executes suivants l'environnement est donc celui d'avant : `specter` reste la
+table du premier Execute, et une table neuve creee a chaque fois ne sert a rien.
+Enregistrer deux fois faisait mourir le jeu au deuxieme Execute.
+
+### Pièges rencontres, tous documentes dans le code
+
+1. **`extern "C"` obligatoire.** `luaconf.h` ne le declare pas : compile en C++,
+   chaque appel sort en `_Z10lua_concatP9lua_Statei` et **rien ne resout** contre
+   les exports C de `xlua.dll`. Aucun avertissement ; l'echec est a l'execution.
+2. **L'index de table avant la poussee de la cle.** `lua_getfield`/`lua_setfield`
+   evaluent `index2addr(L, idx)` **avant** de pousser la cle. Pousser d'abord
+   fait glisser tout index negatif d'un cran : lecture dans la mauvaise table,
+   ecriture une table trop haut. C'est ce qui faisait disparaitre `_G`, `pairs`,
+   `string`, `math` et `require` du jeu — les seules survivantes etaient les dix
+   fonctions que le preamble capture en parametres, qui ne passent jamais par ce
+   chemin.
+3. **`-1`, pas `-2`.** La pile fait `[chunk, store, specter]` : `-2` est le store.
+   L'enregistrement paraissait reussi et la pile se reequilibrait ; seul le
+   symptome etait que Lua ne trouvait rien. `install()` verifie desormais que la
+   cible porte `version`.
