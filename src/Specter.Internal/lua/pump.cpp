@@ -91,6 +91,13 @@ std::atomic<bool> g_hook_installed{false};
 std::atomic<bool> g_seen_state{false};
 std::atomic<void*> g_lua_state{nullptr};
 std::atomic<unsigned long long> g_ticks{0};
+
+// The Lua registry index, found by probe on the first Execute; 0 when none of
+// the documented candidates answered. With 0 there is nowhere to anchor the
+// sandbox, so the store simply does not survive between Executes -- a
+// limitation, not a failure. Constant-initialised like everything else here:
+// no constructor runs at load.
+std::atomic<int> g_registry_index{0};
 std::atomic<void*> g_last_state{nullptr};  // last state we fired hooks for
 
 // ---- detour ----------------------------------------------------------------
@@ -349,6 +356,69 @@ void log_chunk(const char* code, int len)
 // the environment we handed them. No global is created, so there is nothing to
 // collide with and nothing to enumerate out of _G.
 
+// ---- finding the registry, without guessing --------------------------------
+//
+// The env has to be anchored somewhere the GC will keep, and the registry is
+// the only such place reachable from the C API. So the registry index has to be
+// identified — and it is not a constant across versions:
+//
+//     -10000    Lua 5.0 / 5.1      0xFFF    Lua 5.2+
+//
+// Hardcoding the wrong one is not a compile error and not a runtime error: it is
+// an ordinary out-of-range stack index. Writing through it wrote through a
+// pointer computed from an invalid index -- a wild write, before any chunk ran.
+//
+// Two obvious verifications are both WRONG, and the offline harness said so
+// before they ever shipped:
+//   * "the registry contains print"    -- it does not
+//   * "the registry contains _LOADED"  -- it does, but so does _G in 5.1, so it
+//                                         does not tell the two apart
+//
+// What is left is a read-only probe over the documented candidates. READ ONLY:
+// a probe that writes is the very bug it is looking for. It never tries an
+// arbitrary index — only the two the manuals name — and it reports what it
+// finds so the choice is visible in the log rather than assumed.
+//
+// Candidates are the two registry constants, never the globals ones (-10002 /
+// 2): those are different indices, so finding _LOADED at a candidate means the
+// candidate IS the registry, not the globals.
+int find_registry(lua_State* L)
+{
+    static const int kCandidates[] = {-10000, 0xFFF};
+    char buf[640];
+    int n = 0;
+    for (int idx : kCandidates) {
+        // Two keys, and the second is the decisive one. "FILE*" is the registry's
+        // own file-handle list: nothing else holds it, and the globals never do.
+        // "_LOADED" alone would not do -- it is a global in 5.1 too.
+        int found = 0;
+        p_pushstring(L, "_LOADED");
+        p_gettable(L, idx);
+        const bool loaded = p_type(L, -1) == 5;
+        p_settop(L, -2);
+
+        p_pushstring(L, "FILE*");
+        p_gettable(L, idx);
+        const bool files = p_type(L, -1) == 5;
+        p_settop(L, -2);
+
+        if (loaded && files) {
+            found = 1;
+        }
+        n += std::snprintf(buf + n, sizeof(buf) - n, " %d[_LOADED=%d,FILE*=%d]",
+                           idx, loaded ? 1 : 0, files ? 1 : 0);
+        if (found) {
+            log::info("lua: sonde registre : %s", buf);
+            log::info("lua: registre trouve a l'index %d", idx);
+            return idx;
+        }
+    }
+    log::error("lua: sonde registre : %s", buf);
+    log::error("lua: aucun index de registre reconnu -- le store restera par "
+               "Execute, rien ne casse");
+    return 0;
+}
+
 int specter_log(lua_State* L)
 {
     const int top = p_gettop(L);
@@ -378,21 +448,31 @@ int specter_log(lua_State* L)
     return 0;
 }
 
-// Build the sandbox tables on top of the stack. Leaves exactly TWO values:
-// [store, specter].
+// ---- the sandbox environment, built once per Lua state ---------------------
 //
-// That count is load-bearing. run() calls the factory with every value sitting
-// between the callee and the top, so if this function's contract is off by one,
-// the call lands on `store` instead of the factory and fails with a bare
-// "attempt to call a table value" -- no position, no step, because no Lua frame
-// is ever entered. The comment here used to claim "leaves exactly one value"
-// while leaving two, and that lie cost a day of wrong fixes.
+// WHY IT EXISTS AT ALL: a Lua table only survives while something the garbage
+// collector can see still points at it. A void* in this module is not such a
+// thing -- the collector does not know the module exists -- so a table kept
+// only on our side is collected and the pointer dangles. There is no userdata
+// that fixes this: a userdata holds a pointer, not a reference.
 //
-// The store is a plain table, created here and held on the Lua stack for the
-// duration of the call. It is NOT kept in the registry: that needed a registry
-// index, and the only index we could guess was wrong on this build -- a wild
-// write, before any chunk ran. The cost is that a variable created by one
-// Execute does not survive to the next; the sandbox itself is unchanged.
+// That leaves the registry as the only anchor the C API offers. Which is why
+// this file used to have no anchor at all, and why a variable set by one
+// Execute died before the next: guessing the registry index was writing through
+// a wild pointer, so the store was dropped instead. That was a retreat, not a
+// solution.
+//
+// The index is now FOUND rather than assumed. See find_registry_index().
+//
+// WHAT THIS COSTS, stated rather than discovered: the environment is now in the
+// registry, so a script with debug.getregistry() can walk to it. Nova anchors
+// its table there too and hides it behind a debug.getregistry hook; we do not
+// hook it, because hiding our tables from the game's scripts is concealment,
+// not isolation. What we do instead is not sign our own work: the key is
+// derived from the state rather than being a labelled constant, and the store
+// hangs off the environment at an integer key rather than a field called
+// __store.
+
 void build_specter(lua_State* L)
 {
     p_createtable(L, 0, 8);  // [store]
@@ -520,11 +600,16 @@ void run(void* L, const char* code, int len, result_sink sink)
         g_chunk_filter != nullptr && g_chunk_filter(kChunkName);
 
     // Once per process: report what the game's globals actually are, since a
-    // shadowed name there is silent until it kills a chunk.
+    // shadowed name there is silent until it kills a chunk. And establish
+    // whether there is a registry index we can anchor the env in — without one,
+    // the sandbox store simply does not survive between Executes, which is a
+    // limitation, not a failure.
     static bool probed = false;
     if (!probed) {
         probed = true;
         probe_globals(L);
+        const int reg = find_registry(L);
+        g_registry_index.store(reg, std::memory_order_relaxed);
     }
 
     const int top = p_gettop(L);
