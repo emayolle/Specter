@@ -166,31 +166,47 @@ bool resolve_xlua()
 
 constexpr int kMaxCode = 32 * 1024;
 
-// Wrap the chunk so that:
-//   * `print` is captured line by line (tab-joined),
-//   * errors are caught and reported,
-//   * the chunk's own return values are appended,
-//   * the wrapper returns (text, ok) so the C side reads exactly two results.
+// The chunk is a FACTORY: it returns a closure, and C then calls that closure
+// with (real_G, specter).
+//
+// Why not lua_setfenv from C? A Lua 5.1 main chunk is not a vararg function, so
+// the tables cannot arrive through `...`; the only C route is setfenv on the
+// loaded function, and that call refuses the function on this build.
+//
+// And why not setfenv(0, env), the idiomatic 5.1 form? Because LuaJIT does not
+// implement it. Measured on this interpreter: setfenv(0, t) leaves the
+// environment untouched (the read comes back nil), while setfenv(f, t) works.
+// So the factory names itself and passes that name.
+//
+//   read  k      -> our store first, then the game's real _G  (full access)
+//   write k = v  -> the game already owns k, write the GAME's global
+//   write k = v  -> otherwise keep it in our store
 //
 // `print` is captured through a LOCAL rather than by overwriting the global, so
-// there is nothing to restore afterwards and the game's print is never disturbed
-// even for the duration of the chunk.
-//
-// The sandbox environment is NOT built here: a Lua 5.1 chunk is not a vararg
-// function, so it cannot receive anything through `...`. build_env() attaches it
-// from C with lua_setfenv, before the pcall.
+// nothing has to be restored and the game's print is never disturbed.
 constexpr char kPrefix[] =
-    "local __o={};\n"
+    "local __f;\n"
+    "__f=function(__g,__sp)\n"
+    "local __store=__sp.__store\n"
+    "local __o={}\n"
     "local print=function(...)local t={}for i=1,select('#',...)do\n"
     "  t[#t+1]=tostring((select(i,...)))end\n"
     "  __o[#__o+1]=table.concat(t,'\\t')end\n"
+    "local __env=setmetatable({},{\n"
+    "  __index=function(_,k)local v=rawget(__store,k)\n"
+    "    if v~=nil then return v end return __g[k] end,\n"
+    "  __newindex=function(_,k,v)if rawget(__g,k)~=nil then\n"
+    "    rawset(__g,k,v) else rawset(__store,k,v) end end})\n"
+    "rawset(__env,'specter',__sp)\n"
+    "setfenv(__f,__env)\n"
     "local __r={pcall(function()\n";
 
 constexpr char kSuffix[] =
     "\nend)};local __ok=table.remove(__r,1);"
     "if not __ok then __o[#__o+1]='ERROR: '..tostring(__r[1])else if #__r>0 "
     "then local t={}for i=1,#__r do t[i]=tostring(__r[i])end __o[#__o+1]="
-    "table.concat(t,'\\t')end end;return table.concat(__o,'\\n'),__ok";
+    "table.concat(t,'\\t')end end;return table.concat(__o,'\\n'),__ok\n"
+    "end\nreturn __f\n";
 // Registry key for the sandbox store: an anonymous integer slot in the game's
 // registry. Not an entry in _G, and not a name anybody can look up by walking
 // the globals. Ours, under a key we chose, holding only our scratch variables.
@@ -243,102 +259,6 @@ int specter_log(lua_State* L)
     buf[n] = '\0';
     log::info("specter| %s", buf);
     return 0;
-}
-
-// __index for the sandbox: our store first, then the game's globals.
-//
-// This has to be a function rather than a plain `__index = real_G`. With a plain
-// table, a name that the sandbox created is invisible on the next read, because
-// __index is only consulted for names the environment does not carry — so
-// `x = 1` followed by `print(x)` would print nil.
-//
-// Like __newindex it fetches both tables from the registry rather than capturing
-// them as upvalues, to avoid depending on lua_upvalueindex.
-int sandbox_index(lua_State* L)
-{
-    const int top = p_gettop(L);  // [t=1, k=2]
-
-    p_rawgeti(L, LUA_REGISTRYINDEX, kStoreKey);  // [t, k, store]
-    p_pushvalue(L, 2);                          // [t, k, store, k]
-    p_gettable(L, -2);                          // [t, k, store[k]]
-    if (p_type(L, -1) != 0) {                   // the store had it
-        return 1;
-    }
-    p_settop(L, top);
-
-    // Fall through to the game's real globals.
-    p_rawgeti(L, LUA_REGISTRYINDEX, 2);  // [t, k, realG]
-    p_pushvalue(L, 2);                   // [t, k, realG, k]
-    p_gettable(L, -2);                   // [t, k, realG[k]]
-    p_settop(L, top + 1);
-    return 1;
-}
-
-// __newindex for the sandbox: where a write to a global actually lands.
-//
-//   the game already owns the name  -> write the GAME's global
-//   otherwise                      -> keep it in our store
-//
-// Both tables are fetched from the registry rather than captured as upvalues:
-// a closure would need lua_upvalueindex, which is a macro whose value depends on
-// the LUA_GLOBALSINDEX convention, and that is exactly the ambiguity this file
-// is working around.
-// Defined below; build_env needs it and build_specter needs build_env's sibling.
-void build_specter(lua_State* L);
-
-int sandbox_write(lua_State* L)
-{
-    const int top = p_gettop(L);  // [t=1, k=2, v=3]
-
-    // Does the game own this name?
-    p_rawgeti(L, LUA_REGISTRYINDEX, 2);  // [.., realG]
-    p_pushvalue(L, 2);                   // [.., realG, k]
-    p_gettable(L, -2);                   // [.., realG, realG[k]]
-
-    const bool game_owns_it = p_type(L, -1) != 0;
-    p_settop(L, top);
-
-    // realG[k] = v, or store[k] = v.
-    if (game_owns_it) {
-        p_rawgeti(L, LUA_REGISTRYINDEX, 2);
-    } else {
-        p_rawgeti(L, LUA_REGISTRYINDEX, kStoreKey);
-    }
-    // [t, k, v, target]
-    p_pushvalue(L, 3);  // v
-    p_pushvalue(L, 2);  // k
-    p_settable(L, -3);  // target[k] = v, pops k and v
-    p_settop(L, top);
-    return 0;
-}
-
-// Build the sandbox environment on top of the stack. Leaves exactly one value:
-// the env, whose metatable is { __index = real_G, __newindex = sandbox_write }.
-//
-// A Lua chunk is NOT a vararg function in 5.1, so the preamble cannot receive
-// these tables through `...`. They are attached here instead, which is also what
-// nova does: build the tables on the stack, then lua_setfenv on the chunk.
-//
-// NOTE the ordering: `specter` is filled in BEFORE the metatable goes on,
-// because with a metatable in place a plain setfield would trigger __newindex
-// and send our own namespace into the game's globals.
-void build_env(lua_State* L)
-{
-    build_specter(L);  // [specter]
-
-    p_createtable(L, 0, 2);  // [specter, env]
-    p_pushvalue(L, -2);
-    p_setfield(L, -2, "specter");  // env.specter = specter  -> [specter, env]
-
-    p_createtable(L, 0, 2);  // [specter, env, mt]
-    p_pushcclosure(L, &sandbox_index, 0);
-    p_setfield(L, -2, "__index");       // [specter, env, mt]
-    p_pushcclosure(L, &sandbox_write, 0);
-    p_setfield(L, -2, "__newindex");    // [specter, env, mt]
-
-    p_pushvalue(L, -2);  // [specter, env, mt, env]
-    p_setmetatable(L, -2);  // setmetatable(env, mt), pops mt -> [specter, env]
-    p_settop(L, -2);        // drop the specter copy -> [env]
 }
 
 // Build the specter table on top of the stack. Leaves exactly one value.
@@ -466,28 +386,37 @@ void run(void* L, const char* code, int len, result_sink sink)
         p_settop(L, top);
         return;
     }
-    // Attach the sandbox environment to the chunk before running it. A Lua 5.1
-    // chunk cannot take arguments, so this has to happen from here.
-    if (!suppressed) {
-        build_env(L);                        // [chunk, env]
-        if (p_setfenv(L, -2) == 0) {         // pops env
-            sink(false, "chunk is not a Lua function", 28);
-            p_settop(L, top);
-            return;
-        }
+    if (suppressed) {
+        sink(true, "", 0);
+        p_settop(L, top);
+        return;
     }
-    if (!suppressed && p_pcall(L, 0, 2, 0) != 0) {
+
+    // Call 1: the chunk returns its factory closure.
+    if (p_pcall(L, 0, 1, 0) != 0) {
+        std::size_t n = 0;
+        const char* e = p_tolstring(L, -1, &n);
+        sink(false, e ? e : "(lua load error)", static_cast<int>(n));
+        p_settop(L, top);
+        return;
+    }
+    if (p_type(L, -1) != 6) {  // LUA_TFUNCTION
+        sink(false, "chunk did not return a function", 29);
+        p_settop(L, top);
+        return;
+    }
+
+    // Call 2: hand it the game's real globals and our specter table.
+    p_rawgeti(L, LUA_REGISTRYINDEX, 2);  // real _G
+    build_specter(L);                     // specter
+    if (p_pcall(L, 2, 2, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         sink(false, e ? e : "(lua runtime error)", static_cast<int>(n));
         p_settop(L, top);
         return;
     }
-    if (suppressed) {
-        sink(true, "", 0);
-        p_settop(L, top);
-        return;
-    }
+
     // Stack: [text, ok]
     std::size_t n = 0;
     const char* text = p_tolstring(L, -2, &n);
