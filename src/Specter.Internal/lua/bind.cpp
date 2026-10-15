@@ -22,7 +22,11 @@ namespace {
 bool g_enabled_flag = false;
 int g_counter = 0;
 float g_speed = 0.0f;
-double g_position[3] = {0.0, 0.0, 0.0};
+// Three scalars, not a double[3]: LuaBridge's Stack<double[3]> has no writable
+// form, and `specter.var.x` says more than `specter.var.position[1]` anyway.
+double g_x = 0.0;
+double g_y = 0.0;
+double g_z = 0.0;
 
 int api_reset()
 {
@@ -136,15 +140,33 @@ bool install(lua_State* L, int specter_idx)
     //
     //     specter.var.counter = 7
     //     specter.reset()
+    // EVERY property is read AND write, and that is a decision, not a default.
+    //
+    // The two-argument form (getter only) makes Lua raise "attempt to write a
+    // read-only field" when the script assigns. That raise happens INSIDE
+    // LuaBridge's C++ __newindex metamethod, and LuaJIT implements a Lua error as
+    // a longjmp out of the C frame: no C++ destructor runs, LuaBridge abandons
+    // its stack bookkeeping mid-way, and the process dies. Measured on
+    // 2026-10-15 — the game was gone on that one assignment, and the log stopped
+    // with no line at all.
+    //
+    // This is the same longjmp hazard that killed specter.rawset/rawget before
+    // the shim existed; it is a property of LuaJIT plus C++ bindings, not of any
+    // one function.
+    //
+    // So the read-only protection is deliberately given up: a binding layer that
+    // kills the process on a typo is a binding layer nobody uses. What is lost is
+    // small — Lua can only write the addresses we handed it. The alternative,
+    // documented rather than forgotten: expose nothing writable, or accept that
+    // assigning to a read-only property is fatal.
     luabridge::getNamespaceFromStack(L)
         .beginNamespace("var")
-            // Read only: Lua can see these, cannot change them. The documented
-            // two-argument form. Writing raises 'x' is read-only.
-            .addProperty("enabled", &g_enabled_flag)
-            .addProperty("position", &g_position)
-            // Read AND write: the SAME address as getter and setter, which is
-            // what the three-argument form means. The two-argument form does
-            // NOT give you this, and the difference is silent until you write.
+            // Same address as getter and setter — that is what the three-argument
+            // form means, and it is NOT what the two-argument form gives you.
+            .addProperty("enabled", &g_enabled_flag, &g_enabled_flag)
+            .addProperty("x", &g_x, &g_x)
+            .addProperty("y", &g_y, &g_y)
+            .addProperty("z", &g_z, &g_z)
             .addProperty("counter", &g_counter, &g_counter)
             .addProperty("speed", &g_speed, &g_speed)
         .endNamespace()
