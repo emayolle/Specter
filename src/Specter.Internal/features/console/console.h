@@ -58,18 +58,19 @@ void note(const char* text);
 // One-line, human-readable bridge status for the UI.
 const char* status();
 
-// The armed-shell window, in ticks. The checkbox in the Lua Editor tab opens a
-// short window; inside it, a file the shell writes is executed like any other
-// chunk. Outside it, the CLI path does not exist at all.
+// Open the shell channel. The checkbox in the Lua Editor tab opens it; it stays
+// open for the session, until it is closed again. Inside it, a file the shell
+// writes is executed like any other chunk. Outside it, the path does not exist
+// at all.
 //
 // Why it is not just a file the shell writes: a channel triggered by the
 // filesystem is a channel anyone who can write that file can use — no UI, no
-// intent, no trace of a person having asked. Arming stays a checkbox, so the
-// precondition is still a human action, and it expires on its own.
+// intent, no trace of a person having asked. The checkbox keeps that
+// precondition a human action. It is closed at every injection.
 //
-// Every execution is mirrored to the host log, armed or not. A window that runs
-// code nobody can account for would be worse than no window at all.
-void arm_cli(unsigned int ticks);
+// Every execution is mirrored to the host log, open or not. A channel that runs
+// code nobody can account for would be worse than no channel at all.
+void arm_cli();
 
 // Draw the console's tab. Called every frame from inside the tab the registry
 // gave us, on the render thread.

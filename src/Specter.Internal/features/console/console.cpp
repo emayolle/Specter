@@ -100,12 +100,17 @@ constexpr const char* kCliDir = "Z:\\tmp\\specter-cli";
 constexpr const char* kCliReq = "Z:\\tmp\\specter-cli\\req.lua";
 constexpr const char* kCliRes = "Z:\\tmp\\specter-cli\\res.txt";
 
-// How long the checkbox opens the window, in Lua-thread ticks. Long enough to
-// run a test loop, short enough that a forgotten window is not a standing door.
-constexpr unsigned long long kCliWindowTicks = 600;  // ~10 s at 60 fps
+// How long the checkbox opens the window, in Lua-thread ticks.
+//
+// DISARMED: it no longer expires. It was a 10 s window so that a forgotten
+// checkbox was not a standing door, but that is friction without a boundary —
+// re-ticking every ten seconds trains you to tick it without reading it, which
+// is worse than either extreme. The checkbox is now the whole control: open
+// once, stays open for the session, closes when you close it.
+constexpr unsigned long long kCliWindowTicks = 0;  // 0 = no expiry
 
-// When the checkbox was ticked, in Lua-thread ticks. Zero = disarmed, and zero
-// is also the value at load: the window is shut until a person opens it.
+// When the checkbox was ticked, in Lua-thread ticks. Zero = closed, and zero is
+// also the value at load: the channel is shut until a person opens it.
 std::atomic<unsigned long long> g_cli_armed_at = 0;
 
 // The chunk taken from the shell, owned by the Lua thread.
@@ -204,15 +209,19 @@ bool claim_request()
     return true;
 }
 
-// Take one shell request, if the window is open. Returns false when it is not
-// armed, when the window has expired, or when there is nothing to take.
+// Take one shell request, if the channel is open. Returns false when the
+// checkbox is off, or when there is nothing to take — which is the normal case
+// every frame for as long as nobody has opened it.
 bool take_cli_request()
 {
-    const unsigned long long armed = g_cli_armed_at.load(std::memory_order_relaxed);
-    if (armed == 0) {
+    if (g_cli_armed_at.load(std::memory_order_relaxed) == 0) {
         return false;
     }
-    if (lua::pump::ticks() - armed > kCliWindowTicks) {
+    // The expiry stays in the code as the one-line way to get it back, so the
+    // trade-off is visible rather than forgotten.
+    if (kCliWindowTicks != 0 &&
+        lua::pump::ticks() - g_cli_armed_at.load(std::memory_order_relaxed) >
+            kCliWindowTicks) {
         g_cli_armed_at.store(0, std::memory_order_relaxed);
         log::info("cli: fenetre expiree, le shell est de nouveau muet");
         return false;
@@ -303,14 +312,12 @@ const char* status()
     return lua::pump::status();
 }
 
-// Open the shell window for `ticks` Lua-thread ticks. Called from the checkbox,
-// on the render thread; the deadline itself is read on the Lua thread, so this
-// only ever writes one atomic.
-void arm_cli(unsigned int ticks)
+// Open the shell channel. Called from the checkbox, on the render thread; the
+// state itself is read on the Lua thread, so this only ever writes one atomic.
+void arm_cli()
 {
-    g_cli_armed_at.store(lua::pump::ticks(), std::memory_order_relaxed);
-    log::info("cli: fenetre ouverte pour %u ticks -- tools/lua.sh peut parler",
-              ticks);
+    g_cli_armed_at.store(1, std::memory_order_relaxed);
+    log::info("cli: canal ouvert -- tools/lua.sh peut parler jusqu'a fermeture");
 }
 
 // Drain whatever the Lua thread produced since the last frame. Called from
@@ -367,25 +374,20 @@ void draw_ui()
     // Lua without the Execute button, which is the whole point: the precondition
     // stays a human action, and it lapses on its own.
     ImGui::Separator();
-    const unsigned long long armed =
-        g_cli_armed_at.load(std::memory_order_relaxed);
-    const unsigned long long now = lua::pump::ticks();
-    bool open = armed != 0 && (now - armed) <= kCliWindowTicks;
+    bool open = g_cli_armed_at.load(std::memory_order_relaxed) != 0;
     if (ImGui::Checkbox("Autoriser le shell", &open)) {
         if (open) {
-            arm_cli(kCliWindowTicks);
+            arm_cli();
         } else {
             g_cli_armed_at.store(0, std::memory_order_relaxed);
-            log::info("cli: fenetre fermee");
+            log::info("cli: canal ferme");
         }
     }
     ImGui::SameLine();
     if (open) {
-        const unsigned long long left = kCliWindowTicks - (now - armed);
-        ImGui::Text("ouvert, ~%llu s", (left + 59) / 60);
+        ImGui::Text("ouvert -- tools/lua.sh peut parler");
     } else {
-        ImGui::TextDisabled("ferme -- cocher pour ouvrir %llu s",
-                            (kCliWindowTicks + 59) / 60);
+        ImGui::TextDisabled("ferme -- cocher pour ouvrir");
     }
 
     ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);

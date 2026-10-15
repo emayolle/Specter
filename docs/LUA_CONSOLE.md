@@ -111,15 +111,20 @@ retirer le canal à l'origine.
 
 Le canal est donc revenu **derrière une précondition humaine** :
 
-- la case « Autoriser le shell » de l'onglet Lua Editor ouvre une fenêtre ;
-- la fenêtre dure ~10 s et **expire d'elle-même** ;
-- hors fenêtre, la DLL ne regarde **pas** le fichier — le chemin n'existe pas ;
-- à chaque injection, la fenêtre est fermée ;
+- la case « Autoriser le shell » de l'onglet Lua Editor ouvre le canal ;
+- le canal **reste ouvert** jusqu'à ce qu'on le referme ;
+- fermé, la DLL ne regarde **pas** le fichier — le chemin n'existe pas ;
+- à chaque injection, il est **fermé** ;
 - chaque exécution est **journalisée** dans `specter.log` (`cli: requete
-  traitee`), armé ou non. Une fenêtre qui exécuterait du code dont personne ne
-  peut rendre compte serait pire que pas de fenêtre du tout.
+  traitee`). Un canal qui exécuterait du code dont personne ne peut rendre
+  compte serait pire que pas de canal du tout.
 
-`tools/lua.sh` sort en erreur 4 avec le rappel si la fenêtre est fermée.
+`tools/lua.sh` sort en erreur 4 avec le rappel si le canal est fermé.
+
+L'expiration automatique a été retirée après essai : une case à re-cocher toutes
+les dix secondes apprend à cocher sans lire, ce qui est pire que les deux
+extrêmes. Le timeout reste dans le code — `kCliWindowTicks` à 0 — pour que le
+compromis soit visible plutôt qu'oublié.
 
 ### Identité des chunks
 
