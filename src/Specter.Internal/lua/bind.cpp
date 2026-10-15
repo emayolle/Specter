@@ -68,7 +68,13 @@ bool install(lua_State* L, int specter_idx)
         return false;
     }
 
-    luabridge::getNamespaceFromStack(L).beginNamespace("devkit")
+    // No beginNamespace() around it: the table we are registering into IS
+    // `specter`, so adding a namespace would make it `specter.specter.*`. The
+    // members land directly on it:
+    //
+    //     specter.var.counter = 7
+    //     specter.reset()
+    luabridge::getNamespaceFromStack(L)
         .beginNamespace("var")
             // Read only: Lua can see these, cannot change them. The documented
             // two-argument form. Writing raises 'x' is read-only.
@@ -80,8 +86,7 @@ bool install(lua_State* L, int specter_idx)
             .addProperty("counter", &g_counter, &g_counter)
             .addProperty("speed", &g_speed, &g_speed)
         .endNamespace()
-        .addFunction("reset", &api_reset)
-        .endNamespace();
+        .addFunction("reset", &api_reset);
 
     lua_pop(L, 1);  // our copy of the table; the bindings live inside it
 
@@ -93,7 +98,7 @@ bool install(lua_State* L, int specter_idx)
         return false;
     }
 
-    log::info("lua: couche de binding installee dans specter.devkit "
+    log::info("lua: couche de binding installee dans specter "
               "(%d/%d symboles)", capi::bound_count(), capi::required_count());
     return true;
 }
