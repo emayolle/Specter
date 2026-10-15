@@ -21,6 +21,15 @@ namespace {
 // say so here, where the decision is visible, rather than inferring it from the
 // caller's mood. That is the difference between an API and a hole.
 bool g_enabled_flag = false;
+
+// A feature switch owned from the LUA side: a script writes
+// `specter.var.catch_aura = true` and nothing else. Storage is C++, which is
+// what makes it survive between Executes — a module-level bool outlives every
+// sandbox run — while the owner is the script, not a C++ checkbox.
+//
+// The stamina gate above works the other way round on purpose: there the
+// checkbox owns it, because a person toggles it. Here there is no checkbox.
+bool g_catch_aura = false;
 int g_counter = 0;
 float g_speed = 0.0f;
 // Three scalars, not a double[3]: LuaBridge's Stack<double[3]> has no writable
@@ -176,6 +185,8 @@ bool install(lua_State* L, int specter_idx)
             // now a Lua flag and a C++ bool had to be kept in agreement by hand.
             .addProperty("stamina", features::stamina::flag(),
                          features::stamina::flag())
+            // Script-owned switch. See g_catch_aura above.
+            .addProperty("catch_aura", &g_catch_aura, &g_catch_aura)
         .endNamespace()
         .addFunction("reset", &api_reset);
 
