@@ -95,15 +95,47 @@ void lua_rawset(lua_State* L, int idx) { p_lua_rawset(L, idx); }
 // only reason hand-writing them here is acceptable at all.
 void lua_gettable(lua_State* L, int idx) { p_lua_gettable(L, idx); }
 void lua_settable(lua_State* L, int idx) { p_lua_settable(L, idx); }
+// THE ORDER MATTERS, AND GETTING IT WRONG IS SILENT.
+//
+// The real lua_getfield/lua_setfield evaluate index2addr(L, idx) BEFORE the key
+// is pushed. This shim pushed the key first and passed idx afterwards, so every
+// NEGATIVE index slid by one: lua_getfield(L, -1, k) read the slot that by then
+// held the key string, not the table. A lua_setfield with a negative index
+// wrote one table too high.
+//
+// That is the corruption from 2026-10-15. The game's globals lost `_G`, `pairs`,
+// `string`, `math` and `require` while `table`, `tostring`, `rawget`,
+// `setmetatable` and `getfenv` survived -- and those survivors are exactly the
+// ten the sandbox preamble captures as parameters, so they never went through
+// this path. Everything else did, and everything else went.
+//
+// LuaBridge hit it too: its rawsetfield() converts the index to an absolute one
+// first (LuaBridge.h:1296), so its own path was safe, but not every call site
+// is. The fix below is the same conversion, done before the push.
+namespace {
+// The same rule as LuaBridge's own lua_absindex (LuaBridge.h:918): pseudo
+// indices (everything <= LUA_REGISTRYINDEX) are already absolute, positive ones
+// too, and a negative index is relative to the top.
+inline int absolute(lua_State* L, int idx)
+{
+    if (idx > LUA_REGISTRYINDEX && idx < 0) {
+        return p_lua_gettop(L) + idx + 1;
+    }
+    return idx;
+}
+}  // namespace
+
 void lua_getfield(lua_State* L, int idx, const char* k)
 {
+    const int abs = absolute(L, idx);
     p_lua_pushstring(L, k);
-    p_lua_gettable(L, idx);
+    p_lua_gettable(L, abs);
 }
 void lua_setfield(lua_State* L, int idx, const char* k)
 {
+    const int abs = absolute(L, idx);
     p_lua_pushstring(L, k);
-    p_lua_settable(L, idx);
+    p_lua_settable(L, abs);
 }
 
 // ---- pousse ----------------------------------------------------------------
