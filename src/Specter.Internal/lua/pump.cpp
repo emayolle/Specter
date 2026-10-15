@@ -39,8 +39,6 @@ using lua_getglobal_fn = void(__cdecl*)(lua_State*, const char*);
 using lua_type_fn = int(__cdecl*)(lua_State*, int);
 using lua_tolstring_fn = const char*(__cdecl*)(lua_State*, int, size_t*);
 using lua_toboolean_fn = int(__cdecl*)(lua_State*, int);
-using lua_rawgeti_fn = void(__cdecl*)(lua_State*, int, int);
-using lua_rawseti_fn = void(__cdecl*)(lua_State*, int, int);
 using lua_createtable_fn = void(__cdecl*)(lua_State*, int, int);
 using lua_setfield_fn = void(__cdecl*)(lua_State*, int, const char*);
 using lua_pushcclosure_fn = void(__cdecl*)(lua_State*, int(__cdecl*)(lua_State*), int);
@@ -59,8 +57,6 @@ lua_getglobal_fn p_getglobal = nullptr;
 lua_type_fn p_type = nullptr;
 lua_tolstring_fn p_tolstring = nullptr;
 lua_toboolean_fn p_toboolean = nullptr;
-lua_rawgeti_fn p_rawgeti = nullptr;
-lua_rawseti_fn p_rawseti = nullptr;
 lua_createtable_fn p_createtable = nullptr;
 lua_setfield_fn p_setfield = nullptr;
 lua_pushcclosure_fn p_pushcclosure = nullptr;
@@ -71,16 +67,22 @@ lua_settable_fn p_settable = nullptr;
 lua_setfenv_fn p_setfenv = nullptr;
 lua_setmetatable_fn p_setmetatable = nullptr;
 
-// This LuaJIT follows the Lua 5.0 convention: LUA_REGISTRYINDEX is -10000, not
-// the 0xFFF pseudo-index of 5.1. So the pseudo-index below is wrong for this
-// build and the real one is spelled out.
+// The Lua registry is NOT used anywhere in this file, and that is a deliberate
+// decision rather than an omission.
 //
-// The registry is used for ONE thing: keying our sandbox store, so a variable
-// set by one Execute survives to the next. It is deliberately NOT used to reach
-// the game's globals -- see specter_env for why guessing there is a trap.
-#ifndef LUA_REGISTRYINDEX
-#define LUA_REGISTRYINDEX (-10000)
-#endif
+// LUA_REGISTRYINDEX is not a constant across the versions this code could meet:
+// Lua 5.0 and 5.1 spell it -10000, Lua 5.2 and later spell it 0xFFF. Hardcoding
+// the wrong one is not a compile error and not a runtime error -- it is an
+// ordinary stack index that lands far out of bounds. Measured on this build:
+// lua_rawgeti(L, -10000, key) does not return the registry, and the matching
+// lua_rawseti wrote through a pointer computed from that out-of-range index.
+//
+// That is a wild write. It happened before any chunk ran, so no amount of
+// editing the Lua preamble could have changed the symptom, and the symptom was
+// an incoherent error that ignored every fix.
+//
+// The sandbox store is therefore a plain table, rebuilt per Execute, held on
+// the Lua stack for the duration of the call. Nothing here guesses an index.
 
 // ---- state ------------------------------------------------------------------
 
@@ -141,9 +143,6 @@ bool resolve_xlua()
     bind(m, "lua_type", p_type);
     bind(m, "lua_tolstring", p_tolstring);
     bind(m, "lua_toboolean", p_toboolean);
-    // Needed to build the per-run sandbox environment (see build_specter/run).
-    bind(m, "lua_rawgeti", p_rawgeti);
-    bind(m, "lua_rawseti", p_rawseti);
     bind(m, "lua_createtable", p_createtable);
     bind(m, "lua_setfield", p_setfield);
     bind(m, "lua_pushcclosure", p_pushcclosure);
@@ -154,7 +153,7 @@ bool resolve_xlua()
     bind(m, "lua_setfenv", p_setfenv);
     bind(m, "lua_setmetatable", p_setmetatable);
     if (!p_loadbuffer || !p_pcall || !p_gettop || !p_settop || !p_tolstring ||
-        !p_toboolean || !p_getglobal || !p_type || !p_rawgeti || !p_rawseti ||
+        !p_toboolean || !p_getglobal || !p_type ||
         !p_createtable || !p_setfield || !p_pushcclosure ||
         !p_pushstring || !p_pushvalue || !p_gettable || !p_settable || !p_setfenv || !p_setmetatable) {
         log::error("lua: xlua.dll found but some Lua C API exports are missing");
@@ -169,20 +168,17 @@ bool resolve_xlua()
 
 constexpr int kMaxCode = 32 * 1024;
 
-// The chunk is a FACTORY. C hands it everything it needs, by value:
-// the specter table, the real globals, and the standard library functions.
+// The chunk is a FACTORY. C hands it everything it needs, by value: the
+// specter table, the real globals, and the standard library functions. The
+// preamble resolves no name from its own environment, because that
+// environment is whatever luaL_loadbuffer gave the chunk and is not
+// necessarily the game's _G.
 //
-// Everything comes from C on purpose. The preamble used to resolve those
-// names itself, and that silently tied it to whatever environment
-// luaL_loadbuffer gave the chunk -- which is not necessarily the game's _G.
-// A name could then resolve to a table where a function was expected, and the
-// call died with a bare 'attempt to call a table value' and no position,
-// because the raise happens inside a C function.
-//
-// The preamble also writes __step into the store after every stage. The store
-// outlives the failure (it lives in the registry), so when the factory dies C
-// can read back exactly which statement killed it. Guessing has cost four
-// wrong fixes; this costs one string write per stage.
+// The factory NEVER raises. Everything the preamble does is wrapped in a
+// pcall, so when it dies we still get a normal return -- carrying the stage
+// it reached. C reads that third result and logs it. The preamble used to
+// throw straight through, and an error raised inside a C function carries no
+// position, which is why four fixes in a row guessed wrong.
 //
 //   read  k      -> our store first, then the game's real _G  (full access)
 //   write k = v  -> the game already owns k, write the GAME's global
@@ -197,43 +193,46 @@ constexpr char kPrefix[] =
     "local __f;\n"
     "__f=function(__sp,__g,pcall,setfenv,setmetatable,rawset,rawget,\n"
     "table,tostring,select,type,getfenv)\n"
-    "local __store=__sp.__store\n"
-    "__store.__step='01 entree'\n"
-    "__store.__diag=tostring(getfenv(__f)==__g)\n"
-    "__store.__step='02 diag'\n"
     "local __o={}\n"
-    "__store.__step='03 print'\n"
+    "local __st='00 corps'\n"
+    "local __b;__b=function()\n"
+    "local __store=__sp.__store\n"
+    "__st='01 store';\n"
+    "__st='02 diag';__sp.__diag=tostring(getfenv(__f)==__g)\n"
     "local print=function(...)local t={}for i=1,select('#',...)do\n"
     "  t[#t+1]=tostring((select(i,...)))end\n"
     "  __o[#__o+1]=table.concat(t,'\\t')end\n"
-    "__store.__step='04 env'\n"
+    "__st='03 env'\n"
     "local __env=setmetatable({},{\n"
     "  __index=function(_,k)local v=rawget(__store,k)\n"
     "    if v~=nil then return v end return __g[k] end,\n"
     "  __newindex=function(_,k,v)if rawget(__g,k)~=nil then\n"
     "    rawset(__g,k,v) else rawset(__store,k,v) end end})\n"
-    "__store.__step='05 rawset'\n"
+    "__st='04 setfenv'\n"
     "rawset(__env,'specter',__sp)\n"
     "rawset(__sp,'__global',__g)\n"
-    "__store.__step='06 setfenv'\n"
     "setfenv(__f,__env)\n"
-    "__store.__step='07 corps'\n"
-    "local __r={pcall(function()\n";
+    "setfenv(__b,__env)\n"
+    "__st='05 code'\n"
+    "local __u={pcall(function()\n";
 
 constexpr char kSuffix[] =
-    "\nend)};"
-    "__store.__step='08 collecte'\n"
-    "local __ok=table.remove(__r,1);"
-    "if not __ok then __o[#__o+1]='ERROR: '..tostring(__r[1])else if #__r>0 "
-    "then local t={}for i=1,#__r do t[i]=tostring(__r[i])end __o[#__o+1]="
-    "table.concat(t,'\\t')end end;"
-    "__store.__step='09 fini'\n"
-    "return table.concat(__o,'\\n'),__ok\n"
+    "\nend)}"
+    "__st='06 collecte';\n"
+    "local __ok=table.remove(__u,1);"
+    "if not __ok then __o[#__o+1]='ERROR: '..tostring(__u[1])"
+    "else if #__u>0 then local t={}for i=1,#__u do t[i]=tostring(__u[i])end"
+    "  __o[#__o+1]=table.concat(t,'\\t')end end\n"
+    "return true\n"
+    "end\n"
+    "local __r={pcall(__b)}\n"
+    "if not __r[1] then\n"
+    "  __o[#__o+1]='PREAMBLE: '..tostring(__r[2])\n"
+    "  return table.concat(__o,'\\n'),false,__st\n"
+    "end\n"
+    "__st='07 fini'\n"
+    "return table.concat(__o,'\\n'),true,__st\n"
     "end\nreturn __f\n";
-// Registry key for the sandbox store: an anonymous integer slot in the game's
-// registry. Not an entry in _G, and not a name anybody can look up by walking
-// the globals. Ours, under a key we chose, holding only our scratch variables.
-constexpr int kStoreKey = 0x53505254;  // 'SPRT'
 
 // ---- diagnostics ------------------------------------------------------------
 //
@@ -389,19 +388,14 @@ int specter_log(lua_State* L)
 
 // Build the specter table on top of the stack. Leaves exactly one value.
 //
-// The store is recovered from the registry per state and created on first use, so
-// a variable set by one Execute is still there on the next -- without ever
-// touching the game's globals.
+// The store is a plain table, created here and held on the Lua stack for the
+// duration of the call. It is NOT kept in the registry: that needed a registry
+// index, and the only index we could guess was wrong on this build -- a wild
+// write, before any chunk ran. The cost is that a variable created by one
+// Execute does not survive to the next; the sandbox itself is unchanged.
 void build_specter(lua_State* L)
 {
-    p_rawgeti(L, LUA_REGISTRYINDEX, kStoreKey);
-    if (p_type(L, -1) != 5) {  // absent, or the state was recreated
-        p_settop(L, -2);
-        p_createtable(L, 0, 8);
-        p_pushvalue(L, -1);
-        p_rawseti(L, LUA_REGISTRYINDEX, kStoreKey);
-    }
-    // [store]
+    p_createtable(L, 0, 8);  // [store]
 
     p_createtable(L, 0, 4);  // [store, specter]
 
@@ -568,41 +562,26 @@ void run(void* L, const char* code, int len, result_sink sink)
         log::info("lua: %s", buf);
     }
     if (p_pcall(L, 2 + static_cast<int>(sizeof(kPreambleFns) / sizeof(*kPreambleFns)),
-                2, 0) != 0) {
+                3, 0) != 0) {
         std::size_t n = 0;
         const char* e = p_tolstring(L, -1, &n);
         log_chunk(code, len);
-        // The store outlives the failure, so the factory's last stage marker is
-        // still there. It names the statement that killed it.
-        char step[64] = "?";
-        char diag[16] = "?";
-        p_settop(L, top);
-        p_rawgeti(L, LUA_REGISTRYINDEX, kStoreKey);
-        if (p_type(L, -1) == 5) {  // LUA_TTABLE
-            static const char* kKeys[] = {"__step", "__diag"};
-            char* dst[] = {step, diag};
-            for (int i = 0; i < 2; ++i) {
-                p_pushstring(L, kKeys[i]);
-                p_gettable(L, -2);
-                if (p_type(L, -1) == 4) {  // LUA_TSTRING
-                    std::size_t sn = 0;
-                    const char* sv = p_tolstring(L, -1, &sn);
-                    std::snprintf(dst[i], i == 0 ? sizeof(step) : sizeof(diag),
-                                  "%.*s", static_cast<int>(sn), sv ? sv : "?");
-                }
-                p_settop(L, -2);
-            }
-        }
-        log::info("lua: MORT a l'etape '%s' (env du chunk == _G : %s)", step, diag);
         sink(false, e ? e : "(lua runtime error)", static_cast<int>(n));
         p_settop(L, top);
         return;
     }
 
-    // Stack: [text, ok]
+    // Stack: [text, ok, step]. The factory catches its own failures, so reaching
+    // here means it returned normally; `step` is simply where it got to.
     std::size_t n = 0;
-    const char* text = p_tolstring(L, -2, &n);
-    const bool ok = p_toboolean(L, -1) != 0;
+    const char* text = p_tolstring(L, -3, &n);
+    const bool ok = p_toboolean(L, -2) != 0;
+    std::size_t sn = 0;
+    const char* step = p_tolstring(L, -1, &sn);
+    if (!ok) {
+        log::info("lua: le bac a sable a echoue a l'etape '%.*s'",
+                  static_cast<int>(sn), step ? step : "?");
+    }
     sink(ok, text ? text : "", static_cast<int>(n));
     p_settop(L, top);
 }

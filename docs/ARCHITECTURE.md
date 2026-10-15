@@ -167,6 +167,44 @@ console::submit() <-  1 appelant : le bouton « Execute »
 C'est vérifiable en trois lignes de grep, et c'est vérifié à chaque build.
 Il n'y a **ni** polling, **ni** timer, **ni** maintenance, **ni** canal CLI.
 
+### Trois choses apprises en jeu
+
+Chacune a coûté plusieurs allers-retours, parce qu'aucune ne se voyait au
+compilateur. Elles sont écrites ici pour que la suivante ne les=redécouvre pas.
+
+**1. Le registre Lua n'est pas utilisé, et c'est délibéré.**
+`LUA_REGISTRYINDEX` n'a pas la même valeur selon les versions : `-10000` en 5.0 et
+5.1, `0xFFF` en 5.2 et après. Se tromper n'est ni erreur de compilation ni erreur
+d'exécution : c'est un index de pile ordinaire, très hors bornes. Mesuré ici,
+`lua_rawgeti(L, -10000, clé)` ne rend pas le registre, et le `lua_rawseti`
+associé écrivait via un pointeur calculé sur cet index. C'est une écriture
+sauvage, faite **avant** que le moindre chunk ne s'exécute — donc aucune
+correction du préambule Lua ne pouvait changer le symptôme. Le store est
+désormais une table ordinaire, recréée à chaque Execute. Le prix : une variable
+créée par un Execute ne survit pas au suivant.
+
+**2. Le préambule ne résout aucun nom depuis l'environnement du chunk.**
+C'est C qui pousse `pcall`, `setfenv`, `setmetatable`, `rawset`, `rawget`,
+`table`, `tostring`, `select`, `type`, `getfenv` et `_G`, lus par
+`lua_getglobal`, et la fabrique les reçoit **en paramètres**. L'environnement
+que `luaL_loadbuffer` donne au chunk n'est pas forcément le `_G` du jeu, et un
+nom y résolvant en table là où l'on attend une fonction meurt sans position —
+la levée étant dans une fonction C.
+
+**3. Toute erreur doit se décrire elle-même.**
+Un nom **local** est rapporté nommément (`attempt to call upvalue 'setfenv'`).
+Un nom passé par l'environnement perd son identité (`attempt to call a table
+value`). Cette différence est toute l'information disponible quand ça casse.
+Alors la fabrique n'échappe jamais : son corps est sous `pcall`, et elle rend
+son texte, son statut, et **l'étape atteinte**. C consigne les deux derniers
+quand le statut est faux. Vérifié hors du jeu en cassant volontairement
+`setfenv` :
+
+```
+sortie (ok=false, etape 04 setfenv)
+PREAMBLE: c1.lua:22: attempt to call upvalue 'setfenv' (a table value)
+```
+
 ---
 
 ## 5. Ce qui est désactivé, et pourquoi
