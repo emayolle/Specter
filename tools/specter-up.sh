@@ -58,6 +58,8 @@ python3 "$HOSTCH_CLIENT" --pid "$PID" --token "$TOKEN" \
 # 4. suivre le tap au premier plan (Ctrl-C quitte le tap, pas le jeu)
 echo
 echo "== tap actif — Ctrl-C pour quitter (le jeu continue) =="
-echo "   canal Lua CLI : tools/lua.sh 'print(1+1)'   (/tmp/specter-lua)"
+echo "   Lua : onglet 'Lua Editor' de l'overlay -> bouton Execute."
+echo "         (le canal CLI a ete retire : c'etait une execution de code"
+echo "          declenchee par un fichier, sans UI ni authentification)"
 trap - EXIT
 wait "$TAP_PID"

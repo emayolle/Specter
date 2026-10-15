@@ -81,35 +81,22 @@ fixes : jamais de STL dans le chemin chaud.
 
 ## Sorties visibles
 
-Chaque chunk exécuté (UI **ou** CLI) est mirroré sur le **pipe de logs**
-(`/tmp/specter.pipe`, donc `specter.log`) ligne par ligne sous la forme
-`[specter] lua| …` (200 lignes max), et publié dans
-`/tmp/specter-lua/out.txt` :
+Chaque chunk exécuté est mirroré sur le **pipe de logs** (`/tmp/specter.pipe`,
+donc `specter.log`) ligne par ligne sous la forme `[specter] lua| …`
+(200 lignes max), et affiché dans l'onglet **Lua Editor** de l'overlay.
 
-```
-#seq=<n> ok=<0|1>
-<texte>
-```
+## Canal CLI (`tools/lua.sh`) — **retiré**
 
-## Canal CLI (`tools/lua.sh`)
+Le canal n'existe plus. `tools/lua.sh` explique pourquoi et sort en erreur.
 
-```
-tools/lua.sh 'print(1+1)'      # chunk en argument
-tools/lua.sh -f script.lua     # depuis un fichier
-echo '…' | tools/lua.sh        # depuis stdin
-tools/lua.sh --no-wait '…'     # sans attendre le résultat
-```
+Il déposait un chunk dans `/tmp/specter-lua/cmd.lua` et la pompe le relisait
+toutes les 200 ms. C'était un **canal d'exécution de code déclenché par le
+système de fichiers** : sans UI, sans authentification, et sans qu'aucune action
+humaine soit nécessaire. Tout processus capable d'écrire ce fichier y entrait.
 
-Protocole (fichiers uniquement, **dans `/tmp`** — jamais le dossier du jeu ni le
-prefixe Wine) :
-
-1. le script publie le chunk de façon **atomique** (`cmd.tmp` → `cmd.lua`) ;
-2. la pompe le **réclame** de façon atomique (`cmd.lua` → `cmd.run`), l'exécute,
-   supprime `cmd.run` — le rename garantit qu'on ne lit jamais un fichier
-   partiel ;
-3. le script attend que `#seq` change dans `out.txt` et affiche le résultat.
-
-Le sondage est limité à une fois toutes les 200 ms.
+La seule voie d'exécution est maintenant le bouton **Execute** de l'onglet Lua
+Editor. Chaque exécution part dans un environnement construit pour elle — voir
+`docs/ARCHITECTURE.md` §4.
 
 > Le module ne s'active qu'**en jeu** : la pompe n'existe que si
 > `LuaManager.CommonUpdate` est appelée. Un chunk déposé avant l'entrée en jeu
@@ -134,52 +121,68 @@ L'épuisement de stamina est piloté côté Lua : les composants de mouvement
 ActorCombatAttribute`), avec lecture via `getAttribValue(AttributeConst.
 stamina_cur)`.
 
-### Mécanisme : hook `changeStamina` par instance
+### Mécanisme : hook `changeStamina` sur la **classe**
 
-Le toggle « Stamina de déplacement infinie » du panneau installe une fois un
-**remplacement de `changeStamina` sur l'instance du joueur** (shadow de la
-méthode du metatable pour cet objet uniquement) :
+Le coût de déplacement passe tous par
+`actorCombatAttribute:changeStamina(-cost)`. Avaler les deltas négatifs, c'est
+la stamina infinie **à la source** — avant que le coût ne soit appliqué — et ça
+ne fait pas course avec la vidange par frame qu'un refill par frame produirait.
 
-- les **deltas négatifs** (une dépense de stamina : sprint/dash/glide/climb)
-  sont avalés (`return true`) — la stamina ne descend jamais ;
-- les **deltas positifs** (régénération naturelle, objets…) passent tels quels à
-  la méthode d'origine.
+On patche la **classe**, pas l'instance :
 
-L'endurance est remise à fond **une seule fois** à l'installation (via
-`setAttribute` — l'API du jeu, donc les notifications d'attribut et le HUD
-fonctionnent). On ne re-pinne **pas** à chaque drain : chaque `setAttribute`
-déclenche le pipeline complet de changement d'attribut du jeu et causerait un
-mini-freeze à chaque utilisation.
+```lua
+local AC = require('Common.Ability.Attribute.ActorCombatAttribute')
+AC.changeStamina = function(self, delta)
+  if specter.store.inf_stamina and tonumber(delta) and tonumber(delta) < 0 then
+    local e = self and self.entity
+    if e == pg.me or e == pg.pawn then return true end
+  end
+  return orig(self, delta)
+end
+```
 
-### Pourquoi un hook par instance plutôt qu'un tick par frame
+**Vérifié en jeu** : `require('Common.Ability.Attribute.ActorCombatAttribute')`
+rend **exactement** le métatable partagé des instances
+(`AC == getmetatable(aca)`, et `mt.__index == mt`). Un patch sur cette classe
+intercepte donc les appels réels, et **toute instance future l'hérite**.
 
-Découverte de terrain : les chunks de ce pont s'exécutent dans l'environnement
-Lua **sandboxé** du jeu. Les *lectures* des globals existants passent au vrai
-`_G`, mais les *écritures* de globals (même `_G.x = …`) partent dans une table
-d'ombre et n'atteignent jamais le vrai `_G`. La première implémentation — une
-chunk d'installation définissant `__SpecterStaminaTick`, puis la pompe en
-`lua_getglobal` + `lua_pcall` par frame — ne voyait donc jamais la fonction
-(`getglobal` lit le vrai `_G`) : le toggle « ne faisait rien » en silence.
+Trois conséquences, comparées à l'ancien patch d'instance :
 
-Les écritures sur **champs d'objets réels** (l'instance `actorCombatAttribute`)
-persistent, elles : le hook est immune au sandbox. Avantage supplémentaire :
-avaler la dépense **à la source** n'entre pas en course avec le drain du jeu
-par frame (un refill avant l'update aurait été annulé par la dépense ensuite).
+| | patch d'instance (avant) | patch de classe (maintenant) |
+|---|---|---|
+| relog | le patch mourait, il fallait le remettre | **rien à faire** |
+| maintenance | chunk rejoué toutes les ~10 s | **supprimée** |
+| bascule | coût un chunk à chaque toggle | **instantanée**, le drapeau est lu à l'appel |
+
+### Pourquoi ne pas re-pin la stamina à chaque frame
+
+Chaque `setAttribute` déclenche tout le pipeline d'attribut du jeu (recalc +
+notifications HUD + diffusion d'événements) et fait saccader la frame. Le hook
+avale en `return true` — quelques nanosecondes — et la stamina n'est jamais
+re-épinglée en boucle.
 
 ### Implémentation
 
-- `set_infinite_stamina(bool)` (thread de rendu) : bascule l'atomique
-  `g_inf_stamina` et soumet une chunk **silencieuse** (installation ou
-  restauration) qui est consommée par la pompe.
-- L'installateur est **idempotent** (marqueur `aca.__SpecterHooked`) ; la pompe
-  le ré-émet silencieusement toutes les ~10 s tant que le toggle est actif, ce
-  qui re-hook automatiquement une entité/`actorCombatAttribute` neuve après un
-  changement de scène ou un relog.
-- Le chemin **silencieux** (`run_silent`/`submit_silent`) n'écrit ni dans
-  `out.txt`, ni dans le compteur `#seq=` : la maintenance n'entre jamais en
-  conflit avec une commande `tools/lua.sh` en vol. La vérification de
-  résistance du hook : `tools/lua.sh 'local e; for k,v in pairs(pg.global.actorMgr.uid2Ent) do e=v break end
-  print(getmetatable(e.actorCombatAttribute).changeStamina == e.actorCombatAttribute.changeStamina)'
-  ` (false = hook actif).
-- champ d'application **joueur uniquement** : `gmMode == Const.NO_COST_MODE`
-  reste désactivé (il couperait aussi les coûts de compétences et d'eau).
+- `features/inf_stamina/inf_stamina.{h,cpp}`. Le toggle soumet **un seul chunk**
+  sur le canal `kChannelStamina` : poser le patch, ou juste retourner le
+  drapeau. Le drapeau est `specter.store.inf_stamina`, donc il vit dans notre
+  store et **jamais dans un global du jeu**.
+- `install()` ne fait rien et ne lance aucun Lua : poser le patch à
+  l'installation exécuterait du Lua que personne n'a demandé. Il est posé au
+  premier toggle.
+- Désactiver laisse le wrapper en place : il redevient pass-through. Il n'y a
+  donc jamais de fenêtre où le jeu reste à moitié patché.
+- Champ d'application **joueur uniquement** : `Const.NO_COST_MODE` reste
+  désactivé (il couperait aussi les coûts de compétences et d'eau).
+
+### Vérifier que le hook est actif
+
+Dans l'onglet Lua Editor :
+
+```lua
+local e = pg.me
+print(getmetatable(e.actorCombatAttribute).changeStamina
+      == e.actorCombatAttribute.changeStamina)
+```
+
+`false` = le hook de classe est en place. `true` = il ne l'est pas.
