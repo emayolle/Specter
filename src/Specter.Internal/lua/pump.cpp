@@ -483,9 +483,9 @@ int specter_rawset(lua_State* L)
     if (!name) {
         return raise(L, "specter.rawset: key must be a string or an integer");
     }
-    p_pushvalue(L, 1);
-    p_pushvalue(L, 3);
-    p_setfield(L, -3, name);
+    p_pushvalue(L, 1);   // copy of t   ... -2
+    p_pushvalue(L, 3);   // copy of v   ... -1
+    p_setfield(L, -2, name);
     return 0;
 }
 
@@ -504,9 +504,9 @@ int specter_rawget(lua_State* L)
         p_pushlstring(L, nullptr, 0);  // lua_pushnil is a macro in 5.1
         return 1;
     }
-    p_pushvalue(L, 1);
+    p_pushvalue(L, 1);    // copy of t   ... -2
     p_pushstring(L, name);
-    p_gettable(L, -3);
+    p_gettable(L, -2);
     return 1;
 }
 
