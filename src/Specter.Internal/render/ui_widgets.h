@@ -319,6 +319,58 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
     return change;
 }
 
+// UN BOUTON SECONDAIRE : petit, sobre, a droite d'une ligne.
+//
+// SmallButton d'ImGui sort du theme : meme hauteur, meme police, mais un fond
+// neutre sans le liseré des boutons du style, et il se lit comme un lien plutot
+// qu'un bouton. Sur une liste de trente waypoints, trente liens a cote de
+// coordonnees, c'est exactement ce qu'il ne faut pas.
+//
+// Ici le libelle s'aligne sur la ligne, et la zone cliquable a exactement la
+// taille du texte — donc le bouton ne mange pas de largeur pour rien.
+inline bool bouton_ligne(const char* libelle)
+{
+    ImGui::PushID(libelle);
+    const ImVec2 taille = ImGui::CalcTextSize(libelle);
+    const float h = ImGui::GetTextLineHeight();
+
+    ImGui::Dummy(ImVec2(0.0f, h));   // reserve la ligne
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - h);
+
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const bool survole = ImGui::IsMouseHoveringRect(
+        p, ImVec2(p.x + taille.x + 16.0f, p.y + h), true);
+    if (survole) {
+        dl->AddRectFilled(p, ImVec2(p.x + taille.x + 16.0f, p.y + h),
+                          coul(accent_doux()), 4.0f);
+    }
+
+    ImGui::SetCursorScreenPos(p);
+    ImGui::InvisibleButton("##b", ImVec2(taille.x + 16.0f, h));
+    const bool clic = ImGui::IsItemClicked();
+
+    ImGui::SetCursorScreenPos(
+        ImVec2(p.x + 8.0f, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
+    ImGui::TextColored(survole ? accent() : texte_faible(), "%s", libelle);
+
+    ImGui::PopID();
+    return clic;
+}
+
+// Un TITRE DE SECTION a l'interieur d'un panneau : trait d'accent a gauche,
+// libelle en dessous. Remplace le Separator + « Zone %d » colle au bord.
+inline void titre_section(const char* libelle)
+{
+    const ImVec2 d = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(ImVec2(d.x, d.y + 4.0f), ImVec2(d.x + 3.0f, d.y + 15.0f),
+                      coul(accent()), 1.5f);
+    ImGui::Dummy(ImVec2(10.0f, 0.0f));
+    ImGui::TextColored(texte(), "%s", libelle);
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+}
+
 // Un curseur qui ressemble a un curseur : piste fine, poignée ronde violette,
 // valeur en clair a droite.
 inline bool curseur(const char* libelle, float* valeur, float mini, float maxi,

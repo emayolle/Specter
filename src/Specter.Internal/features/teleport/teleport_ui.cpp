@@ -230,16 +230,21 @@ void draw_ui_waypoints()
                         "scene data. Cached in /tmp/specter-floraisons.json "
                         "and /tmp/specter-waypoints.json.");
                 }
-                ImGui::Separator();
-                ImGui::BeginChild("##wp_list", ImVec2(-1.0f, -1.0f), true);
+                { render::Panneau panneau("REPERES DU JEU");
+                ImGui::BeginChild("##wp_list", ImVec2(0.0f, 0.0f),
+                                  ImGuiChildFlags_None);
                 if (nz == 0) {
-                    ImGui::TextColored(render::texte_faible(), 
+                    ImGui::TextColored(render::texte_faible(),
                         "nothing yet - press Refresh once in-world");
                 }
                 for (int zi = 0; zi < nz; ++zi) {
                     const int zone = zones[zi];
-                    ImGui::Separator();
-                    ImGui::TextColored(render::texte_faible(), "Zone %d", zone);
+                    if (zi > 0) {
+                        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+                    }
+                    char titre[32];
+                    std::snprintf(titre, sizeof(titre), "Zone %d", zone);
+                    render::titre_section(titre);
                     for (int i = 0; i < nflora; ++i) {
                         int z = 0;
                         float fx = 0.0f, fy = 0.0f, fz = 0.0f;
@@ -248,11 +253,13 @@ void draw_ui_waypoints()
                             continue;
                         }
                         ImGui::PushID(100000 + i);
+                        ImGui::Dummy(ImVec2(10.0f, 0.0f));
                         ImGui::TextUnformatted("Floraison");
                         ImGui::SameLine();
-                        ImGui::TextColored(render::texte_faible(), "(%.1f, %.1f, %.1f)", fx, fy, fz);
+                        ImGui::TextColored(render::texte_faible(),
+                                           "(%.1f, %.1f, %.1f)", fx, fy, fz);
                         ImGui::SameLine();
-                        if (ImGui::SmallButton("Teleport")) {
+                        if (render::bouton_ligne("Teleport")) {
                             if (!features::teleport::teleport_to_floraison(i)) {
                                 console::note("! tp: bridge not ready\n");
                             }
@@ -269,11 +276,13 @@ void draw_ui_waypoints()
                             continue;
                         }
                         ImGui::PushID(200000 + i);
+                        ImGui::Dummy(ImVec2(10.0f, 0.0f));
                         ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
                         ImGui::SameLine();
-                        ImGui::TextColored(render::texte_faible(), "(%.1f, %.1f, %.1f)", wx, wy, wz);
+                        ImGui::TextColored(render::texte_faible(),
+                                           "(%.1f, %.1f, %.1f)", wx, wy, wz);
                         ImGui::SameLine();
-                        if (ImGui::SmallButton("Teleport")) {
+                        if (render::bouton_ligne("Teleport")) {
                             if (!features::teleport::teleport_to_waypoint(i)) {
                                 console::note("! tp: bridge not ready\n");
                             }
@@ -282,6 +291,7 @@ void draw_ui_waypoints()
                     }
                 }
                 ImGui::EndChild();
+                }  // du panneau
 }
 
 }  // namespace teleport
