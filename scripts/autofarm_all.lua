@@ -23,16 +23,29 @@
 --
 -- UN SEUL "Coffre" sur douze. Les onze autres ont ete consommes aussi.
 --
--- Pourquoi : `estCoffre()` ne peut pas ecarter les ramassages quand
--- `markBindStaticId` vaut nil -- et il vaut nil sur les coffres REELS aussi.
--- Le seul identifiant jamais nul est `ent.id`, et c'est lui qu'on utilise.
--- On ne peut donc plus distinguer 10506 de 10505 par ce chemin-la.
+-- CE QUI A CHANGE DEPUIS : LES COFFRES SONT MAINTENANT ECARTES
+--
+-- On ne pouvait pas les distinguer -- markBindStaticId vaut nil SUR LES
+-- COFFRES REELS AUSSI, et ent.id ne dit pas 10506 de 10505. Ce qui marche,
+-- c'est la distance a la marque de registre : quand la marque la plus proche
+-- est a moins de 3 u, c'est la sienne, et son markConfigId tranche.
+--
+--     nom          d(u)   cfgMarque   dMarque
+--     Coffre        28.3      10506      0.5   -> ecarte
+--     Ramasser      29.5      10506      2.6   -> ecarte
+--     Ambre lumin   54.3      10505      0.0   -> garde
+--
+-- Un "Ramasser" peut donc etre un coffre : son nom d'affichage est le verbe
+-- generique, pas sa nature. Filtrer sur le nom aurait laisse passer des coffres.
+--
+-- Regle : on ecarte quand SA marque, et seulement la sienne, porte 10506.
+-- Pas de nom, pas de chaine, pas d'heuristique. Cout : 3 ms pour 2323 marques.
 --
 -- CE QUE CA DONNE A UTILISER
 --
 --   - de l'auto-farm d'Aniipods dans la nature : c'est exactement ca.
---   - ouvrir des coffres SANS toucher aux Aniipods : il manque un
---     discriminateur. Ne pas l'appeler en croyant qu'il est restrictif.
+--   - ouvrir des coffres SANS toucher aux Aniipods : chest-open.lua. Ne pas
+--     l'appeler en croyant qu'il est restrictif -- il ne l'est pas.
 --
 -- L'ETAT EST PARTAGE AVEC chest-open.lua
 --
@@ -47,8 +60,8 @@
 --
 -- Réglages :
 local CHAIN_OPENS  = 10      -- nb de coffres à ouvrir par exécution (0 = tout)
-local BREATH       = 1.6     -- s, pause entre deux ouvertures
-local WAIT_AFTER_TP = 0.8    -- s, à attendre APRÈS le TP avant d'interagir
+local BREATH       = 0.5     -- s, pause entre deux ouvertures
+local WAIT_AFTER_TP = 0.5    -- s, à attendre APRÈS le TP avant d'interagir
 local TRY_SECONDS  = 5       -- fenêtre pour trouver l'entité + son unité
 local INTERACT_TYPE = 1      -- interactionType du coffre (actif / ENT_FUNC)
 local MAX_LIST     = 40      -- lignes imprimées au plus
@@ -154,18 +167,11 @@ ETAT.done = 0
 local opened = type(ETAT.opened) == 'table' and ETAT.opened or {}
 ETAT.opened = opened
 
--- Repere de configuration quand on peut le lire : c'est ce qui distingue un
--- vrai Coffre (10506) d'un ramassage (10505). markCfg sert UNIQUEMENT a cela,
--- et seulement quand markBindStaticId existe -- voir estCoffre() plus bas.
+-- markConfigId du vrai coffre. Sert au registre (priorite 2) ; pour les
+-- entites vivantes, c'est CFG_COFFRE plus bas qui fait le travail.
 local CHEST_CONFIG = 10506
-local markCfg = {}
-local okm, mpts = pcall(SU.getSceneMarkPointData, e.sceneId)
-if okm and type(mpts) == 'table' then
-  for mid, mp in pairs(mpts) do
-    markCfg[mid] = mp.markConfigId
-  end
-end
--- IDENTIFIER UN COFFRE
+
+-- IDENTIFIER UNE CIBLE
 --
 -- `markBindStaticId` est la facon evidente, et elle ne marche pas. Mesure, en
 -- jeu, colle au coffre :
@@ -192,15 +198,93 @@ local function identifiant(en)
   return en.id
 end
 
--- Marqueur de configuration, quand on peut le lire. Sert a ecarter les
--- ramassages (10505) quand l'information est la ; quand elle manque, on ne
--- filtre pas plutot que de ne rien voir.
-local function estCoffre(en)
-  local mbsid = en.markBindStaticId
-  if type(mbsid) == 'number' then
-    return markCfg[mbsid] == CHEST_CONFIG
+-- ---------------------------------------------------------- CLASSER UNE CIBLE
+--
+-- On ne veut PAS de coffres ici : on veut les Aniipods, les Ambre, les
+-- ramassages. Il faut donc distinguer 10506 (coffre) du reste -- et
+-- markBindStaticId, qui le faisait, vaut nil partout.
+--
+-- CE QUI RESTE, MESURE EN JEU, SCENE 3000
+--
+--     entite            1re marque   cfg      2e marque
+--     Coffre               0.5 u   10506      27.7 u
+--     Ramasser (coffre)    2.6 u   10506      19.6 u
+--     Ambre lumin          0.0 u   10505      15.3 u
+--     Ambre lumin          0.0 u   10505      17.1 u
+--     Ambre lumin          0.0 u   10505      37.6 u
+--     Ambre lumin          0.0 u   10505      38.1 u
+--     Aniipod             13.9 u   10505      30.3 u
+--     Oeuf d'elite         7.4 u   10506      10.6 u
+--     Aniipod pro         24.5 u    102      28.0 u
+--
+-- Trois choses tombent du tableau.
+--
+-- 1. Quand la 1re marque est a moins de 3 u et la 2e a plus de 15, l'entite et
+--    la marque c'est la meme objet : c'est SA marque. Le critere est donc
+--    `dMarque <= 3`, et au-dela on ne classe pas.
+--
+-- 2. Un "Ramasser" PEUT ETRE UN COFFRE. Celui a 2.6 u porte cfg 10506 : son
+--    nom d'affichage est le verbe generique, sa nature est celle d'un coffre.
+--    Filtrer sur le nom affiche aurait donc laisse passer des coffres.
+--
+-- 3. cfg 10506 n'est PAS "coffre" au sens de ce qu'on veut ramasser : un
+--    "Oeuf d'elite" en porte aussi. Il est a 7.4 u de sa marque, donc il n'est
+--    PAS classe, donc il est garde. C'est le bon choix ici -- un oeuf n'est pas
+--    un coffre.
+--
+-- TAILLE D'ECHANTILLON : DEUX COFFRES. 0.5 u et 2.6 u. Le seuil de 3 u les
+--    couvre tous les deux, avec 0.4 u de marge sur le pire. Ce n'est pas une
+--    loi du jeu, c'est deux observations -- si un troisieme coffre sortait avec
+--    sa marque a 4 u, il passerait au travers. Le compteur
+--    "# coffres ECARTES" sert a le voir.
+--
+-- LIMITES, DITES TELLES QU'ELLES SONT
+--
+--   - une entite dont la marque n'est pas chargee n'est pas classee, et elle est
+--     donc GARDEE. Un coffre non classe peut etre ramasse. C'est le choix
+--     inverse de chest-open.lua, et c'est le bon ici : un Aniipod rate coute
+--     une ressource, un coffre pris par erreur ne coute qu'un coffre.
+--   - l'inverse existe aussi : une entite a moins de 3 u de la marque d'un
+--     VOISIN sera ecartee a tort. Rare -- la 2e marque est presque toujours a
+--     plus de 15 u.
+--   - cout : 3 ms pour 2323 marques, une fois par collecte.
+local MARQUE_ASSOC_D = 3     -- u : en dessous, c'est SA marque
+local CFG_COFFRE    = 10506  -- markConfigId du vrai coffre
+
+local marques = nil
+local marquesScene = nil   -- les marques sont par scene : on ne les recycle pas
+
+local function indexerMarques()
+  local sid = e.sceneId
+  if marques and marquesScene == sid then return marques end
+  local ok, pts = pcall(SU.getSceneMarkPointData, sid)
+  local out = {}
+  if ok and type(pts) == 'table' then
+    for _, mp in pairs(pts) do
+      -- `markPosition` est un userdata VECTEUR : markPosition[1..3], pas
+      -- .x/.y/.z. SceneUtils.lua:340 fait Vector3.Clone(point.markPosition).
+      local P = mp.markPosition
+      if P and P[1] then
+        out[#out + 1] = { x = P[1], y = P[2], z = P[3], cfg = mp.markConfigId }
+      end
+    end
   end
-  return true   -- identite inconnue : on tente, l'interaction tranchera
+  marques, marquesScene = out, sid
+  return out
+end
+
+-- Retourne le markConfigId de l'entite, ou nil si on n'est pas sur de l'avoir
+-- identifiee. nil se distingue de 10505 : "je sais ce que c'est" / "je ne sais pas".
+local function cfgDeLEtat(x, y, z)
+  local mk = marques or indexerMarques()
+  local bd, bc
+  for i = 1, #mk do
+    local M = mk[i]
+    local d = ((M.x - x) ^ 2 + (M.y - y) ^ 2 + (M.z - z) ^ 2) ^ 0.5
+    if not bd or d < bd then bd, bc = d, M.cfg end
+  end
+  if bd and bd <= MARQUE_ASSOC_D then return bc end
+  return nil
 end
 
 -- ----------------------------------------------------------- collecte cible
@@ -211,22 +295,30 @@ local function collectTargets()
   -- Priorité 1 : entités ClientChest VIVANTES donc disponibles (ouvertes par
   -- construction). Un coffre déjà ouvert par nous est caché par `opened`
   -- ci-dessous, même si son entité traîne encore (despawn lent).
-  local byLive = {}
+  local byLive, ecartees = {}, 0
   for _, en in pairs(pg.getEntities() or {}) do
-    if en.isChest and en.chestValid and estCoffre(en) then
+    if en.isChest and en.chestValid then
       local okp, p = pcall(function() return en:getPosition() end)
       if okp and p then
-        byLive[#byLive + 1] = {
-          id = identifiant(en),
-          entId = en.id,
-          x = p[1], y = p[2], z = p[3],
-          d = distance(pnow, p[1], p[2], p[3]),
-          name = localize(en.configName) or 'Coffre',
-        }
+        local cfg = cfgDeLEtat(p[1], p[2], p[3])
+        if cfg == CFG_COFFRE then
+          -- Coffre confirme par SA marque : on ne le prend pas.
+          ecartees = ecartees + 1
+        else
+          byLive[#byLive + 1] = {
+            id = identifiant(en),
+            entId = en.id,
+            x = p[1], y = p[2], z = p[3],
+            d = distance(pnow, p[1], p[2], p[3]),
+            name = localize(en.configName) or 'Ramassage',
+            cfg = cfg,          -- nil = on n'a pas su le classer
+          }
+        end
       end
     end
   end
   table.sort(byLive, function(a, b) return a.d < b.d end)
+  ETAT.coffresEcartes = ecartees
 
   -- Priorité 2 : marques Coffre (cfg 10506) déverrouillées (registre).
   local unlocked = {}
@@ -475,8 +567,13 @@ end
 
 -- On affiche aussi ce qu'on ECarte, et pourquoi. Un compteur de "ignorés" sans
 -- raison n'apprend rien ; avec la raison, on sait si le filtre fait son travail.
-print(string.format('# coffres NON OUVERTS (scene %s, source: %s) : %d  [cache déjà ouverts: %d]',
+print(string.format('# cibles NON OUVERTES (scene %s, source: %s) : %d  [cache déjà ouverts: %d]',
                      tostring(e.sceneId), source0, #list0, nCache))
+-- Les coffres qu'on a laisse Deliberement tranquilles. C'est LA mesure qui dit
+-- si le filtre marche : sans ce nombre, "0 cible" est indistinguable de
+-- "0 cible parce que j'ai tout ecarte".
+print(string.format('# coffres ECARTES (marque 10506 confirmee a <= %d u) : %d',
+                    MARQUE_ASSOC_D, ETAT.coffresEcartes or 0))
 print(string.format('# marques au registre IGNOREES (aucune entité = TP dans le vide) : %d',
                      #rows0))
 for i, r in ipairs(list0) do
@@ -484,8 +581,9 @@ for i, r in ipairs(list0) do
     print(string.format('... (%d de plus)', #list0 - MAX_LIST))
     break
   end
-  print(string.format('U %s %.2f %.2f %.2f d=%7.1f %s',
-                     tostring(r.id), r.x, r.y, r.z, r.d, r.name))
+  -- cfg nil = on n'a pas su classer cette cible : elle est gardee, et on le dit.
+  print(string.format('U %s %.2f %.2f %.2f d=%7.1f cfg=%-5s %s',
+                     tostring(r.id), r.x, r.y, r.z, r.d, tostring(r.cfg or '?'), r.name))
 end
 print('TOTAL_UNLOCKED=' .. #list0)
 
