@@ -100,6 +100,24 @@ end
 
 print('[init] état Lua nouveau')
 
+-- CHRONOMETRE DE DEMARRAGE.
+--
+-- Le passage d'une zone a l'autre gelait le jeu 1.4 s, mesure :
+--
+--     tp: teleport to waypoint 'Colline de primepousse' zone 20200
+--     perf:   0.5 fps  |  pump 1408.634 ms
+--
+-- Ce script-la s'execute DANS pump_impl, sur le thread du jeu, donc ce temps
+-- est du temps de gel, pas du temps de fond. 1.4 s ne se devine pas : on
+-- mesure phase par phase, sinon on optimise au hasard.
+local T0 = os.clock()
+local function phase(nom)
+  local t = os.clock()
+  local d = (t - T0) * 1000
+  T0 = t
+  print(string.format('[init] phase %-34s %7.1f ms', nom, d))
+end
+
 -- ── 1. stamina infinie ────────────────────────────────────────────
 -- Pose le wrapper sur la CLASSE, donc toutes les instances sont couvertes
 -- et une reconnexion ne le perd pas — ce fichier rejoue, point.
@@ -130,8 +148,10 @@ do
             end
             AC.changeStamina = w
             SPECTER_STAMINA[AC] = orig
-            print('[init] stamina : patch posé sur la classe')
+                phase('stamina: patch sur la classe')
+        print('[init] stamina : patch posé sur la classe')
         else
+            phase('stamina: deja patche, rien a faire')
             print('[init] stamina : déjà patché, rien à faire')
         end
     end
@@ -403,9 +423,11 @@ do
                 end
             end
             P[CLE] = origs
-            print('[init] chute : patch pose sur ' .. #classes .. ' table(s)')
+            phase('chute: patch sur ' .. #classes .. ' table(s)')
+        print('[init] chute : patch pose sur ' .. #classes .. ' table(s)')
         end
     end
 end
 
+phase('total au pret')
 print('[init] prêt')
