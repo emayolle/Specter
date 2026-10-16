@@ -10,7 +10,7 @@
 # WHY THE WHOLE FONT AND NOT A SUBSET
 #   A subset would be 20 ko instead of 420 ko, and it would be right for the
 #   seven icons we use today and wrong the first time somebody adds an eighth.
-#   Font Awesome Free is SIL OFL 1.1, which allows embedding and redistribution.
+#   Lucide is ISC licensed, which allows embedding and redistribution.
 #   The cost is compile time on this one file, and the file does not change.
 set -euo pipefail
 
@@ -41,7 +41,7 @@ with open(out, 'w', encoding='utf-8') as f:
         '// AUTO-GENERE par tools/embed-font.sh.\n'
         '// Ne pas editer a la main.\n'
         '//\n'
-        '// Font Awesome Free 6.5.2, SIL OFL 1.1 (voir third_party/fontawesome/\n'
+        '// Lucide, ISC (voir third_party/lucide/LICENSE.txt).\n'
         '// LICENSE.txt). Integre en entier : un sous-ensemble aurait ete correct\n'
         '// pour les sept icones d aujourd hui et faux des la huitieme.\n'
         '#pragma once\n'

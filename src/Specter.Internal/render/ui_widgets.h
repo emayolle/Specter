@@ -14,7 +14,7 @@
 //
 // LA POLICE D'ICONES
 //
-// Font Awesome Free 6.5.2, SIL OFL 1.1, integree en entier dans la DLL par
+// Lucide, sous-ensemble de 107 glyphes, integre dans la DLL par
 // tools/embed-font.sh. Elle est AJOUTEE a l'atlas, pas mise par defaut : le
 // defaut reste celui d'ImGui, sinon tous les libelles seraient des rectangles
 // vides. Les icones se demandent avec la classe Icone.
@@ -80,7 +80,7 @@ private:
 };
 
 // Les glyphes qu'on utilise reellement, par nom plutot que par nombre.
-// Font Awesome Free, zone privee d'Unicode.
+// Lucide, zone privee d'Unicode.
 namespace ico {
 // Lucide, sous-ensemble de 107 glyphes. Les points de code viennent de
 // Lucide.css via third_party/lucide/GLYPHES.txt ; les recopier a la main serait

@@ -435,7 +435,7 @@ InitResult init_once(IDXGISwapChain* sc)
     // seraient devenues des rectangles vides. Le defaut reste celui d'ImGui, et
     // les icones se demandent une par une avec PushFont.
     //
-    // Font Awesome Free place ses glyphes dans la zone privee d'Unicode, donc
+    // Lucide place ses glyphes dans la zone privee d'Unicode, donc
     // la plage se construit a la main : passer 0xFFFF ferait cuire 65 000
     // glyphes dont on n'en utilise qu'une dizaine.
     static const ImWchar kPlageIcones[] = {0xE000, 0xF8FF};
