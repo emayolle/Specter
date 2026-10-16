@@ -38,10 +38,16 @@ const Feature kWaypoints{
     &teleport::draw_ui_waypoints, nullptr,
 };
 
-// nullptr install, like stamina: the patch is in scripts/init.lua, so there is
-// nothing to hook at startup. What is left is the gate and its checkbox.
+// Its own tab, NOT "Movement" again.
+//
+// The tab label is the ImGui ID. Two features carrying the same label produce
+// two tabs with the same ID, and selecting one selects both — the second one is
+// unreachable, with no error and no symptom you would look for.
+//
+// Teleport already takes two entries this way (Teleport and Waypoints), so a
+// tab per feature is the convention here rather than a tab per grouping.
 const Feature kNoFall{
-    "nofall", "Movement", nullptr, &nofall::draw_ui, nullptr,
+    "nofall", "Fall damage", nullptr, &nofall::draw_ui, nullptr,
 };
 
 const Feature kStamina{
