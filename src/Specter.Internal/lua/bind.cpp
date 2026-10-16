@@ -9,6 +9,7 @@
 #include "lua/worker.h"
 
 #include "features/inf_stamina/inf_stamina.h"
+#include "features/nofall/nofall.h"
 #include "features/teleport/teleport.h"
 #include "platform/log.h"
 
@@ -189,6 +190,10 @@ bool install(lua_State* L, int specter_idx)
             // C++'s, and passing them as call arguments would mean formatting
             // them into a chunk on every click -- the thing this migration
             // exists to remove.
+            // Same shape as stamina, same reason: installed once per lua_State,
+            // read at every call, written by the checkbox. One store.
+            .addProperty("nofall", features::nofall::flag(),
+                         features::nofall::flag())
             .addProperty("tp_step", features::teleport::lerp_step_addr(),
                          features::teleport::lerp_step_addr())
             .addProperty("tp_speed", features::teleport::lerp_speed_addr(),

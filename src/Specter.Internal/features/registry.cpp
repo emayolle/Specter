@@ -14,6 +14,7 @@
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/init/init.h"
 #include "features/lua_dump/lua_dump.h"
+#include "features/nofall/nofall.h"
 #include "features/teleport/teleport.h"
 #include "features/teleport/teleport_ui.h"
 
@@ -37,6 +38,12 @@ const Feature kWaypoints{
     &teleport::draw_ui_waypoints, nullptr,
 };
 
+// nullptr install, like stamina: the patch is in scripts/init.lua, so there is
+// nothing to hook at startup. What is left is the gate and its checkbox.
+const Feature kNoFall{
+    "nofall", "Movement", nullptr, &nofall::draw_ui, nullptr,
+};
+
 const Feature kStamina{
     // nullptr install: the patch lives in scripts/init.lua, so there is nothing
     // to hook at startup. What is left is the gate and its checkbox.
@@ -57,8 +64,8 @@ const Feature kLuaDump{"lua_dump", nullptr, &lua_dump::install, nullptr,
 // The list, in menu order.
 // kInit comes FIRST on purpose: it re-arms the per-session patches, and those
 // want to be in place before anything else runs on a fresh state.
-const Feature* const kFeatures[] = {&kInit,    &kConsole, &kTeleport,
-                                    &kWaypoints, &kStamina, &kLuaDump};
+const Feature* const kFeatures[] = {&kInit,      &kConsole, &kTeleport,
+                                    &kWaypoints, &kStamina, &kNoFall, &kLuaDump};
 
 }  // namespace
 

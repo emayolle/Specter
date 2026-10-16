@@ -37,6 +37,13 @@
 --     canal, avec un drapeau en double (un bool C++ ET un champ Lua sur la
 --     classe du jeu). Ici il n'y a qu'un source de vérité.
 
+-- Nos sauvegardes de fonctions originales, par classe.
+--
+-- Un nom a nous sur une table du jeu, ca se voit et ca peut entrer en
+-- collision. Ici c'est une table sans metatable, indexee par la classe : rien
+-- dans le jeu n'a de raison de la connaitre.
+SPECTER_PATCHES = SPECTER_PATCHES or {}
+
 print('[init] état Lua nouveau')
 
 -- ── 1. stamina infinie ────────────────────────────────────────────
@@ -281,6 +288,61 @@ do
         -- finaliseur garde les listes en cache quand une scene n'en a pas, et
         -- une reponse partielle ne doit jamais ecraser de bonnes donnees.
         specter.marks_done()
+    end
+end
+
+-- ── 3. pas de degats de chute ─────────────────────────────────────
+-- Le jeu applique le degat en UN endroit :
+--
+--     function ClientDyingComponent:receiveFallToGroundDamage(height)
+--       if Utils.isPlayer(self) or Utils.isPlayerPet(self) then
+--         if self.space and self.space:checkImmuneFallDamage() then return end
+--         self:serverMsg("RPC_CS_SpecialDamage", ...)
+--       end
+--     end
+--
+-- Il n'y a rien plus bas a intercepter : la fonction EST la decision, et elle
+-- decide une fois par atterrissage.
+do
+    local ok, CDC = pcall(require,
+        'Entities.SpaceEntities.CommonComponent.ClientDyingComponent')
+    if not ok or type(CDC) ~= 'table' then
+        print('[init] chute : ClientDyingComponent introuvable, passe')
+    elseif type(rawget(CDC, 'receiveFallToGroundDamage')) ~= 'function' then
+        print('[init] chute : receiveFallToGroundDamage absent, passe')
+    else
+        -- AUCUN MARQUEUR SUR LES TABLES DU JEU.
+        --
+        -- Le script d'origine gardait l'original dans _G.OriginalFallDamage.
+        -- C'est un nom a nous dans les globales du jeu : visible par quiconque
+        -- les parcourt, et susceptible d'entrer en collision avec un jour ou le
+        -- jeu definirait un _G.Original* de son cote. Il est dans notre store,
+        -- indexe par la classe.
+        --
+        -- Notre store est une table sans metatable : aucune metamethode ne peut
+        -- s'y meler.
+        local P = SPECTER_PATCHES.fallDamage
+        if P == nil then
+            P = {}
+            SPECTER_PATCHES.fallDamage = P
+        end
+        if P[CDC] ~= nil then
+            print('[init] chute : deja patche, rien a faire')
+        else
+            local orig = rawget(CDC, 'receiveFallToGroundDamage')
+            local w
+            w = function(self, height)
+                -- La porte est lue ICI, a chaque atterrissage, et vient du C++.
+                -- Une seule source de verite, rien a resynchroniser.
+                if specter.var.nofall then
+                    return
+                end
+                return orig(self, height)
+            end
+            CDC.receiveFallToGroundDamage = w
+            P[CDC] = orig
+            print('[init] chute : patch pose sur la classe')
+        end
     end
 end
 

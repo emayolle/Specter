@@ -192,6 +192,7 @@ for spec in \
   "$SRC/features/inf_stamina/inf_stamina.cpp:features-inf_stamina" \
   "$SRC/features/registry.cpp:features-registry" \
   "$SRC/features/init/init.cpp:features-init" \
+  "$SRC/features/nofall/nofall.cpp:features-nofall" \
   "$SRC/lua/pump.cpp:lua-pump" \
   "$SRC/lua/capi.cpp:lua-capi" \
   "$SRC/lua/capi_shim.cpp:lua-capi_shim" \
