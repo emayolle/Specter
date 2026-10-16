@@ -233,6 +233,24 @@ constexpr int kMaxCode = 32 * 1024;
 // And why not setfenv(0, env), the idiomatic 5.1 form? Because LuaJIT does not
 // implement it: measured, setfenv(0, t) leaves the environment untouched while
 // setfenv(f, t) works. So the factory names itself and passes that name.
+// NOUVEAU LECTEUR, LIS CE COMMENTAIRE.
+//
+// LE BAC A SABLE N'EXPOSE PAS LES VALEURS DE RETOUR DU CHUNK. Ce qui apparait
+// dans le resultat, c'est ce que print a ecrit, plus les erreurs. Mesure :
+//
+//     return "X"                 -> sortie vide
+//     local x = 1 return x, "Y"  -> sortie vide
+//     print("X")                 -> "X"
+//
+// J'ai cru l'inverse en migrating une sonde de print vers return, et la
+// position du joueur a cesse de s'afficher -- le C++ ne recevait rien, et
+// n'avait rien a le dire. Une sonde qui echoue en silence est pire qu'une
+// sonde qui echoue bruyamment.
+//
+// Si un jour le retour doit fonctionner, c'est __u qu'il faut lire dans la
+// collection, pas ce qui sort de __b -- qui renvoie `true`. Mais ne change pas
+// le prefixe sans raison : il tient tout l'isolement, et il l'a deja casse
+// quatre fois.
 constexpr char kPrefix[] =
     "local __f;\n"
     "__f=function(__store,__sp,__g,__env,pcall,setfenv,setmetatable,rawset,\n"

@@ -116,16 +116,33 @@ do
 
     -- Position, DANS LE FORMAT QUE LE C++ LIT DEJA.
     --
-    -- On RETOURNE la chaine au lieu de l'imprimer : le bac a sable capture les
-    -- valeurs de retour, donc handle_result() ne change pas d'une ligne. Changer
-    -- le protocole et le parseur dans le meme commit, pour un gain nul, c'est
-    -- deux choses qui peuvent casser au lieu d'une.
+    -- !!! print, PAS return !!!
+    --
+    -- Le bac a sable N'EXPOSE PAS les valeurs de retour du chunk. Mesure :
+    --
+    --     return "X"                      -> sortie vide
+    --     local x = 1 return x, "Y"       -> sortie vide
+    --     print("X")                      -> "X"
+    --
+    -- Ce qui apparait dans le resultat, c'est ce que print a ecrit et les
+    -- erreurs. Un return ne produit rien du tout.
+    --
+    -- J'ai remplace le print de l'ancienne sonde par un return en croyant
+    -- moderniser, et la position a cesse de s'afficher. Le print n'etait pas
+    -- de la laideur : il etait PORTANT. Une migration qui casse parce qu'elle
+    -- est plus jolie, c'est une migration.
     specter.tp.pos = function()
         local e = joueur()
-        if not e then return end
+        if not e then
+            print('E pas d entite')
+            return
+        end
         local p = e:getPosition()
-        if not p then return end
-        return string.format('P %.2f %.2f %.2f %d', p[1], p[2], p[3], p[4] or 0)
+        if not p then
+            print('E pas de position')
+            return
+        end
+        print(string.format('P %.2f %.2f %.2f %d', p[1], p[2], p[3], p[4] or 0))
     end
 
     -- Un petit setPosition est rejete par le deplacement autoritaire et le
@@ -138,7 +155,7 @@ do
     -- et la meme correction.
     specter.tp.here = function(x, y, z)
         local e = joueur()
-        if not e or not e.getPosition then return 'pas d entite' end
+        if not e or not e.getPosition then return end
 
         local TM = require('Core.Timer.TimerManager')
         local store = specter.store
@@ -150,7 +167,7 @@ do
         if prev then prev.active = false end
 
         local p = e:getPosition()
-        if not p then return 'pas de position' end
+        if not p then return end
 
         local step = tonumber(specter.var.tp_step) or 5.5
         local speed = tonumber(specter.var.tp_speed) or 120
@@ -187,7 +204,10 @@ do
         end)
         st.tid = tid
         store.tpMove = st
-        return ('deplacement en %d pas de %.2f'):format(n, step)
+        -- Pas de return ici : personne ne le lit, et le bac a sable
+        -- l'ignorerait. print('deplacement en %d pas de %.2f') fonctionnerait,
+        -- mais la ligne atterrirait dans le tampon du canal teleport, ou
+        -- handle_result() tenterait de la lire.
     end
 
     -- Interrompre un deplacement en cours. Le C++ n'en a pas besoin pour
@@ -196,11 +216,10 @@ do
     specter.tp.stop = function()
         local TM = require('Core.Timer.TimerManager')
         local st = specter.store.tpMove
-        if not st then return 'rien a arreter' end
+        if not st then return end
         if st.tid then pcall(function() TM.removeTimer(st.tid) end) end
         st.active = false
         specter.store.tpMove = nil
-        return 'arrete'
     end
 
     -- ── reperer les floraisons et les teleporteurs ──────────────────────
