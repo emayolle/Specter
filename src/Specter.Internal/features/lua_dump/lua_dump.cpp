@@ -157,9 +157,34 @@ int __cdecl loadbuffer_hook(lua_State* L, const char* buff, std::size_t size,
 
 }  // namespace
 
+// OFF. Do not flip this on without reading the note below.
+//
+// 2026-10-16, measured: this filled /tmp to 81% — 13 GB, 14 509 files — and
+// it kept refilling after every deletion. /tmp is a 16 GB tmpfs, and a full
+// tmpfs fails writes for EVERYTHING: ours and the game's. That was the only
+// cause still standing after the worker crashes were eliminated one by one
+// (six concurrent workers, allocator leaks, missing pcall, non-cooperative
+// kill, a CPU-bound worker with no checkpoint — all cleared by measurement).
+//
+// This is also the feature with no cap anywhere in it. It writes one file per
+// chunk the game loads, for as long as the game is played. A debugging tool
+// that can exhaust the filesystem is not a debugging tool.
+//
+// Turning it back on is one edit, and it still works — but give it a cap first,
+// or it will do it again.
+constexpr bool kEnabled = false;
+
 bool install()
 {
     ensure_lock();
+
+    if (!kEnabled) {
+        log::info("lua_dump: coupe -- %ls n'est plus ecrit. "
+                  "Raison : 13 Go remplis sur un tmpfs de 16 Go, sans plafond. "
+                  "Le module xluaL_loadbuffer n'est meme pas detourne.",
+                  kDumpDir);
+        return true;
+    }
 
     if (!g_hook_installed.load(std::memory_order_relaxed)) {
         HMODULE m = ::GetModuleHandleW(L"xlua.dll");
