@@ -1,5 +1,25 @@
 -- chest-open.lua — ouvre les coffres NON OUVERTS, ENCHAÎNÉ.
 --
+-- ⚠ LE NOM MENT, ET IL MENT DEPUIS LA DERNIERE CORRECTION.
+--
+-- Ce script n'ouvre PAS que des coffres : il ouvre tout ce qui a une unité
+-- d'interaction. Mesuré, un run réel en scene 3000 :
+--
+--     # coffres NON OUVERTS ... : 12   [cache déjà ouverts: 22]
+--     U atHYy3O3S5olugzX  d=   0.7  Coffre
+--     U atHYy3O3S5olugzc  d=  22.5  Aniipod
+--     U atHYwnO3S5oluguv  d=  26.9  Aniipod
+--     U atHYy3O3S5olugzJ  d=  64.6  Œuf Alpha
+--     U atHYwnO3S5oluguy  d=  72.0  Ramasser
+--     ...                                 (1 seul "Coffre" sur 12)
+--
+-- La cause est mesurée : `markBindStaticId` vaut nil SUR LES COFFRES RÉELS
+-- AUSSI, donc le filtre 10506 n'a plus rien sur quoi s'appuyer. On est passé
+-- à `ent.id`, qui n'est jamais nil — mais qui ne distingue plus 10506 de 10505.
+--
+-- Pour un auto-farm d'Aniipods, c'est le bon script : c'est `autofarm_all.lua`.
+-- Pour des coffres SANS toucher aux Aniipods, il manque un discriminateur.
+--
 -- Déroulé par cycle :
 --   1. coffres non ouverts = marques Coffre (cfg 10506) du registre
 --      "déverrouillé" (pg.game.map.markUnlocker.unlockChunkMap) + entités
