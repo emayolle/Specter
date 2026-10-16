@@ -381,18 +381,85 @@ inline void titre_section(const char* libelle)
 {
     const ImVec2 d = ImGui::GetCursorScreenPos();
     const float h = ImGui::GetTextLineHeight();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Le trait sur la HAUTEUR DU TEXTE, pas sur 11 pixels pose au hasard : il
-    // sortait au-dessus du mot, ce qui se lisait comme un accent manquant.
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(ImVec2(d.x, d.y + 1.0f), ImVec2(d.x + 3.0f, d.y + h - 1.0f),
                       coul(accent()), 1.5f);
 
-    ImGui::Dummy(ImVec2(11.0f, 0.0f));
+    // LE DUMMY QUI DECALAIT LE TIRET.
+    //
+    // La version d'avant faisait Dummy(11, 0) pour indenter, puis TextColored.
+    // Or Dummy — meme de hauteur nulle — fait passer le curseur A LA LIGNE
+    // SUIVANTE. Le tiret, dessine avant, se retrouvait donc une ligne au-dessus
+    // du mot : on lisait « Zone 20200 » avec un trait flotte au-dessus.
+    //
+    // Tout en ecran, et une seule ligne reservee a la fin.
+    ImGui::SetCursorScreenPos(ImVec2(d.x + 11.0f, d.y));
     ImGui::TextColored(texte(), "%s", libelle);
-    ImGui::Dummy(ImVec2(0.0f, 5.0f));
+
+    ImGui::SetCursorScreenPos(d);
+    ImGui::Dummy(ImVec2(0.0f, h));
 }
 
+// UNE LIGNE DE REPERE : nom, coordonnees, bouton.
+//
+// Les trois objets tenant sur UNE ligne. La version d'avant les empilait avec
+// des Dummy(10, 0) d'indentation, et chacun faisait sauter une ligne : d'ou
+// l'ecart enorme entre « Floraison » et « Colline de primepousse ».
+//
+// Ici tout est en ecran, et la ligne est reservee une seule fois, a la fin.
+inline bool ligne_repere(const char* nom, float x, float y, float z,
+                         const char* action)
+{
+    ImGui::PushID(nom);
+    const ImVec2 d = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetTextLineHeight();
+    const float marge = 10.0f;
+
+    // Nom, puis coordonnees attenuees, cote a cote.
+    ImGui::SetCursorScreenPos(ImVec2(d.x + marge, d.y));
+    ImGui::TextUnformatted(nom);
+
+    const float l_nom = ImGui::CalcTextSize(nom).x;
+    ImGui::SetCursorScreenPos(ImVec2(d.x + marge + l_nom + 12.0f, d.y));
+    char xyz[64];
+    std::snprintf(xyz, sizeof(xyz), "(%.1f, %.1f, %.1f)", x, y, z);
+    ImGui::TextColored(texte_faible(), "%s", xyz);
+
+    // Bouton a droite, toujours au meme endroit quelle que soit la longueur du
+    // nom : aligne, on lit une colonne de boutons au lieu d'un texte a saute.
+    const ImVec2 t_btn = ImGui::CalcTextSize(action);
+    const float pad = 10.0f;
+    const ImVec2 p0(d.x + ImGui::GetContentRegionAvail().x - t_btn.x - pad * 2.0f,
+                     d.y + 1.0f);
+    const ImVec2 q(p0.x + t_btn.x + pad * 2.0f, d.y + h);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const bool survole = ImGui::IsMouseHoveringRect(p0, q, true);
+    if (survole) {
+        dl->AddRectFilled(p0, q, coul(accent()), 5.0f);
+    } else {
+        dl->AddRectFilled(p0, q, coul(panneau()), 5.0f);
+        dl->AddRect(p0, q, coul(bordure()), 5.0f, 0, 1.0f);
+    }
+    ImGui::SetCursorScreenPos(ImVec2(p0.x + pad, d.y + 1.0f));
+    ImGui::TextColored(survole ? fond() : texte(), "%s", action);
+
+    ImGui::SetCursorScreenPos(p0);
+    ImGui::InvisibleButton("##act", ImVec2(q.x - p0.x, q.y - p0.y));
+    const bool clic = ImGui::IsItemClicked();
+
+    // UNE SEULE ligne reservee.
+    ImGui::SetCursorScreenPos(d);
+    ImGui::Dummy(ImVec2(0.0f, h));
+
+    ImGui::PopID();
+    return clic;
+}
+
+// Une case a cocher qui ressemble a une case a cocher : cadre sombre, coche
+// blanche quand elle est pleine, cadre qui s'allume a l'accent au survol, et le
+// libelle qui s'atténue quand elle est décochée.
 // Un curseur qui ressemble a un curseur : piste fine, poignée ronde violette,
 // valeur en clair a droite.
 inline bool curseur(const char* libelle, float* valeur, float mini, float maxi,

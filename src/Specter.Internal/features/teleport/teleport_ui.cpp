@@ -257,13 +257,7 @@ void draw_ui_waypoints()
                             continue;
                         }
                         ImGui::PushID(100000 + i);
-                        ImGui::Dummy(ImVec2(10.0f, 0.0f));
-                        ImGui::TextUnformatted("Floraison");
-                        ImGui::SameLine();
-                        ImGui::TextColored(render::texte_faible(),
-                                           "(%.1f, %.1f, %.1f)", fx, fy, fz);
-                        ImGui::SameLine();
-                        if (render::bouton_ligne("Teleport")) {
+                        if (render::ligne_repere("Floraison", fx, fy, fz, "Teleport")) {
                             if (!features::teleport::teleport_to_floraison(i)) {
                                 console::note("! tp: bridge not ready\n");
                             }
@@ -280,13 +274,8 @@ void draw_ui_waypoints()
                             continue;
                         }
                         ImGui::PushID(200000 + i);
-                        ImGui::Dummy(ImVec2(10.0f, 0.0f));
-                        ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
-                        ImGui::SameLine();
-                        ImGui::TextColored(render::texte_faible(),
-                                           "(%.1f, %.1f, %.1f)", wx, wy, wz);
-                        ImGui::SameLine();
-                        if (render::bouton_ligne("Teleport")) {
+                        if (render::ligne_repere(nm[0] ? nm : "(unnamed)", wx, wy, wz,
+                                                 "Teleport")) {
                             if (!features::teleport::teleport_to_waypoint(i)) {
                                 console::note("! tp: bridge not ready\n");
                             }
