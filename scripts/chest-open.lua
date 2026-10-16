@@ -140,11 +140,10 @@ ETAT.done = 0
 local opened = type(ETAT.opened) == 'table' and ETAT.opened or {}
 ETAT.opened = opened
 
--- Que les VRAIS coffres (markConfigId 10506) : isChest couvre aussi
--- ramassages / Ambre lumin / Aniipods.
+-- Repere de configuration quand on peut le lire : c'est ce qui distingue un
+-- vrai Coffre (10506) d'un ramassage (10505). markCfg sert UNIQUEMENT a cela,
+-- et seulement quand markBindStaticId existe -- voir estCoffre() plus bas.
 local CHEST_CONFIG = 10506
-local SEED_RADIUS = 4   -- u : coffre du registre très proche SANS entité
-                        -- vivante => considéré comme déjà ouvert (désync)
 local markCfg = {}
 local okm, mpts = pcall(SU.getSceneMarkPointData, e.sceneId)
 if okm and type(mpts) == 'table' then
@@ -152,18 +151,42 @@ if okm and type(mpts) == 'table' then
     markCfg[mid] = mp.markConfigId
   end
 end
-local function isCoffre(id)
-  return type(id) == 'number' and markCfg[id] == CHEST_CONFIG
+-- IDENTIFIER UN COFFRE
+--
+-- `markBindStaticId` est la facon evidente, et elle ne marche pas. Mesure, en
+-- jeu, colle au coffre :
+--
+--     unites d'interaction : type=1  globalId=atHYy3O3S5olugzX  (chaine)
+--     coffre a 1.4 u       : mbsid=nil  cfg=nil  id=atHYy3O3S5olugzX
+--
+-- markBindStaticId est NIL sur le coffre qui est LA. Donc isCoffre(nil)
+-- renvoyait faux, et le coffre n'entrait JAMAIS dans la liste de cibles :
+-- la chaine partait, le TP partait vers ce qu'elle avait retenu ailleurs, et
+-- zero coffre n'etait jamais ouvert.
+--
+-- Ce qui n'est jamais nul, c'est `ent.id` -- et c'est exactement la valeur que
+-- l'unite d'interaction porte dans `globalId`. C'est donc par LA que le jeu
+-- reconnait une cible, et c'est par la que nous le faisons.
+--
+-- markBindStaticId reste utile quand il existe : il identifie le coffre dans le
+-- registre et permet de le retrouver apres un despawn. On s'en sert comme CLE
+-- DE CACHE quand il est present, et on retombe sur ent.id sinon.
+local function identifiant(en)
+  if en.markBindStaticId ~= nil then
+    return en.markBindStaticId
+  end
+  return en.id
 end
 
-local function liveChestIds()
-  local s = {}
-  for _, en in pairs(pg.getEntities() or {}) do
-    if en.isChest and en.markBindStaticId then
-      s[en.markBindStaticId] = true
-    end
+-- Marqueur de configuration, quand on peut le lire. Sert a ecarter les
+-- ramassages (10505) quand l'information est la ; quand elle manque, on ne
+-- filtre pas plutot que de ne rien voir.
+local function estCoffre(en)
+  local mbsid = en.markBindStaticId
+  if type(mbsid) == 'number' then
+    return markCfg[mbsid] == CHEST_CONFIG
   end
-  return s
+  return true   -- identite inconnue : on tente, l'interaction tranchera
 end
 
 -- ----------------------------------------------------------- collecte cible
@@ -176,11 +199,12 @@ local function collectTargets()
   -- ci-dessous, même si son entité traîne encore (despawn lent).
   local byLive = {}
   for _, en in pairs(pg.getEntities() or {}) do
-    if en.isChest and en.chestValid and isCoffre(en.markBindStaticId) then
+    if en.isChest and en.chestValid and estCoffre(en) then
       local okp, p = pcall(function() return en:getPosition() end)
       if okp and p then
         byLive[#byLive + 1] = {
-          id = en.markBindStaticId,
+          id = identifiant(en),
+          entId = en.id,
           x = p[1], y = p[2], z = p[3],
           d = distance(pnow, p[1], p[2], p[3]),
           name = localize(en.configName) or 'Coffre',
@@ -216,15 +240,6 @@ local function collectTargets()
           name = localize(p.infoTitle) or '',
         }
       end
-    end
-  end
-
-  -- Réconciliation : un coffre du registre quasi-collé au joueur SANS entité
-  -- vivante est déjà ouvert (registre pas purgé en temps réel).
-  local liveNow = liveChestIds()
-  for _, r in ipairs(rows) do
-    if not opened[r.id] and r.d <= SEED_RADIUS and not liveNow[r.id] then
-      opened[r.id] = true
     end
   end
 
@@ -314,10 +329,15 @@ local function startPoll()
       return
     end
 
-    -- 1) l'entité liée à la marque
+    -- 1) l'entité liée à la cible.
+    --
+    -- On la retrouve par le meme identifiant que celui de la liste, et par son
+    -- `ent.id` : c'est la valeur que l'unité d'interaction porte dans
+    -- `globalId`, donc c'est celle qui apparait dans unitMap quand on est à
+    -- portée.
     local ent
     for _, en in pairs(pg.getEntities() or {}) do
-      if en.isChest and en.markBindStaticId == marker then
+      if en.isChest and (identifiant(en) == marker or en.id == marker) then
         ent = en
         break
       end
@@ -358,7 +378,12 @@ local function startPoll()
     if okr then
       onOpened()
     else
-      finish('OPEN_ERR')
+      -- Un echec d'interaction ne prouve pas que le coffre est ouvert : ca
+      -- peut etre un ramassage (10505) que le filtre n'a pas su ecarter parce
+      -- que markBindStaticId manquait. On passe au suivant plutot que de
+      -- finir -- sinon une cible erronee arrete toute la chaine.
+      ETAT.lastInteractOk = false
+      startCycle()
     end
     end)
 
