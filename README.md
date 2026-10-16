@@ -13,8 +13,9 @@ le jeu, via **Il2CppInspectorRedux**.
 | Jeu | Aniimo (installé via Steam) |
 | Chemin | `~/.local/share/Steam/steamapps/common/Aniimo/` |
 | Moteur | Unity **2022.3.62f1**, backend **IL2CPP** |
-| Binaire | `GameAssembly.dll` — PE32+, x64, ~115 Mo |
-| Metadata | `Aniimo_Data/il2cpp_data/Metadata/global-metadata.dat` (~28,9 Mo) |
+| Build | **3732728** (2026-10-15) — `verlist.txt` ; version Lua `1.0.3732728` |
+| Binaire | `GameAssembly.dll` — PE32+, x64, 115 180 928 o |
+| Metadata | `Aniimo_Data/il2cpp_data/Metadata/global-metadata.dat` (28 881 824 o) |
 | Version metadata | **31** (le header en clair affiche une version bidon = taille du fichier) |
 | Protection | **NetEase Protect 2** (`NEP2.dll`, `NEPKernel.sys`) → metadata **chiffrée** (entropie ~7,93) |
 
@@ -209,4 +210,4 @@ variable Windows `SPECTER_PIPE`.
 
 > Résultat du run : `CodeRegistration @ 0x184E73630`,
 > `MetadataRegistration @ 0x185921F40`, `196 460` définitions de méthodes,
-> `23 698` `TypeInfo`.
+> `450 735` `DO_APP_FUNC` (surcharges incluses), `23 698` `TypeInfo`.
