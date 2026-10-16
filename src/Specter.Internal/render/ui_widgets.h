@@ -105,6 +105,35 @@ constexpr unsigned int oeil = 0xE0BA;       // eye
 constexpr unsigned int liste = 0xE106;      // list
 }  // namespace ico
 
+// Encode un point de code en UTF-8 et le rend.
+//
+// "%c" NE MARCHE PAS ICI, et c'est-evident apres coup. %c ecrit UN octet, alors
+// que les glyphes de Lucide sont en zone privee d'Unicode : 0xE0AC tient sur
+// trois octets en UTF-8. vsnprintf ecrivait donc 0xAC, un octet de continuation
+// isole ; le decodeur UTF-8 d'ImGui le consomme sans produire de glyphe, et
+// l'icone disparait SANS ERREUR. La mise en page reste correcte, c'est
+// exactement ce qu'on a vu.
+//
+// Le passage en parametre, lui, ecrirait 0xE0 0xAC — deux octets, pas plus
+// correct. Il faut donc encoder a la main.
+inline void glyphe_dessine(unsigned int cp, ImVec4 couleur)
+{
+    char utf8[4];
+    int n = 0;
+    if (cp < 0x80u) {
+        utf8[n++] = static_cast<char>(cp);
+    } else if (cp < 0x800u) {
+        utf8[n++] = static_cast<char>(0xC0u | (cp >> 6));
+        utf8[n++] = static_cast<char>(0x80u | (cp & 0x3Fu));
+    } else {
+        utf8[n++] = static_cast<char>(0xE0u | (cp >> 12));
+        utf8[n++] = static_cast<char>(0x80u | ((cp >> 6) & 0x3Fu));
+        utf8[n++] = static_cast<char>(0x80u | (cp & 0x3Fu));
+    }
+    utf8[n] = '\0';
+    ImGui::TextColored(couleur, "%s", utf8);
+}
+
 // Une entree de navigation : icone + libelle, comme sur la maquette.
 inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
                        bool actif, float largeur, float hauteur)
@@ -127,8 +156,7 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
     if (police) {
         Icone portee(police, 16.0f);
         ImGui::SetCursorPos(ImVec2(p.x + 14.0f, p.y + (hauteur - 16.0f) * 0.5f));
-        ImGui::TextColored(actif ? accent() : texte_faible(), "%c",
-                           static_cast<unsigned short>(glyphe));
+        glyphe_dessine(glyphe, actif ? accent() : texte_faible());
     }
 
     // Libelle, a cote de l icone.

@@ -681,8 +681,7 @@ void build_ui()
                     // "SPECTER" et "Aniimoe" sortaient eux aussi avec elle.
                     Icone logo(g_icon_font, 17.0f);
                     ImGui::SetCursorPos(ImVec2(p.x + 7.0f, p.y + 6.0f));
-                    ImGui::TextColored(fond(), "%c",
-                                       static_cast<unsigned short>(ico::vise));
+                    glyphe_dessine(ico::vise, fond());
                 }
                 ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f));
                 ImGui::TextColored(texte(), "SPECTER");
