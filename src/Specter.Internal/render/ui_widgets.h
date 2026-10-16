@@ -150,8 +150,19 @@ inline void glyphe_dessine(unsigned int cp, ImVec4 couleur)
 // `hauteur` par ligne, quoi qu'il arrive.
 
 inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
-                       bool actif, float largeur, float hauteur, float marge)
+                       bool actif, float largeur, float hauteur, float marge,
+                       int id)
 {
+    // Un ID PAR LIGNE. Les sept InvisibleButton portaient tous "##nav", et
+    // ImGui le signale tres exactement :
+    //
+    //     Programmer error: 7 visible items with conflicting ID!
+    //
+    // « 7 » etait le nombre de pages. Le libelle etant masque par « ## », il
+    // ne sert pas d'identifiant : il faut un ID explicite. PushID encadre le
+    // tout, donc il couvre aussi le glyphe et le libelle.
+    ImGui::PushID(id);
+
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 depart = ImGui::GetCursorScreenPos();
     const ImVec2 p(depart.x + marge, depart.y);
@@ -197,7 +208,9 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
     ImGui::SetCursorScreenPos(depart);
     ImGui::Dummy(ImVec2(largeur + marge, hauteur));
     ImGui::SetCursorScreenPos(depart);
-    ImGui::InvisibleButton("##nav", ImVec2(largeur + marge, hauteur));
+    ImGui::InvisibleButton("##zone", ImVec2(largeur + marge, hauteur));
+
+    ImGui::PopID();
 }
 
 // Un PANNEAU DE GROUPE : titre a l'accent, contenu en dessous.

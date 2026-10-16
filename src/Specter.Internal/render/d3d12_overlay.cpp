@@ -736,7 +736,7 @@ void build_ui()
 
                 const float h = ImGui::GetTextLineHeight() + 11.0f;
                 entree_nav(g_icon_font, pages[i].label, glyphe, (i == choisie),
-                           l_nav - 28.0f, h, 14.0f);
+                           l_nav - 28.0f, h, 14.0f, i);
 
                 if (ImGui::IsItemClicked()) {
                     choisie = i;
