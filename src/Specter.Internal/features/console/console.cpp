@@ -205,7 +205,24 @@ void sink(bool ok, const char* text, int n)
     out.ok = ok;
     g_channels[g_sink_channel].publish(out);
     ++g_out_seq;
-    log_result(ok, text, n);
+
+    // Which channels' output is a human reading it, and which is a machine.
+    //
+    // The teleport channel answers "P x y z", "F <zone> ...", "W <zone> ...".
+    // handle_result() parses those back into position slots and lists; nobody
+    // reads them. Mirroring them to the log wrote one line every 0.75 s for as
+    // long as the Teleport tab was open -- which showed up as a wall of
+    // "(no output)", and the real question underneath it ("does the probe
+    // work?") was invisible in the noise.
+    //
+    // Errors are logged whatever the channel: a chunk that failed is worth
+    // seeing even if its output was meant for a parser.
+    const bool pourHumain = (g_sink_channel == kChannelConsole ||
+                             g_sink_channel == kChannelCli ||
+                             g_sink_channel == kChannelInit);
+    if (pourHumain || !ok) {
+        log_result(ok, text, n);
+    }
     if (g_sink_channel == kChannelCli) {
         publish_cli_result(ok, text, n);
     }
