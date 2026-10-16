@@ -331,36 +331,43 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
 inline bool bouton_ligne(const char* libelle)
 {
     ImGui::PushID(libelle);
-    const ImVec2 d = ImGui::GetCursorScreenPos();   // le caller a fait SameLine
+    const ImVec2 d = ImGui::GetCursorScreenPos();
     const float h = ImGui::GetTextLineHeight();
-    const ImVec2 taille = ImGui::CalcTextSize(libelle);
-    const ImVec2 q(d.x + taille.x + 14.0f, d.y + h);
+    const ImVec2 txt = ImGui::CalcTextSize(libelle);
+
+    // UNE CAPSULE BORDEE, pas du texte gris.
+    //
+    // Sans cadre, « Teleport » se lit comme une etiquette : rien ne dit qu'on
+    // peut cliquer. Un panneau plein de reperes finit par avoir trente fois le
+    // meme mot, et c'est exactement le genre de repetition qui fait qu'une
+    // interface parait accidentelle.
+    const float pad = 10.0f;
+    const ImVec2 q(d.x + txt.x + pad * 2.0f, d.y + h);
+    const ImVec2 p0(d.x, d.y + 1.0f);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const bool survole = ImGui::IsMouseHoveringRect(d, q, true);
+    const bool survole = ImGui::IsMouseHoveringRect(p0, q, true);
+
     if (survole) {
-        dl->AddRectFilled(d, q, coul(accent_doux()), 4.0f);
+        dl->AddRectFilled(p0, q, coul(accent()), 5.0f);
+    } else {
+        dl->AddRectFilled(p0, q, coul(panneau()), 5.0f);
+        dl->AddRect(p0, q, coul(bordure()), 5.0f, 0, 1.0f);
     }
 
-    // LE TEXTE PASSE PAR LE FLUX NORMAL.
-    //
-    // La premiere version reservait la ligne avec un Dummy puis rewindait le Y
-    // de la hauteur du texte. Ca se repetait correct sur le papier et le bouton
-    // RETOMBAIT A LA LIGNE SUIVANTE : un Dummy suivi d'un retour en arriere
-    // n'annule pas le retour a la ligne que le Dummy peut declencher quand il
-    // deborde de la largeur.
-    //
-    // Ici on rend le texte normalement — ca avance le curseur comme il faut,
-    // puisque le caller a deja fait SameLine — et on pose seulement la zone
-    // cliquable par-dessus, en absolu.
-    ImGui::TextColored(survole ? accent() : texte_faible(), "%s", libelle);
+    // LE TEXTE PASSE PAR LE FLUX NORMAL : l'appelant a deja fait SameLine, donc
+    // il se place sur la meme ligne, et le curseur avance comme ImGui veut.
+    // Seule la zone cliquable est posee en absolu — un Dummy suivi d'un retour
+    // en arriere faisait retomber le bouton a la ligne suivante.
+    ImGui::Dummy(ImVec2(pad, 0.0f));
+    ImGui::SetCursorScreenPos(ImVec2(d.x + pad, d.y + 1.0f));
+    ImGui::TextColored(survole ? fond() : texte(), "%s", libelle);
 
-    ImGui::SetCursorScreenPos(d);
-    ImGui::InvisibleButton("##b", ImVec2(taille.x + 14.0f, h));
+    ImGui::SetCursorScreenPos(p0);
+    ImGui::InvisibleButton("##b", ImVec2(q.x - p0.x, q.y - p0.y));
     const bool clic = ImGui::IsItemClicked();
 
-    // On rend la main APRES le bouton, pas a sa place : un appelant qui enfile
-    // un deuxieme bouton sur la meme ligne ne doit pas repartir sur le bouton.
+    // On rend la main APRES le bouton, pas a sa place.
     ImGui::SetCursorScreenPos(q);
     ImGui::Dummy(ImVec2(0.0f, h));
 
@@ -373,12 +380,17 @@ inline bool bouton_ligne(const char* libelle)
 inline void titre_section(const char* libelle)
 {
     const ImVec2 d = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetTextLineHeight();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(ImVec2(d.x, d.y + 4.0f), ImVec2(d.x + 3.0f, d.y + 15.0f),
+
+    // Le trait sur la HAUTEUR DU TEXTE, pas sur 11 pixels pose au hasard : il
+    // sortait au-dessus du mot, ce qui se lisait comme un accent manquant.
+    dl->AddRectFilled(ImVec2(d.x, d.y + 1.0f), ImVec2(d.x + 3.0f, d.y + h - 1.0f),
                       coul(accent()), 1.5f);
-    ImGui::Dummy(ImVec2(10.0f, 0.0f));
+
+    ImGui::Dummy(ImVec2(11.0f, 0.0f));
     ImGui::TextColored(texte(), "%s", libelle);
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    ImGui::Dummy(ImVec2(0.0f, 5.0f));
 }
 
 // Un curseur qui ressemble a un curseur : piste fine, poignée ronde violette,
