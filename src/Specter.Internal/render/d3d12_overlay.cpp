@@ -664,50 +664,65 @@ void build_ui()
         bool affiche_mouvement = false;
 
         // ---------------- colonne de navigation ----------------
-        ImGui::BeginChild("nav", ImVec2(l_nav, taille.y), ImGuiChildFlags_None);
+        ImGui::BeginChild("nav", ImVec2(l_nav, taille.y),
+                          ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse);
         {
-            // Le logo : un carre arrondi a l'accent avec le glyphe du jeu, puis
-            // le nom. C'est ce qui donne au menu un point de repere quand il
-            // est ouvert, au lieu d'un titre de fenetre barre de 1 pixel.
-            ImGui::Dummy(ImVec2(16.0f, 14.0f));
+            // Le logo : carre arrondi a l'accent, glyphe du jeu, puis le nom.
+            //
+            // Tout est dessine en absolu et rendu a la main, comme les lignes :
+            // ce qui est dessine ne doit pas laisser le curseur ou il etait,
+            // sinon la colonne derive a la droite — visible des que la fenetre
+            // bouge, invisible tant qu'elle reste en place.
             {
-                ImVec2 p = ImGui::GetCursorScreenPos();
+                const ImVec2 d = ImGui::GetCursorScreenPos();
+                const ImVec2 o(d.x + 15.0f, d.y + 13.0f);
                 const float c = 30.0f;
-                ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + c, p.y + c),
-                                                          coul(accent()), 8.0f);
+
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(o, ImVec2(o.x + c, o.y + c), coul(accent()), 8.0f);
+
                 {
-                    // BLOC A PART : Icone pose la police d'icones, et son
-                    // destructeur la retire en sortant d'ici. Sans ce bloc,
-                    // "SPECTER" et "Aniimoe" sortaient eux aussi avec elle.
                     Icone logo(g_icon_font, 17.0f);
-                    ImGui::SetCursorPos(ImVec2(p.x + 7.0f, p.y + 6.0f));
+                    ImGui::SetCursorPos(ImVec2(o.x + 7.0f, o.y + 6.0f));
                     glyphe_dessine(ico::vise, fond());
                 }
-                ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f));
+                ImGui::SetCursorPos(ImVec2(o.x + c + 11.0f, o.y + 2.0f));
                 ImGui::TextColored(texte(), "SPECTER");
-                ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f +
-                                                ImGui::GetTextLineHeight()));
+                ImGui::SetCursorPos(
+                    ImVec2(o.x + c + 11.0f, o.y + 2.0f + ImGui::GetTextLineHeight()));
                 ImGui::TextColored(texte_faible(), "Aniimoe");
-            }
-            ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
-            // Titres de section, comme sur la maquette : CA combat, CA autre.
-            // Sans ca, six entrees de meme niveau donnent une liste grise.
-            ImGui::TextColored(texte_faible(), "  DEPLACEMENT");
-            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::SetCursorScreenPos(d);
+                ImGui::Dummy(ImVec2(l_nav, c + 26.0f));
+            }
+
+            {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                const ImVec2 s = ImGui::GetCursorScreenPos();
+                dl->AddRectFilled(
+                    ImVec2(s.x, s.y), ImVec2(s.x + l_nav - 30.0f, s.y + 1.0f),
+                    coul(bordure()), 0.5f);
+                ImGui::Dummy(ImVec2(0.0f, 12.0f));
+            }
+
+            // Titres de section : DEPLACEMENT, puis JEU.
+            bool deja_jeu = false;
+            bool deja_deplacement = true;
 
             for (int i = 0; i < npages; ++i) {
-                // Deux groupes : ce qui agit sur le personnage, ce qui agit sur
-                // la scene. Un libelle suffit a le dire, une icône non.
-                const bool mouvement =
+                const bool est_mouvement =
                     (std::strcmp(pages[i].label, "Teleport") == 0 ||
                      std::strcmp(pages[i].label, "Waypoints") == 0);
-                const bool suivant_mouvement = mouvement && !affiche_mouvement;
-                if (suivant_mouvement) {
-                    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-                    ImGui::TextColored(texte_faible(), "  JEU");
+
+                if (!est_mouvement && !deja_jeu) {
+                    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+                    ImGui::SetCursorPosX(14.0f);
+                    ImGui::TextColored(texte_faible(), "JEU");
                     ImGui::Dummy(ImVec2(0.0f, 4.0f));
-                    affiche_mouvement = true;
+                    deja_jeu = true;
+                    deja_deplacement = false;
                 }
 
                 unsigned int glyphe = ico::reglages;
@@ -719,16 +734,15 @@ void build_ui()
                 else if (std::strcmp(pages[i].label, "Lua Editor") == 0) glyphe = ico::terminal;
                 else if (std::strcmp(pages[i].label, "Divers") == 0) glyphe = ico::outil;
 
-                const float h = ImGui::GetTextLineHeight() + 10.0f;
-                ImGui::Dummy(ImVec2(6.0f, 1.0f));
+                const float h = ImGui::GetTextLineHeight() + 11.0f;
                 entree_nav(g_icon_font, pages[i].label, glyphe, (i == choisie),
-                           l_nav - 32.0f, h);
+                           l_nav - 28.0f, h, 14.0f);
 
-                // InvisibleButton pose plus haut ; on intercepte le clic ici.
-                if (ImGui::IsMouseClicked(0) && ImGui::IsItemHovered()) {
+                if (ImGui::IsItemClicked()) {
                     choisie = i;
                 }
             }
+            (void)deja_deplacement;
         }
         ImGui::EndChild();
 

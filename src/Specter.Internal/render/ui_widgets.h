@@ -135,40 +135,54 @@ inline void glyphe_dessine(unsigned int cp, ImVec4 couleur)
 }
 
 // Une entree de navigation : icone + libelle, comme sur la maquette.
+// UNE LIGNE DE NAVIGATION.
+//
+// Le piege, et il a fallu une capture deplacee pour le voir : je lisais la
+// position du curseur, je dessinais l'icone et le libelle avec SetCursorPos, et
+// je posais la zone cliquable — mais entre les trois, le curseur normal
+// AVAIT avance. Les lignes suivantes partaient donc de ou la ligne precedente
+// s'etait arretee, et la colonne derivait vers la droite. A la position initiale
+// c'est invisible ; des qu'on bouge la fenetre, le decalage s'accumule.
+//
+// La regle : une ligne ne doit JAMAIS deplacer le curseur de facon inattendue.
+// Donc on dessine en absolu, puis on rend la main avec Dummy, et la zone
+// cliquable est posee au point de depart. Le curseur descend d'exactement
+// `hauteur` par ligne, quoi qu'il arrive.
+
 inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
-                       bool actif, float largeur, float hauteur)
+                       bool actif, float largeur, float hauteur, float marge)
 {
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 depart = ImGui::GetCursorScreenPos();
+    const ImVec2 p(depart.x + marge, depart.y);
     const ImVec2 q(p.x + largeur, p.y + hauteur);
 
-    if (actif) {
+    if (actif || ImGui::IsMouseHoveringRect(p, q, true)) {
         dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
     }
-
-    // Trait d'accent a gauche : c'est ce qu'on voit quand la nav defile.
     if (actif) {
         dl->AddRectFilled(ImVec2(p.x, p.y + 3.0f), ImVec2(p.x + 3.0f, q.y - 3.0f),
                           coul(accent()), 1.5f);
     }
 
-    // Icone.
+    // Icone, police d'icones posee le temps du rendu.
     if (police) {
         Icone portee(police, 16.0f);
-        ImGui::SetCursorPos(ImVec2(p.x + 14.0f, p.y + (hauteur - 16.0f) * 0.5f));
+        ImGui::SetCursorPos(ImVec2(p.x + 13.0f, p.y + (hauteur - 16.0f) * 0.5f));
         glyphe_dessine(glyphe, actif ? accent() : texte_faible());
     }
 
-    // Libelle, a cote de l icone.
-    ImGui::SetCursorPos(ImVec2(p.x + 38.0f, p.y + (hauteur - ImGui::GetTextLineHeight()) * 0.5f));
+    // Libelle, a cote de l'icone.
+    ImGui::SetCursorPos(
+        ImVec2(p.x + 37.0f, p.y + (hauteur - ImGui::GetTextLineHeight()) * 0.5f));
     ImGui::TextColored(actif ? texte() : texte_faible(), "%s", libelle);
 
-    // Zone cliquable, posee APRES le texte donc par-dessus, et transparente.
-    ImGui::SetCursorScreenPos(p);
-    ImGui::InvisibleButton("##nav", ImVec2(largeur, hauteur));
-    if (ImGui::IsItemHovered()) {
-        dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
-    }
+    // On rend la main EXACTEMENT d'une ligne de haut, puis on pose la zone
+    // cliquable a son point de depart.
+    ImGui::SetCursorScreenPos(depart);
+    ImGui::Dummy(ImVec2(largeur + marge, hauteur));
+    ImGui::SetCursorScreenPos(depart);
+    ImGui::InvisibleButton("##nav", ImVec2(largeur + marge, hauteur));
 }
 
 // Un PANNEAU DE GROUPE : titre a l'accent, contenu en dessous.
