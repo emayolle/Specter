@@ -296,10 +296,23 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
                     r, 0, survole ? 2.0f : 1.6f);
     }
 
+    // Le libelle, CENTRE SUR LA CASE — et c'est le detail qui se voyait.
+    //
+    // AlignTextToFramePadding() decale le texte de la hauteur du cadre d'un
+    // widget normal. Or notre case n'est pas un cadre : elle fait exactement la
+    // taille d'une ligne de texte. Le libelle se retrouvait donc plus bas que
+    // la coche, de la valeur exacte du padding vertical du style.
+    //
+    // On replace le curseur a la verticale voulue, plutot que de demander un
+    // alignement qui suppose un cadre qu'il n'y a pas. `p` est le coin haut
+    // gauche de la case ; 11 px, c'est l'espace entre les deux.
     ImGui::SameLine(0.0f, 11.0f);
-    ImGui::AlignTextToFramePadding();
+    const float haut_case = p.y - ImGui::GetCursorPosY();
+    const float h_texte = ImGui::GetTextLineHeight();
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + haut_case + (t.y - h_texte) * 0.5f);
+
     if (*valeur) {
-        ImGui::TextUnformatted(libelle);
+        ImGui::TextColored(texte(), "%s", libelle);
     } else {
         ImGui::TextColored(texte_faible(), "%s", libelle);
     }
