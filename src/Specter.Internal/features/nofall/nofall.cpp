@@ -43,12 +43,12 @@ void draw_ui()
     ImGui::SameLine();
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Patches receiveFallToGroundDamage on the ClientDyingComponent "
-            "CLASS, so every instance is covered and a relog cannot lose it. "
-            "The game already has an immunity path of its own "
-            "(space:checkImmuneFallDamage); this one does not depend on where "
-            "you are. Turning it off restores the normal behaviour immediately "
-            "\u2014 the patch stays installed and becomes a pass-through.");
+            "Patches checkImmuneFallDamage, the game's OWN fall-damage "
+            "immunity decision, so both of its call sites are covered -- the "
+            "player and the pet -- and the per-zone immunity it already "
+            "implements is respected. This one does not depend on where you "
+            "are. Turning it off restores the normal behaviour immediately: "
+            "the patch stays installed and becomes a pass-through.");
     }
 }
 

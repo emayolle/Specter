@@ -1,39 +1,69 @@
 // Specter.Internal — no fall damage.
 //
-// The game applies it in one place: `ClientDyingComponent:receiveFallToGroundDamage(height)`.
-// It checks whether the space grants immunity, then asks the server for the
-// damage:
+// WE DO NOT PATCH receiveFallToGroundDamage. We patch checkImmuneFallDamage,
+// and that is strictly better.
 //
-//     if Utils.isPlayer(self) or Utils.isPlayerPet(self) then
-//         if self.space and self.space:checkImmuneFallDamage() then return end
-//         self:serverMsg("RPC_CS_SpecialDamage",
-//                         Utils.calcFallToGroundDamage(height),
-//                         Const.LIFE_DEAD_BY_FALL_TO_GROUND)
-//     end
+// The game already has a fall-damage immunity, and it is a decision, not a
+// value: `ClientSpace:checkImmuneFallDamage()` (ClientSpace.lua:1145) reads
+// the scene's own flag, and two call sites consult it:
 //
-// So there is nothing to intercept further down: the function is the decision,
-// and it decides once per landing.
+//     ClientDyingComponent:receiveFallToGroundDamage  -> the player and pet
+//     ClientRobSpaceEgg                                -> the pet again
+//
+// So one patch on the decision covers BOTH call sites, adds no second
+// mechanism beside the game's, and leaves the per-zone immunity alone.
+//
+// Patching the caller instead would have covered the same two cases by
+// accident and cost a duplicate bypass of the game's own logic.
+//
+// WHY require() IS NOT ENOUGH
+//
+// Measured, not assumed:
+//
+//     require('...ClientDyingComponent') -> 11 keys, all metadata
+//                                            (__Name2ComponentMethod__ ...)
+//                                            and not one function
+//     require('...ClientSpace')           -> the class, but the method sits
+//                                            behind its metatable's __index
+//
+// And the same key lives in SEVERAL tables:
+//
+//     checkImmuneFallDamage       3 tables
+//     receiveFallToGroundDamage   9 tables
+//     changeStamina               1 table
+//
+// "Take the first one found" would patch a table nothing uses, and nothing
+// would happen -- silently. scripts/init.lua therefore walks the reachable
+// tables and patches every candidate. The walk is rawget-only (a `t[k]` would
+// fire a proxy __index in this game) and costs 0.29 s, once per lua_State.
+//
+// The gate itself was measured in game before being written:
+//
+//     nofall ON  -> true
+//     nofall OFF -> false
 //
 // WHY A CLASS PATCH
 //
-// `require(...)` returns the shared metatable of every ClientDyingComponent —
-// the same property `changeStamina` has for stamina — so patching the class
-// covers the player, the pet and anything else that lands. Patching the
-// player's own instance would die with the object on relog.
+// Patching the class rather than the instance means the player, the pet and
+// anything else covered by the same decision are all handled, and a relog
+// cannot lose it: scripts/init.lua is replayed on every new state.
 //
 // WHY THE FLAG IS C++
 //
 // Exactly the stamina argument. The wrapper is installed ONCE per lua_State and
 // reads `specter.var.nofall` at every call, so enabling and disabling is one
-// store write with nothing to desynchronise. It used to be the other way
-// round on other features: a field written on the game class by a posted chunk,
-// plus a second bool in C++, kept in agreement by hand across a thread and
-// across a relog.
+// store write with nothing to desynchronise.
 //
 // TURNING IT OFF
 //
 // The wrapper stays installed and becomes a pass-through, exactly like the
 // stamina one: no window where the game is left half-patched.
+//
+// STILL UNKNOWN
+//
+// The damage request is an RPC to the server
+// (`RPC_CS_SpecialDamage`). If the server validates landings itself, patching
+// the client call will not be enough. Only jumping in game answers that.
 
 #pragma once
 

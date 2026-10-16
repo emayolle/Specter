@@ -44,6 +44,60 @@
 -- dans le jeu n'a de raison de la connaitre.
 SPECTER_PATCHES = SPECTER_PATCHES or {}
 
+-- Trouve TOUTES les tables qui portent une cle, en remontant _G.
+--
+-- Pourquoi ne pas se contenter de `require` ? Mesure :
+--
+--     require('...ClientDyingComponent')  -> 11 cles, toutes des metadonnees
+--                                            (__Name2ComponentMethod__ ...)
+--                                            et AUCUNE fonction.
+--     require('...ClientSpace')            -> la classe, mais la methode est
+--                                            derriere le __index de sa metatable.
+--
+-- Et surtout : la meme cle vit dans PLUSIEURS tables. Mesure sur une session :
+--
+--     checkImmuneFallDamage       3 tables
+--     receiveFallToGroundDamage   9 tables
+--     changeStamina               1 table
+--
+-- Prendre « la premiere trouvee » serait fragile : on patcherait une table que
+-- rien n'utilise, et rien ne se passerait -- en silence. On patche donc
+-- TOUTES les candidates.
+--
+-- rawget SEULEMENT. Un t[k] declencherait un __index, et le jeu a des tables
+-- de proxies dont le __index appelle une fonction du jeu : y toucher leve une
+-- erreur dont personne ne devinerait la cause.
+--
+-- Cout mesure : 0.29 s, une fois par etat Lua.
+SPECTER_TROUVER = SPECTER_TROUVER or function(cle)
+    local vus, trouve, file = {}, {}, { _G }
+    while #file > 0 do
+        local t = table.remove(file)
+        if not vus[t] then
+            vus[t] = true
+            if rawget(t, cle) ~= nil then
+                trouve[#trouve + 1] = t
+            end
+            local mt = getmetatable(t)
+            if type(mt) == 'table' then
+                file[#file + 1] = mt
+            end
+            for _, k in ipairs({ '__index', '__objMetatable', 'super' }) do
+                local v = rawget(t, k)
+                if type(v) == 'table' then
+                    file[#file + 1] = v
+                end
+            end
+            for _k, v in pairs(t) do
+                if type(v) == 'table' and not vus[v] and #file < 4000 then
+                    file[#file + 1] = v
+                end
+            end
+        end
+    end
+    return trouve
+end
+
 print('[init] état Lua nouveau')
 
 -- ── 1. stamina infinie ────────────────────────────────────────────
@@ -292,56 +346,64 @@ do
 end
 
 -- ── 3. pas de degats de chute ─────────────────────────────────────
--- Le jeu applique le degat en UN endroit :
 --
---     function ClientDyingComponent:receiveFallToGroundDamage(height)
---       if Utils.isPlayer(self) or Utils.isPlayerPet(self) then
---         if self.space and self.space:checkImmuneFallDamage() then return end
---         self:serverMsg("RPC_CS_SpecialDamage", ...)
---       end
+-- ON NE POSE PAS LE PATCH SUR receiveFallToGroundDamage. On le pose sur
+-- checkImmuneFallDamage, et c'est bien meilleur.
+--
+-- Le jeu a deja un mecanisme d'immunité :
+--
+--     -- ClientSpace.lua:1145
+--     function ClientSpace:checkImmuneFallDamage()
+--       local sceneInfo = SceneData[self.sceneId]
+--       return sceneInfo and sceneInfo.immuneFallDamage == 1 or false
 --     end
 --
--- Il n'y a rien plus bas a intercepter : la fonction EST la decision, et elle
--- decide une fois par atterrissage.
+-- et deux appelants, mesures :
+--
+--     ClientDyingComponent:receiveFallToGroundDamage  -> degats du joueur/pet
+--     ClientRobSpaceEgg                                -> degats du pet
+--
+-- Un patch sur la fonction de decision couvre LES DEUX, n'invente pas un
+-- second mecanisme a cote du mecanisme du jeu, et respecte l'immunite par
+-- zone que le jeu applique deja.
+--
+-- Mesure du comportement, en jeu :
+--
+--     nofall ON  -> true
+--     nofall OFF -> false
+--
+-- La porte est lue a CHAQUE appel et vient du C++ : specter.var.nofall.
 do
-    local ok, CDC = pcall(require,
-        'Entities.SpaceEntities.CommonComponent.ClientDyingComponent')
-    if not ok or type(CDC) ~= 'table' then
-        print('[init] chute : ClientDyingComponent introuvable, passe')
-    elseif type(rawget(CDC, 'receiveFallToGroundDamage')) ~= 'function' then
-        print('[init] chute : receiveFallToGroundDamage absent, passe')
+    local CLE = 'checkImmuneFallDamage'
+    local P = SPECTER_PATCHES.fallDamage
+    if P == nil then
+        P = {}
+        SPECTER_PATCHES.fallDamage = P
+    end
+
+    if P[CLE] then
+        print('[init] chute : deja patche sur ' .. #P[CLE] .. ' table(s)')
     else
-        -- AUCUN MARQUEUR SUR LES TABLES DU JEU.
-        --
-        -- Le script d'origine gardait l'original dans _G.OriginalFallDamage.
-        -- C'est un nom a nous dans les globales du jeu : visible par quiconque
-        -- les parcourt, et susceptible d'entrer en collision avec un jour ou le
-        -- jeu definirait un _G.Original* de son cote. Il est dans notre store,
-        -- indexe par la classe.
-        --
-        -- Notre store est une table sans metatable : aucune metamethode ne peut
-        -- s'y meler.
-        local P = SPECTER_PATCHES.fallDamage
-        if P == nil then
-            P = {}
-            SPECTER_PATCHES.fallDamage = P
-        end
-        if P[CDC] ~= nil then
-            print('[init] chute : deja patche, rien a faire')
+        local classes = SPECTER_TROUVER(CLE)
+        if #classes == 0 then
+            print('[init] chute : ' .. CLE .. ' introuvable, passe')
         else
-            local orig = rawget(CDC, 'receiveFallToGroundDamage')
-            local w
-            w = function(self, height)
-                -- La porte est lue ICI, a chaque atterrissage, et vient du C++.
-                -- Une seule source de verite, rien a resynchroniser.
-                if specter.var.nofall then
-                    return
+            local origs = {}
+            for i = 1, #classes do
+                local t = classes[i]
+                origs[i] = rawget(t, CLE)
+                local o = origs[i]
+                t[CLE] = function(self)
+                    -- Decoche, on devient pass-through : pas de fenetre ou le
+                    -- jeu serait a moitie patche.
+                    if specter.var.nofall then
+                        return true
+                    end
+                    return o(self)
                 end
-                return orig(self, height)
             end
-            CDC.receiveFallToGroundDamage = w
-            P[CDC] = orig
-            print('[init] chute : patch pose sur la classe')
+            P[CLE] = origs
+            print('[init] chute : patch pose sur ' .. #classes .. ' table(s)')
         end
     end
 end
