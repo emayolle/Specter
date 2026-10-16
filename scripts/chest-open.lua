@@ -40,6 +40,12 @@ local INTERACT_TYPE = 1      -- interactionType du coffre (actif / ENT_FUNC)
 local MAX_LIST     = 40      -- lignes imprimées au plus
 local ARRIVED_D    = 2.5     -- u : on considère arrivé en dessous
 local OPEN_ENABLED = true    -- false = TP seulement (vers le plus proche)
+-- Utiliser le registre des marques quand AUCUNE entité n'est chargée autour.
+-- OFF par defaut, et mesure a l'appui : en scene 3000, 194 marques
+-- deverrouillees pour 4 coffres reellement charges, et AUCUNE marque ne
+-- correspondait a une entite. Le registre sert a savoir QUOI il y a dans la
+-- scene, pas a ou aller maintenant.
+local USE_REGISTRY = false
 
 -- Usage : tools/lua.sh -f scripts/chest-open.lua   (En jeu uniquement)
 --
@@ -372,7 +378,25 @@ startCycle = function()
   end
 
   local byLive, rows = collectTargets()
-  local list = #byLive > 0 and byLive or rows
+  -- JAMAIS de repli aveugle sur le registre. Mesure, en jeu :
+  --
+  --   scene 3000
+  --   entites ClientChest chargees ... 10   (dont 4 reellement 10506)
+  --   marques Coffre deverrouillees ..... 194
+  --   dont avec une entite vivante ....... 0
+  --   distance mediane jusqu a une marque : 397 u
+  --
+  -- Une marque du registre n'a pas d'entite tant qu'on n'est pas alle la
+  -- charger. Se téléporter dessus, c'est se téléporter dans le vide -- et c'est
+  -- exactement la question "je me TP a des chests invisible ?".
+  --
+  -- Donc : entites vivantes, ou rien.
+  local list = byLive
+  if USE_REGISTRY and #byLive == 0 then
+    list = rows
+    print('REGISTRE: ' .. #rows .. ' marque(s) -- many ont AUCUNE entite, le TP '
+          .. 'peut atterrir dans le vide')
+  end
   if #list == 0 then
     finish('NP')
     return
@@ -403,11 +427,19 @@ local nCache = 0
 for _ in pairs(opened) do nCache = nCache + 1 end
 
 local byLive0, rows0 = collectTargets()
-local list0 = #byLive0 > 0 and byLive0 or rows0
-local source0 = #byLive0 > 0 and 'entités vivantes' or 'registre déverrouillé'
+local list0 = byLive0
+local source0 = 'entités vivantes'
+if USE_REGISTRY and #byLive0 == 0 then
+  list0 = rows0
+  source0 = 'registre (RISQUE : marques sans entité)'
+end
 
+-- On affiche aussi ce qu'on ECarte, et pourquoi. Un compteur de "ignorés" sans
+-- raison n'apprend rien ; avec la raison, on sait si le filtre fait son travail.
 print(string.format('# coffres NON OUVERTS (scene %s, source: %s) : %d  [cache déjà ouverts: %d]',
                      tostring(e.sceneId), source0, #list0, nCache))
+print(string.format('# marques au registre IGNOREES (aucune entité = TP dans le vide) : %d',
+                     #rows0))
 for i, r in ipairs(list0) do
   if i > MAX_LIST then
     print(string.format('... (%d de plus)', #list0 - MAX_LIST))
