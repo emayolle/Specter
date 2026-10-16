@@ -12,30 +12,37 @@
 // .cpp de rendu, ou a redefinir sa propre version — c'est-a-dire retrouver le
 // probleme qu'on vient de resoudre.
 //
-// SANS POLICE D'ICONES
+// LA POLICE D'ICONES
 //
-// Le backend D3D12 n'en embarque aucune. En ajouter une pour six libelles ne
-// vaut pas le cout, alors la navigation se fait au libelle, avec un trait
-// d'accent a gauche pour la page courante.
+// Font Awesome Free 6.5.2, SIL OFL 1.1, integree en entier dans la DLL par
+// tools/embed-font.sh. Elle est AJOUTEE a l'atlas, pas mise par defaut : le
+// defaut reste celui d'ImGui, sinon tous les libelles seraient des rectangles
+// vides. Les icones se demandent avec la classe Icone.
+//
+// Les glyphes sont dans la zone privee d'Unicode, donc on passe par un petit
+// wrapper PushIcon au lieu d'ecrire "\xEF\x80\x80" partout — une chaine brute
+// serait illisible, et un caractere isole se coupe en fin de ligne.
 //
 // RIEN ICI NE DEPEND DU C++ DU MENU
 //
-// Widgets purs : ils knowledge le style d'ImGui et dessinent. Aucune feature,
-// aucun registre. Si une feature s'en sert, c'est qu'elle veut la meme
-// apparence que les autres — pas qu'elle a besoin de savoir quoi.
+// Widgets purs : ils connaissent le style d'ImGui et dessinent. Aucune feature,
+// aucun registre.
 
 #pragma once
 
 #include "imgui.h"
 
+#include <algorithm>
+
 namespace specter::render {
 
 // La couleur d'accent, et les quatre qui vont avec. Tout le ton du menu tient
-// dans ces cinq valeurs : un violet sur un fond presque noir.
+// dans ces sept valeurs : un violet sur un fond presque noir.
 inline ImVec4 accent() { return ImVec4(0.58f, 0.36f, 0.92f, 1.00f); }
 inline ImVec4 accent_doux() { return ImVec4(0.22f, 0.15f, 0.34f, 1.00f); }
 inline ImVec4 fond() { return ImVec4(0.07f, 0.07f, 0.09f, 1.00f); }
 inline ImVec4 panneau() { return ImVec4(0.11f, 0.11f, 0.14f, 1.00f); }
+inline ImVec4 carte() { return ImVec4(0.10f, 0.10f, 0.13f, 1.00f); }
 inline ImVec4 survol() { return ImVec4(0.17f, 0.16f, 0.22f, 1.00f); }
 inline ImVec4 texte() { return ImVec4(0.88f, 0.88f, 0.92f, 1.00f); }
 inline ImVec4 texte_faible() { return ImVec4(0.50f, 0.48f, 0.57f, 1.00f); }
@@ -47,12 +54,135 @@ inline ImU32 coul(ImVec4 v)
     return ImGui::ColorConvertFloat4ToU32(v);
 }
 
+// Emporte la police d'icones tant qu'on en a besoin.
+class Icone {
+public:
+    Icone(ImFont* police, float taille)
+        : held_(police != nullptr)
+    {
+        if (held_) {
+            ImGui::PushFont(police);
+            ImGui::SetWindowFontScale(taille / 16.0f);
+        }
+    }
+    ~Icone()
+    {
+        if (held_) {
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::PopFont();
+        }
+    }
+    Icone(const Icone&) = delete;
+    Icone& operator=(const Icone&) = delete;
+
+private:
+    bool held_;
+};
+
+// Les glyphes qu'on utilise reellement, par nom plutot que par nombre.
+// Font Awesome Free, zone privee d'Unicode.
+namespace ico {
+constexpr unsigned int reglages = 0xF013;   // cog
+constexpr unsigned int eclair = 0xF0E7;     // bolt
+constexpr unsigned int terminal = 0xF120;   // terminal
+constexpr unsigned int carte = 0xF041;      // map-marker
+constexpr unsigned int vise = 0xF05B;       // crosshairs
+constexpr unsigned int robot = 0xF544;      // robot
+constexpr unsigned int cube = 0xF1B2;       // cube
+constexpr unsigned int curseur = 0xF3C5;   // sliders-h
+constexpr unsigned int bug = 0xF118;        // bug
+constexpr unsigned int liste = 0xF0C9;      // bars
+constexpr unsigned int code = 0xF1C9;       // file-code
+constexpr unsigned int outil = 0xF0AD;      // wrench
+constexpr unsigned int oeil = 0xF06E;       // eye
+constexpr unsigned int info = 0xF05A;       // info-circle
+}  // namespace ico
+
+// Une entree de navigation : icone + libelle, comme sur la maquette.
+inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
+                       bool actif, float largeur, float hauteur)
+{
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 q(p.x + largeur, p.y + hauteur);
+
+    if (actif) {
+        dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
+    }
+
+    // Trait d'accent a gauche : c'est ce qu'on voit quand la nav defile.
+    if (actif) {
+        dl->AddRectFilled(ImVec2(p.x, p.y + 3.0f), ImVec2(p.x + 3.0f, q.y - 3.0f),
+                          coul(accent()), 1.5f);
+    }
+
+    // Icone, a l'etat de la page.
+    if (police) {
+        Icone portee(police, 15.0f);
+        ImGui::SetCursorPos(ImVec2(p.x + 14.0f, p.y + (hauteur - 15.0f) * 0.5f));
+        ImGui::TextColored(actif ? accent() : texte_faible(), "%c",
+                           static_cast<unsigned short>(glyphe));
+    }
+
+    // Libelle. Selectable reste pose dessous : c'est lui qui capte le clic, et
+    // on ne peut pas le poser sous un texte qu'on dessine a la main.
+    ImGui::SetCursorScreenPos(p);
+    ImGui::InvisibleButton("##nav", ImVec2(largeur, hauteur));
+    if (actif && ImGui::IsItemHovered()) {
+        dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
+    }
+}
+
+// Un PANNEAU DE GROUPE : titre a l'accent, contenu en dessous.
+//
+// C'est ce qui remplace les `---` d'ImGui, qui reignent le menu en lignes de
+// tirets et donnent l'impression d'une liste de debug plutot que d'un panneau.
+//
+// RAII, et BeginChild : une premiere version dessinait le fond a la main avec
+// GetContentRegionAvail(), qui RETRECIT a chaque ligne ajoutee — la hauteur du
+// cadre aurait donc dependre de l'ordre de dessin, et le panneau aurait ete
+// trop court des que son contenu aurait grandi. BeginChild sait se mesurer
+// seul.
+class Panneau {
+public:
+    explicit Panneau(const char* titre) : titre_(titre)
+    {
+        const ImVec2 dispo = ImGui::GetContentRegionAvail();
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, carte());
+        ImGui::PushStyleColor(ImGuiCol_Border, bordure());
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(11.0f, 9.0f));
+
+        ImGui::BeginChild(titre, ImVec2(dispo.x, 0.0f),
+                          ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY,
+                          ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse);
+
+        ImGui::TextColored(accent(), "%s", titre_);
+        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+    }
+
+    ~Panneau()
+    {
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    }
+
+    Panneau(const Panneau&) = delete;
+    Panneau& operator=(const Panneau&) = delete;
+
+private:
+    const char* titre_;
+};
+
 // Une case a cocher qui ressemble a une case a cocher : cadre sombre, coche
 // blanche quand elle est pleine, cadre qui s'allume a l'accent au survol, et le
 // libelle qui s'atténue quand elle est décochée.
-//
-// REND VRAI quand l'utilisateur a clique. Le libellé est multi-lignes si besoin :
-// tout ce qui suit un retour a la ligne explicite passe dessous.
 inline bool case_a_cocher(const char* libelle, bool* valeur)
 {
     ImGui::PushID(libelle);
@@ -98,7 +228,23 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
     return change;
 }
 
-// Titre de section, avec le trait d'accent qui donne le ton.
+// Un curseur qui ressemble a un curseur : piste fine, poignée ronde violette,
+// valeur en clair a droite.
+inline bool curseur(const char* libelle, float* valeur, float mini, float maxi,
+                    const char* format = "%.1f")
+{
+    ImGui::PushID(libelle);
+    const float l = ImGui::GetContentRegionAvail().x - 62.0f;
+
+    ImGui::TextUnformatted(libelle);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::max(l, 60.0f));
+    const bool change = ImGui::SliderFloat("##v", valeur, mini, maxi, format);
+    ImGui::PopID();
+    return change;
+}
+
+// Titre de page, avec le trait d'accent qui donne le ton.
 inline void entete(const char* titre)
 {
     ImGui::Dummy(ImVec2(0.0f, 4.0f));

@@ -37,6 +37,7 @@
 #include "platform/perf.h"
 
 #include "imgui.h"
+#include "font_awesome.h"          // generated/, from third_party/fontawesome/
 #include "render/ui_widgets.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
@@ -64,6 +65,10 @@ std::atomic<bool> g_ui_enabled{true};
 State g_state = State::Idle;
 bool g_err_logged = false;
 bool g_queue_wait_logged = false;
+
+// La police d icones, une fois l'atlas cuit. Pas la police par defaut :
+// voir le commentaire au chargement.
+ImFont* g_icon_font = nullptr;
 
 HWND g_probe_hwnd = nullptr;
 HWND g_hwnd = nullptr;
@@ -420,6 +425,35 @@ InitResult init_once(IDXGISwapChain* sc)
     // (see render/input.*).
     io.MouseDrawCursor = true;
     ImGui::StyleColorsDark();
+
+    // La police d icones, AVANT le premier ImGui_ImplDX12_NewFrame : c'est lui
+    // qui cuit l'atlas, et un glyphe ajoute apres ne peut plus l'etre.
+    //
+    // Elle est AJOUTEE, pas mise par defaut. La version d'avant faisait
+    // SetDefaultFont() dessus, ce qui veut dire que TOUT le texte du menu
+    // aurait ete rendu avec une police de glyphes uniques : les libelles
+    // seraient devenues des rectangles vides. Le defaut reste celui d'ImGui, et
+    // les icones se demandent une par une avec PushFont.
+    //
+    // Font Awesome Free place ses glyphes dans la zone privee d'Unicode, donc
+    // la plage se construit a la main : passer 0xFFFF ferait cuire 65 000
+    // glyphes dont on n'en utilise qu'une dizaine.
+    static const ImWchar kPlageIcones[] = {0xF000, 0xF8FF};
+    static bool police_ajoutee = false;
+    if (!police_ajoutee) {
+        police_ajoutee = true;
+        ImFontConfig cfg;
+        // kIconFont est statique : ImGui ne doit surtout pas tenter de la
+        // liberer a la destruction de l'atlas.
+        cfg.FontDataOwnedByAtlas = false;
+        g_icon_font = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
+            render::kIconFont, static_cast<int>(render::kIconFontSize),
+            16.0f, &cfg, kPlageIcones);
+        if (g_icon_font == nullptr) {
+            log_once("police d icones refusee -- le menu tournera sans icone");
+        }
+    }
+
     ImGui_ImplWin32_Init(g_hwnd ? g_hwnd : g_probe_hwnd);
 
     // Once the context exists, route keyboard messages the subclass swallows to
@@ -615,56 +649,72 @@ void build_ui()
         }
 
         const ImVec2 taille = ImGui::GetContentRegionAvail();
-        const float l_nav = 186.0f;
+        const float l_nav = 190.0f;
+        bool affiche_mouvement = false;
 
         // ---------------- colonne de navigation ----------------
         ImGui::BeginChild("nav", ImVec2(l_nav, taille.y), ImGuiChildFlags_None);
         {
-            ImGui::Dummy(ImVec2(14.0f, 12.0f));
-            ImGui::TextColored(accent(), "SPECTER");
-            ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            const ImVec2 s = ImGui::GetCursorScreenPos();
-            dl->AddRectFilled(ImVec2(s.x - 8.0f, s.y),
-                              ImVec2(s.x + l_nav - 26.0f, s.y + 1.0f),
-                              coul(bordure()), 0.5f);
+            // Le logo : un carre arrondi a l'accent avec le glyphe du jeu, puis
+            // le nom. C'est ce qui donne au menu un point de repere quand il
+            // est ouvert, au lieu d'un titre de fenetre barre de 1 pixel.
+            ImGui::Dummy(ImVec2(16.0f, 14.0f));
+            {
+                ImVec2 p = ImGui::GetCursorScreenPos();
+                const float c = 30.0f;
+                ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + c, p.y + c),
+                                                          coul(accent()), 8.0f);
+                Icone logo(g_icon_font, 17.0f);
+                ImGui::SetCursorPos(ImVec2(p.x + 7.0f, p.y + 6.0f));
+                ImGui::TextColored(fond(), "%c", static_cast<unsigned short>(ico::vise));
+                ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f));
+                ImGui::TextColored(texte(), "SPECTER");
+                ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f +
+                                                ImGui::GetTextLineHeight()));
+                ImGui::TextDisabled("Aniimoe");
+            }
             ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
+            // Titres de section, comme sur la maquette : CA combat, CA autre.
+            // Sans ca, six entrees de meme niveau donnent une liste grise.
+            ImGui::TextDisabled("  DEPLACEMENT");
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
             for (int i = 0; i < npages; ++i) {
-                const bool actif = (i == choisie);
+                // Deux groupes : ce qui agit sur le personnage, ce qui agit sur
+                // la scene. Un libelle suffit a le dire, une icône non.
+                const bool mouvement =
+                    (std::strcmp(pages[i].label, "Teleport") == 0 ||
+                     std::strcmp(pages[i].label, "Waypoints") == 0);
+                const bool suivant_mouvement = mouvement && !affiche_mouvement;
+                if (suivant_mouvement) {
+                    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+                    ImGui::TextDisabled("  JEU");
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    affiche_mouvement = true;
+                }
 
+                unsigned int glyphe = ico::reglages;
+                if (std::strcmp(pages[i].label, "Teleport") == 0) glyphe = ico::vise;
+                else if (std::strcmp(pages[i].label, "Waypoints") == 0) glyphe = ico::carte;
+                else if (std::strcmp(pages[i].label, "Movement") == 0) glyphe = ico::eclair;
+                else if (std::strcmp(pages[i].label, "Auto-farm") == 0) glyphe = ico::robot;
+                else if (std::strcmp(pages[i].label, "Aniimoe") == 0) glyphe = ico::bug;
+                else if (std::strcmp(pages[i].label, "Lua Editor") == 0) glyphe = ico::terminal;
+                else if (std::strcmp(pages[i].label, "Divers") == 0) glyphe = ico::outil;
+
+                const float h = ImGui::GetTextLineHeight() + 10.0f;
                 ImGui::Dummy(ImVec2(6.0f, 1.0f));
-                ImVec2 t = ImGui::GetContentRegionAvail();
-                t.x = l_nav - 34.0f;
-                t.y = ImGui::GetTextLineHeight() + 9.0f;
+                entree_nav(g_icon_font, pages[i].label, glyphe, (i == choisie),
+                           l_nav - 32.0f, h);
 
-                ImGui::PushStyleColor(ImGuiCol_Text,
-                                      actif ? texte() : texte_faible());
-                ImGui::Selectable(pages[i].label, actif,
-                                  ImGuiSelectableFlags_SpanAllColumns, t);
-                ImGui::PopStyleColor();
-
-                if (actif) {
-                    const ImVec2 p = ImGui::GetItemRectMin();
-                    const ImVec2 q = ImGui::GetItemRectMax();
-                    dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
-                    dl->AddRectFilled(ImVec2(p.x, p.y + 3.0f),
-                                      ImVec2(p.x + 3.0f, q.y - 3.0f),
-                                      coul(accent()), 1.5f);
+                // InvisibleButton pose plus haut ; on intercepte le clic ici.
+                if (ImGui::IsMouseClicked(0) && ImGui::IsItemHovered()) {
+                    choisie = i;
                 }
             }
         }
         ImGui::EndChild();
-
-        // filet vertical entre les deux colonnes
-        {
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            const ImVec2 o = ImGui::GetWindowPos();
-            dl->AddRectFilled(ImVec2(o.x + l_nav, o.y + 10.0f),
-                              ImVec2(o.x + l_nav + 1.0f, o.y + taille.y - 10.0f),
-                              coul(bordure()), 0.0f);
-        }
 
         // ---------------- contenu ----------------
         ImGui::SameLine(0.0f, 1.0f);
@@ -674,22 +724,23 @@ void build_ui()
             entete(pages[choisie].label);
 
             if (std::strcmp(pages[choisie].label, "Divers") == 0) {
-                ImGui::TextDisabled("Etat du client");
-                ImGui::Dummy(ImVec2(0.0f, 2.0f));
-                ImGui::TextUnformatted(g_snapshot);
-                ImGui::Dummy(ImVec2(0.0f, 12.0f));
-
-                ImGui::TextDisabled("Rendu");
-                ImGui::Dummy(ImVec2(0.0f, 2.0f));
-                ImGui::Text("%.1f fps   (%.2f ms par image)", io.Framerate,
-                            1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
-                ImGui::Dummy(ImVec2(0.0f, 16.0f));
-
-                if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
-                    g_ui_enabled = false;
+                {
+                    Panneau p1("ETAT DU CLIENT");
+                    ImGui::TextUnformatted(g_snapshot);
                 }
-                ImGui::SameLine();
-                ImGui::TextDisabled("ou DELETE");
+                {
+                    Panneau p2("RENDU");
+                    ImGui::Text("%.1f fps", io.Framerate);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(%.2f ms par image)",
+                                        1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
+                        g_ui_enabled = false;
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("ou DELETE");
+                }
             } else {
                 for (int i = 0; i < features::registry_count(); ++i) {
                     const features::Feature* f = features::registry()[i];
