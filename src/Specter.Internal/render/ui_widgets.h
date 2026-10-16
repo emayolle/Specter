@@ -165,15 +165,30 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
                           coul(accent()), 1.5f);
     }
 
+    // DEUX SYSTEMES DE COORDONNEES, ET C'EST LA QUE CA CASSAIT.
+    //
+    // GetCursorScreenPos() et SetCursorScreenPos() parlent ABSOLU : coordonnees
+    // ecran. SetCursorPos() et GetCursorPos() parlent LOCAL : relatives a la
+    // fenetre courante.
+    //
+    // Je lisais en absolu et j'ecrivais en local. L'ecart vaut exactement la
+    // position de la fenetre : a 40 px du coin, il passait inapercu ; des que
+    // la fenetre bougeait vers la droite, tout glissait de la meme quantite —
+    // le logo, les icones, les libelles, tous du meme decalage.
+    //
+    // LA REGLE : on lit avec GetCursorScreenPos, on ecrit avec
+    // SetCursorScreenPos. On ne melange jamais les deux.
+
     // Icone, police d'icones posee le temps du rendu.
     if (police) {
         Icone portee(police, 16.0f);
-        ImGui::SetCursorPos(ImVec2(p.x + 13.0f, p.y + (hauteur - 16.0f) * 0.5f));
+        ImGui::SetCursorScreenPos(
+            ImVec2(p.x + 13.0f, p.y + (hauteur - 16.0f) * 0.5f));
         glyphe_dessine(glyphe, actif ? accent() : texte_faible());
     }
 
     // Libelle, a cote de l'icone.
-    ImGui::SetCursorPos(
+    ImGui::SetCursorScreenPos(
         ImVec2(p.x + 37.0f, p.y + (hauteur - ImGui::GetTextLineHeight()) * 0.5f));
     ImGui::TextColored(actif ? texte() : texte_faible(), "%s", libelle);
 

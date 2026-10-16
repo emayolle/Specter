@@ -685,12 +685,12 @@ void build_ui()
 
                 {
                     Icone logo(g_icon_font, 17.0f);
-                    ImGui::SetCursorPos(ImVec2(o.x + 7.0f, o.y + 6.0f));
+                    ImGui::SetCursorScreenPos(ImVec2(o.x + 7.0f, o.y + 6.0f));
                     glyphe_dessine(ico::vise, fond());
                 }
-                ImGui::SetCursorPos(ImVec2(o.x + c + 11.0f, o.y + 2.0f));
+                ImGui::SetCursorScreenPos(ImVec2(o.x + c + 11.0f, o.y + 2.0f));
                 ImGui::TextColored(texte(), "SPECTER");
-                ImGui::SetCursorPos(
+                ImGui::SetCursorScreenPos(
                     ImVec2(o.x + c + 11.0f, o.y + 2.0f + ImGui::GetTextLineHeight()));
                 ImGui::TextColored(texte_faible(), "Aniimoe");
 
