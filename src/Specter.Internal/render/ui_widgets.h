@@ -207,8 +207,16 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
     // cliquable a son point de depart.
     ImGui::SetCursorScreenPos(depart);
     ImGui::Dummy(ImVec2(largeur + marge, hauteur));
+    // APRES le Dummy : c'est la ou le curseur doit se retrouver.
+    const ImVec2 apres = ImGui::GetCursorScreenPos();
+
+    // Zone cliquable par-dessus, posee SANS deplacer le curseur : un
+    // InvisibleButton avance le curseur comme n'importe quel item, donc sans ce
+    // retour les pages de la nav se reservaient DEUX lignes chacune — c'est
+    // l'ecart enorme entre Joueur et Monde.
     ImGui::SetCursorScreenPos(depart);
     ImGui::InvisibleButton("##zone", ImVec2(largeur + marge, hauteur));
+    ImGui::SetCursorScreenPos(apres);
 
     ImGui::PopID();
 }
@@ -428,10 +436,16 @@ inline bool ligne_repere(const char* nom, float x, float y, float z,
 
     // Bouton a droite, toujours au meme endroit quelle que soit la longueur du
     // nom : aligne, on lit une colonne de boutons au lieu d'un texte a saute.
+    // LE BOUTON PREND LA HAUTEUR DE LA LIGNE.
+    //
+    // Il faisait la taille du texte plus deux pixels : au milieu d'une ligne de
+    // 24 px, un bouton de 20 px paraissait Petit, et c'etait le seul element
+    // de la ligne qui ne touchait ni le haut ni le bas. Un rectangle qui ne
+    // remplit pas sa ligne se lit comme un titre, pas comme une action.
     const ImVec2 t_btn = ImGui::CalcTextSize(action);
-    const float pad = 10.0f;
+    const float pad = 12.0f;
     const ImVec2 p0(d.x + ImGui::GetContentRegionAvail().x - t_btn.x - pad * 2.0f,
-                     d.y + 1.0f);
+                     d.y);
     const ImVec2 q(p0.x + t_btn.x + pad * 2.0f, d.y + h);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -442,7 +456,8 @@ inline bool ligne_repere(const char* nom, float x, float y, float z,
         dl->AddRectFilled(p0, q, coul(panneau()), 5.0f);
         dl->AddRect(p0, q, coul(bordure()), 5.0f, 0, 1.0f);
     }
-    ImGui::SetCursorScreenPos(ImVec2(p0.x + pad, d.y + 1.0f));
+    ImGui::SetCursorScreenPos(
+        ImVec2(p0.x + pad, p0.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
     ImGui::TextColored(survole ? fond() : texte(), "%s", action);
 
     ImGui::SetCursorScreenPos(p0);
