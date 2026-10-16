@@ -10,6 +10,7 @@
 #include <Windows.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "platform/hook/detour.h"
@@ -32,6 +33,119 @@ constexpr int kMaxHooks = 32;
 // Exactly the algorithm of the Steam routine at RVA 0x93770: first entry whose
 // 1..4-byte prefix matches wins; it reports the instruction length and the
 // relocation kind (0 none, 1 rel32@1, 2 rel32@2, 3 rel32@3, 4 rel8 EB->E9).
+// Longueur d'une instruction ModRM/SIB/disp, regles x86-64.
+//
+// `imm8` / `imm32` disent ce qui suit le operande. On ne devine JAMAIS : un
+// appel qui ne sait pas rendre une longueur refuse, parce qu'une longueur
+// fausse dans un trampoline, c'est un saut au milieu d'une instruction.
+bool modrm_len(const std::uint8_t* p, bool imm8, bool imm32, std::uint32_t* out)
+{
+    const std::uint8_t modrm = p[1];
+    const std::uint8_t mod = static_cast<std::uint8_t>(modrm >> 6);
+    const std::uint8_t rm = static_cast<std::uint8_t>(modrm & 7);
+    std::uint32_t n = 2;  // opcode + ModRM
+    if (mod != 3 && rm == 4) {
+        n += 1;  // SIB
+    }
+    if (mod == 0 && rm == 5) {
+        n += 4;  // disp32
+    } else if (mod == 1) {
+        n += 1;  // disp8
+    } else if (mod == 2) {
+        n += 4;  // disp32
+    }
+    if (imm8) {
+        n += 1;
+    }
+    if (imm32) {
+        n += 4;
+    }
+    *out = n;
+    return true;
+}
+
+// Le repli, pour ce que la table de Steam ne couvre pas.
+//
+// La table est un jeu de PREFIXES, pas un decodeur ModRM general : elle a une
+// seule entree 0x83, `83 64 24 00` (cmp dword [rsp+0x24], imm8). Le
+// compilateur de CE jeu ouvre une fonction par `83 f9 <imm8>` -- cmp ecx,
+// imm8 -- et la table ne le sait pas. Resultat mesure :
+//
+//     detour: XSRGlobalManager::GetPerfDistance opcode @+0 (byte 83)
+//             not in decoder table - refusing
+//
+// Ajouter l'entree qui manque ici ne ferait que deplacer le probleme a la
+// fonction suivante. Donc on decode vraiment le ModRM, pour les familles dont
+// la longueur est sans ambiguite, et on REFUSE tout le reste.
+//
+// Aucun de ces cas ne contient d immediat relatif : out_reloc reste 0, donc le
+// trampoline les recopie telles quelles.
+bool ld_decode_fallback(const std::uint8_t* op, std::uint32_t* out_len,
+                      std::uint32_t* out_reloc)
+{
+    *out_reloc = 0;
+    const std::uint8_t opc = op[0];
+    std::uint32_t n = 0;
+    switch (opc) {
+    // ALU op r/m,r et r,r/m : pas d immediat
+    case 0x00: case 0x01: case 0x02: case 0x03:
+    case 0x08: case 0x09: case 0x0a: case 0x0b:
+    case 0x10: case 0x11: case 0x12: case 0x13:
+    case 0x18: case 0x19: case 0x1a: case 0x1b:
+    case 0x20: case 0x21: case 0x22: case 0x23:
+    case 0x28: case 0x29: case 0x2a: case 0x2b:
+    case 0x30: case 0x31: case 0x32: case 0x33:
+    case 0x38: case 0x39: case 0x3a: case 0x3b:
+    // MOV, TEST, XCHG, LEA, POP r/m
+    case 0x63: case 0x84: case 0x85: case 0x86: case 0x87:
+    case 0x88: case 0x89: case 0x8a: case 0x8b: case 0x8d: case 0x8f:
+    // NOP r/m, Prefetch
+    case 0x0f:
+        return false;  // deux octets : la table s'en charge
+    // shifts par 1 et par CL
+    case 0xd0: case 0xd1: case 0xd2: case 0xd3:
+    // group 4 et 5
+    case 0xfe: case 0xff:
+        modrm_len(op, false, false, &n);
+        *out_len = n;
+        return true;
+    // Jcc rel8 : 2 octets, et le trampoline les reecrit en forme longue. Le
+    // second octet est un decalage, pas un ModRM : c'est pour ca que ca passe
+    // par le repli et pas par modrm_len.
+    case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75:
+    case 0x76: case 0x77: case 0x78: case 0x79: case 0x7a: case 0x7b:
+    case 0x7c: case 0x7d: case 0x7e: case 0x7f: {
+        if (out_reloc == nullptr) {
+            return false;
+        }
+        *out_len = 2;
+        *out_reloc = 5;
+        return true;
+    }
+    // immediat 8 bits
+    case 0x6b: case 0x80: case 0x83: case 0xc0: case 0xc1:
+        modrm_len(op, true, false, &n);
+        *out_len = n;
+        return true;
+    // immediat 32 bits
+    case 0x69: case 0x81: case 0xc7:
+        modrm_len(op, false, true, &n);
+        *out_len = n;
+        return true;
+    // group 3 : l'immediat n'existe que pour /0 et /1 (TEST)
+    case 0xf6: case 0xf7: {
+        const std::uint8_t reg = static_cast<std::uint8_t>((op[1] >> 3) & 7);
+        const bool imm = (reg <= 1);
+        const bool wide = (opc == 0xf7);
+        modrm_len(op, imm && !wide, imm && wide, &n);
+        *out_len = n;
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 bool ld_decode(const std::uint8_t* p, std::uint32_t* out_len,
                std::uint32_t* out_reloc)
 {
@@ -51,6 +165,13 @@ bool ld_decode(const std::uint8_t* p, std::uint32_t* out_len,
         }
         *out_len = t.len;
         *out_reloc = t.reloc;
+        return true;
+    }
+    std::uint32_t n = 0;
+    std::uint32_t reloc = 0;
+    if (ld_decode_fallback(p, &n, &reloc) && n != 0) {
+        *out_len = n;
+        *out_reloc = reloc;
         return true;
     }
     return false;
@@ -168,13 +289,22 @@ std::uint8_t* build_trampoline(void* target, void* hook, const char* name,
         std::uint32_t len = 0;
         std::uint32_t reloc = 0;
         if (!ld_decode(code + off, &len, &reloc) || len == 0) {
+            // Les 8 octets du depart, parce que "byte 83" ne dit rien et
+            // qu'il a fallu relire le desassemblage pour comprendre.
+            char octets[32];
+            std::snprintf(octets, sizeof(octets), "%02x %02x %02x %02x "
+                                               "%02x %02x %02x %02x",
+                          code[0], code[1], code[2], code[3], code[4], code[5],
+                          code[6], code[7]);
             log::error("detour: %s opcode @+%u (byte %02x) not in decoder "
-                       "table - refusing",
-                       name, off, code[off]);
+                       "table - refusing. depart : %s",
+                       name, off, code[off], octets);
             return nullptr;
         }
         insns[n++] = {off, len, reloc};
-        copy_len += (reloc == 4) ? 5u : len;
+        // reloc 4 : EB rel8 -> E9 rel32  (2 octets -> 5)
+        // reloc 5 : Jcc rel8 -> 0F 8x rel32 (2 octets -> 6)
+        copy_len += (reloc == 4) ? 5u : (reloc == 5 ? 6u : len);
         off += len;
     }
     const std::uint32_t preamble_len = off;
@@ -211,6 +341,38 @@ std::uint8_t* build_trampoline(void* target, void* hook, const char* name,
             const std::int32_t r = static_cast<std::int32_t>(nr);
             std::memcpy(tramp + c + 1, &r, 4);
             c += 5;
+        } else if (in.reloc == 5) {
+            // JCC REL8 -> FORME LONGUE.
+            //
+            // 7x rel8 devient 0F 8x rel32 : 2 octets remplaces par 6. Sans
+            // ca, le trampoline recopierait les 2 octets et le saut porterait
+            // sur l'adresse du patch, pas sur la destination d'origine.
+            //
+            // C'est le cas du jeu : GetPerfDistance commence par
+            //     83 f9 0a   cmp ecx, 0x0a
+            //     7e 27      jle +0x27
+            // et la table de Steam n'a AUCUNE famille Jcc : elle a ete
+            // relevee sur un overlay qui n'avait jamais rencontres ca.
+            const std::uint8_t opc = code[in.off];
+            const std::int8_t rel8 =
+                static_cast<std::int8_t>(code[in.off + 1]);
+            const std::int64_t dest = static_cast<std::int64_t>(
+                                          reinterpret_cast<std::uintptr_t>(
+                                              code + in.off + 2)) +
+                                      rel8;
+            const std::int64_t end = static_cast<std::int64_t>(
+                reinterpret_cast<std::uintptr_t>(tramp + c + 6));
+            const std::int64_t nr = dest - end;
+            if (nr < INT32_MIN || nr > INT32_MAX) {
+                ::VirtualFree(tramp, 0, MEM_RELEASE);
+                log::error("detour: %s Jcc relocation out of range", name);
+                return nullptr;
+            }
+            tramp[c] = 0x0F;
+            tramp[c + 1] = static_cast<std::uint8_t>(0x80 | (opc & 0x0F));
+            const std::int32_t r = static_cast<std::int32_t>(nr);
+            std::memcpy(tramp + c + 2, &r, 4);
+            c += 6;
         } else {
             std::memcpy(tramp + c, code + in.off, in.len);
             if (in.reloc >= 1 && in.reloc <= 3) {

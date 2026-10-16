@@ -199,10 +199,18 @@ bool set_lod_cap(int valeur)
 
 void draw_ui()
 {
-    if (!installed()) {
-        ImGui::TextDisabled("detour absent -- reinjecter la DLL");
-        return;
-    }
+    // LE DETOUR ET LE PLAFOND SONT DEUX CHOSES INDEPENDANTES.
+    //
+    // Le plafond s'ecrit dans un octet du code du jeu, avec VirtualProtect : il
+    // n'a besoin ni du detour, ni de la table de decodage, ni de la
+    // trampoline. Le detour, lui, peut echouer -- il l'a fait, sur une opcode
+    // que la table de Steam ne connait pas.
+    //
+    // Rendre l'UI entiere dependante du detour, c'est supprimer le second
+    // levier au moment exact ou le premier est en panne. Ca a ete le cas : le
+    // detour a echoue, et le message "detour absent" a masque le curseur de
+    // plafond, qui aurait, lui, fonctionne.
+    const bool detour_ok = installed();
 
     // Le neutre est un BOUTON, pas une position du curseur.
     //
@@ -218,15 +226,20 @@ void draw_ui()
         set_value(kMax);
     }
 
-    int v = g_chunks;
-    if (ImGui::SliderInt("Portee du streaming", &v, kMin, kMax, "%d")) {
-        set_value(v);
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("%s", label_for(g_chunks));
-
-    if (g_game_value > 0) {
-        ImGui::TextDisabled("le jeu demande %d", g_game_value);
+    if (detour_ok) {
+        int v = g_chunks;
+        if (ImGui::SliderInt("Portee du streaming", &v, kMin, kMax, "%d")) {
+            set_value(v);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", label_for(g_chunks));
+        if (g_game_value > 0) {
+            ImGui::TextDisabled("le jeu demande %d", g_game_value);
+        }
+    } else {
+        // Le detour manque : on le dit sur SA ligne, et le plafond reste la
+        // dessous, fonctionnel.
+        ImGui::TextDisabled("detour absent -- GetPerfDistance non branche");
     }
 
     // ---- LE SECOND PLAFOND ----
