@@ -43,22 +43,34 @@ local function etat(h)
                        e ~= '' and ('  | ' .. e) or '')
 end
 
--- --- 1. arreter le palier precedent ---------------------------------------
-if S.workers and #S.workers > 0 then
-  print('=== arret du palier ' .. tostring(S.palier or '?') .. ' ===')
-  for _, h in ipairs(S.workers) do
+-- --- 1. arreter TOUT ce qui tourne ----------------------------------------
+-- Pas seulement le palier precedent : un worker lance par une version du
+-- script qui a plante AVANT d'enregistrer son handle traine jusqu'a la
+-- fermeture du jeu et fausse le compte. Au palier 2 on voyait "3 worker(s) en
+-- vie" pour 2 workers lances. On balaie donc les six emplacements.
+local orphans = {}
+for h = 0, 5 do
+  local st = specter.thread.status(h)
+  if st == 'running' or st == 'kill asked' or st == 'starting' then
+    orphans[#orphans + 1] = h
+  end
+end
+
+if #orphans > 0 then
+  print('=== arret de ' .. #orphans .. ' worker(s) en cours ===')
+  for _, h in ipairs(orphans) do
     print(string.format('  kill  %d -> %s', h, tostring(specter.thread.kill(h))))
   end
-  for _, h in ipairs(S.workers) do
+  for _, h in ipairs(orphans) do
     print(string.format('  join  %d -> %s', h, tostring(specter.thread.join(h, 8000))))
   end
-  for _, h in ipairs(S.workers) do
+  for _, h in ipairs(orphans) do
     print('  final ' .. etat(h))
   end
   print('  alive apres arret : ' .. tostring(specter.thread.alive()))
-  S.workers = nil
   print("  -> va voir le log : grep '\\[worker' specter.log")
 end
+S.workers = nil
 
 -- --- 2. lancer le palier suivant -------------------------------------------
 S.palier = (S.palier or 0) + 1
