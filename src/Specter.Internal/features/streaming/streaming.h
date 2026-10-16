@@ -66,7 +66,7 @@
 // |chunkAgent - chunkPos| <= 1 sur x ET z ; le niveau de portee, lui, est en
 // tuiles et plafonne a 12.
 
-CE QUE CA NE FAIT PAS, ET C'EST LE POINT
+// CE QUE CA NE FAIT PAS, ET C'EST LE POINT
 //
 // Ca ne fait PAS apparaître plus d'entités. Le streaming charge des BLOCS de
 // terrain ; les coffres, les Aniipods et les PNJ viennent du SERVEUR. Charger
