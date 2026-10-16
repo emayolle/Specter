@@ -37,6 +37,7 @@
 #include "platform/perf.h"
 
 #include "imgui.h"
+#include "render/ui_widgets.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
 
@@ -469,17 +470,84 @@ void feed_input()
     }
 }
 
+// ---------------------------------------------------------------- theme
+//
+// Palette et widgets.
+//
+// La demande etait : « c'est pas assez representatif, et c'est complique de se
+// balader dedans ». Les deux problemes sont la disposition, pas la couleur : une
+// barre d'onglets en haut avec six libelles oblige a lire chaque mot pour savoir
+// ou cliquer. Une colonne de navigation a gauche avec une seule couleur d'accent
+// se repere au coin de l'oeil.
+//
+// Aucune police d'icones : le backend D3D12 n'en embarque aucune, et en ajouter
+// une pour six entrees ne vaut pas le cout. Les libelles sont la navigation.
+
+void poser_style()
+{
+    static bool fait = false;
+    if (fait) {
+        return;
+    }
+    fait = true;
+
+    ImGuiStyle& st = ImGui::GetStyle();
+    st.WindowRounding = 12.0f;
+    st.ChildRounding = 10.0f;
+    st.FrameRounding = 7.0f;
+    st.GrabRounding = 7.0f;
+    st.ScrollbarRounding = 7.0f;
+    st.ItemSpacing = ImVec2(10.0f, 9.0f);
+    st.FramePadding = ImVec2(11.0f, 7.0f);
+    st.WindowPadding = ImVec2(0.0f, 0.0f);   // la coque dessine son propre padding
+
+    ImVec4* c = st.Colors;
+    c[ImGuiCol_WindowBg] = fond();
+    c[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    c[ImGuiCol_PopupBg] = panneau();
+    c[ImGuiCol_Border] = bordure();
+    c[ImGuiCol_FrameBg] = panneau();
+    c[ImGuiCol_FrameBgHovered] = survol();
+    c[ImGuiCol_FrameBgActive] = accent_doux();
+    c[ImGuiCol_TitleBg] = fond();
+    c[ImGuiCol_TitleBgActive] = fond();
+    c[ImGuiCol_Button] = panneau();
+    c[ImGuiCol_ButtonHovered] = survol();
+    c[ImGuiCol_ButtonActive] = accent_doux();
+    c[ImGuiCol_Header] = survol();
+    c[ImGuiCol_HeaderHovered] = survol();
+    c[ImGuiCol_HeaderActive] = accent_doux();
+    c[ImGuiCol_CheckMark] = accent();
+    c[ImGuiCol_SliderGrab] = accent();
+    c[ImGuiCol_SliderGrabActive] = ImVec4(0.76f, 0.58f, 1.00f, 1.00f);
+    c[ImGuiCol_Text] = texte();
+    c[ImGuiCol_TextDisabled] = texte_faible();
+    c[ImGuiCol_Separator] = ImVec4(0.30f, 0.28f, 0.36f, 0.40f);
+}
+
+// Une case a cocher qui ressemble a une case a cocher.
+//
+// ImGui dessine la sienne en mode « frame », ce qui se lit comme un champ de
+// saisie des qu'elle est cochee : c'est la premiere chose qui rendait l'ancien
+// menu peu representatif. Ici la coche est un glyphe, le cadre s'allume a
+// l'accent au survol, et la ligne entiere reagit.
+
+using namespace specter::render;
+
 void build_ui()
 {
+    poser_style();
     ImGuiIO& io = ImGui::GetIO();
 
-    ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(780.0f, 600.0f), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Specter")) {
-        ImGui::TextUnformatted(g_snapshot);
-        ImGui::Separator();
+    ImGui::SetNextWindowPos(ImVec2(40.0f, 40.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(920.0f, 620.0f), ImGuiCond_FirstUseEver);
 
-        // Feed every feature first, visible tab or not.
+    const ImGuiWindowFlags fen =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
+
+    if (ImGui::Begin("Specter", nullptr, fen)) {
+        // Feed every feature first, visible page or not.
         for (int i = 0; i < features::registry_count(); ++i) {
             const features::Feature* f = features::registry()[i];
             if (f->on_frame) {
@@ -487,92 +555,155 @@ void build_ui()
             }
         }
 
-        if (ImGui::BeginTabBar("##main_tabs")) {
-            // ONE TAB PER DISTINCT LABEL, not one per feature.
-            //
-            // The overlay no longer knows what a console is, or that a teleport
-            // tab used to exist. But the tab LABEL is the ImGui ID, so two
-            // features carrying the same label produce two tabs with the same
-            // ID: selecting one selects both, and the second is unreachable --
-            // with no error, and no symptom anyone would look for.
-            //
-            // So the label is the grouping key, not the feature. "Movement"
-            // holds the stamina checkbox and the fall-damage one. Teleport and
-            // Waypoints each keep their own. Nothing here knows or cares which
-            // feature lives in which tab.
-            //
-            // The first version tracked the labels it had OPENED, which is the
-            // wrong set. BeginTabItem returns false for every tab that is not
-            // the selected one, so an unselected label never got recorded and
-            // the NEXT feature with that label called BeginTabItem again --
-            // two tabs, one ID, and ImGui saying so:
-            //
-            //     Programmer error: 2 visible items with conflicting ID!
-            //
-            // So what is tracked is every label PASSED to BeginTabItem, along
-            // with whether that call ended up open. One call per distinct
-            // label, always; drawing only for the ones that are open.
-            //
-            // A small fixed array rather than a std::vector: this runs every
-            // frame, and the image is manually mapped, so the fewer dynamic
-            // things a render frame touches, the better.
-            struct TabVu {
-                const char* label;
-                bool open;
-            };
-            TabVu vus[16];
-            int nvus = 0;
+        // ---- les pages : UNE PAR LIBELLE DISTINCT, pas une par feature ----
+        //
+        // Le overlay ne sait plus ce qu'est une console, ni qu'un onglet
+        // Teleport a existe. Mais la libelle EST l'identifiant ImGui : deux
+        // features qui portent la meme libelle donnent deux entrees de meme ID,
+        // et la seconde devient injoignable -- sans erreur, et sans symptome que
+        // quiconque chercherait.
+        //
+        // La premiere version memorisait les libelles qu'elle avait OUVERTES.
+        // C'est le mauvais ensemble : BeginTabItem rend false pour toute
+        // libelle non selectionnee, donc une libelle non selectionnee n'etait
+        // jamais enregistree, et la feature SUIVANTE de la meme libelle
+        // rappelait BeginTabItem -- deux entrees, un ID, et ImGui qui le dit :
+        //
+        //     Programmer error: 2 visible items with conflicting ID!
+        //
+        // Ce qu'on memorise est donc l'ensemble des libelles VUES. Un seul
+        // passage par libelle distincte, toujours. La regle a survécu au
+        // changement de coque : c'est elle, pas BeginTabItem, qui faisait foi.
+        //
+        // Un tableau fixe plutot qu'un std::vector : ceci tourne a chaque frame
+        // et l'image est chargee manuellement, donc moins de choses dynamiques
+        // touchees par une frame de rendu, mieux c'est.
+        struct Page {
+            const char* label;
+        };
+        static Page pages[16];
+        static int choisie = 0;
+        int npages = 0;
 
-            for (int i = 0; i < features::registry_count(); ++i) {
-                const features::Feature* f = features::registry()[i];
-                if (!f->tab || !f->draw_ui) {
-                    continue;
-                }
-
-                int dejaVu = -1;
-                for (int j = 0; j < nvus; ++j) {
-                    if (std::strcmp(vus[j].label, f->tab) == 0) {
-                        dejaVu = j;
-                        break;
-                    }
-                }
-
-                if (dejaVu >= 0) {
-                    if (vus[dejaVu].open) {
-                        // Already inside that tab: draw, do not open it again.
-                        f->draw_ui();
-                    }
-                    continue;
-                }
-
-                if (nvus >= 16) {
-                    continue;  // more distinct labels than the array holds
-                }
-                const bool open = ImGui::BeginTabItem(f->tab);
-                vus[nvus].label = f->tab;
-                vus[nvus].open = open;
-                ++nvus;
-                if (open) {
-                    f->draw_ui();
-                    ImGui::EndTabItem();
+        for (int i = 0; i < features::registry_count(); ++i) {
+            const features::Feature* f = features::registry()[i];
+            if (!f->tab || !f->draw_ui) {
+                continue;
+            }
+            bool deja = false;
+            for (int j = 0; j < npages; ++j) {
+                if (std::strcmp(pages[j].label, f->tab) == 0) {
+                    deja = true;
+                    break;
                 }
             }
+            if (!deja && npages < 16) {
+                pages[npages].label = f->tab;
+                ++npages;
+            }
+        }
 
-            if (ImGui::BeginTabItem("Miscellaneous")) {
+        // « Divers » est une PAGE, pas une feature : elle n'a donc pas sa place
+        // dans le registre, et c'est le seul endroit du overlay ou l'on nomme
+        // encore une page.
+        if (npages < 16) {
+            pages[npages].label = "Divers";
+            ++npages;
+        }
+        if (choisie >= npages) {
+            choisie = npages > 0 ? npages - 1 : 0;
+        }
 
-                ImGui::Separator();
-                ImGui::Checkbox("ImGui demo window", &g_demo);
-                ImGui::Separator();
-                ImGui::Text("FPS %.1f (%.2f ms)", io.Framerate,
+        const ImVec2 taille = ImGui::GetContentRegionAvail();
+        const float l_nav = 186.0f;
+
+        // ---------------- colonne de navigation ----------------
+        ImGui::BeginChild("nav", ImVec2(l_nav, taille.y), ImGuiChildFlags_None);
+        {
+            ImGui::Dummy(ImVec2(14.0f, 12.0f));
+            ImGui::TextColored(accent(), "SPECTER");
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 s = ImGui::GetCursorScreenPos();
+            dl->AddRectFilled(ImVec2(s.x - 8.0f, s.y),
+                              ImVec2(s.x + l_nav - 26.0f, s.y + 1.0f),
+                              coul(bordure()), 0.5f);
+            ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+            for (int i = 0; i < npages; ++i) {
+                const bool actif = (i == choisie);
+
+                ImGui::Dummy(ImVec2(6.0f, 1.0f));
+                ImVec2 t = ImGui::GetContentRegionAvail();
+                t.x = l_nav - 34.0f;
+                t.y = ImGui::GetTextLineHeight() + 9.0f;
+
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                                      actif ? texte() : texte_faible());
+                ImGui::Selectable(pages[i].label, actif,
+                                  ImGuiSelectableFlags_SpanAllColumns, t);
+                ImGui::PopStyleColor();
+
+                if (actif) {
+                    const ImVec2 p = ImGui::GetItemRectMin();
+                    const ImVec2 q = ImGui::GetItemRectMax();
+                    dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
+                    dl->AddRectFilled(ImVec2(p.x, p.y + 3.0f),
+                                      ImVec2(p.x + 3.0f, q.y - 3.0f),
+                                      coul(accent()), 1.5f);
+                }
+            }
+        }
+        ImGui::EndChild();
+
+        // filet vertical entre les deux colonnes
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 o = ImGui::GetWindowPos();
+            dl->AddRectFilled(ImVec2(o.x + l_nav, o.y + 10.0f),
+                              ImVec2(o.x + l_nav + 1.0f, o.y + taille.y - 10.0f),
+                              coul(bordure()), 0.0f);
+        }
+
+        // ---------------- contenu ----------------
+        ImGui::SameLine(0.0f, 1.0f);
+        ImGui::BeginChild("page", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
+        {
+            ImGui::Dummy(ImVec2(18.0f, 0.0f));
+            entete(pages[choisie].label);
+
+            if (std::strcmp(pages[choisie].label, "Divers") == 0) {
+                ImGui::TextDisabled("Etat du client");
+                ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                ImGui::TextUnformatted(g_snapshot);
+                ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+                ImGui::TextDisabled("Rendu");
+                ImGui::Dummy(ImVec2(0.0f, 2.0f));
+                ImGui::Text("%.1f fps   (%.2f ms par image)", io.Framerate,
                             1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
-                if (ImGui::Button("Close menu (DELETE)", ImVec2(-1.0f, 0.0f))) {
+                ImGui::Dummy(ImVec2(0.0f, 16.0f));
+
+                if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
                     g_ui_enabled = false;
                 }
-                ImGui::EndTabItem();
+                ImGui::SameLine();
+                ImGui::TextDisabled("ou DELETE");
+            } else {
+                for (int i = 0; i < features::registry_count(); ++i) {
+                    const features::Feature* f = features::registry()[i];
+                    if (!f->tab || !f->draw_ui) {
+                        continue;
+                    }
+                    // Meme libelle = meme page, donc jamais deux fois dessus.
+                    if (std::strcmp(f->tab, pages[choisie].label) == 0) {
+                        f->draw_ui();
+                    }
+                }
             }
-
-            ImGui::EndTabBar();
         }
+        ImGui::EndChild();
     }
     ImGui::End();
 

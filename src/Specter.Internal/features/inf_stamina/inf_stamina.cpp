@@ -5,6 +5,7 @@
 
 #include "features/inf_stamina/inf_stamina.h"
 #include "imgui.h"
+#include "render/ui_widgets.h"
 
 namespace specter::features {
 namespace stamina {
@@ -51,9 +52,9 @@ bool enabled()
 void draw_ui()
 {
     bool inf = g_enabled;
-    if (ImGui::Checkbox("Infinite movement stamina\n"
-                        "(sprint / dash / glide / climb)",
-                        &inf)) {
+    if (render::case_a_cocher("Infinite movement stamina\n"
+                              "(sprint / dash / glide / climb)",
+                              &inf)) {
         set_enabled(inf);
     }
     ImGui::SameLine();

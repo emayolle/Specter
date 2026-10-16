@@ -4,6 +4,7 @@
 
 #include "features/aniai/aniai.h"
 #include "imgui.h"
+#include "render/ui_widgets.h"
 
 namespace specter::features {
 namespace aniai {
@@ -51,9 +52,11 @@ const char* etat_label(int v)
 void draw_ui()
 {
     bool on = g_enabled;
-    if (ImGui::Checkbox("IA des Aniimoe\n( decochee : ils ne font plus rien )", &on)) {
+    if (render::case_a_cocher("IA des Aniimoe", &on)) {
         g_enabled = on;
     }
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    ImGui::TextDisabled("decochee : ils ne font plus rien");
 
     ImGui::SameLine();
     ImGui::BeginDisabled();

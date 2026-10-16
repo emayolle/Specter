@@ -19,6 +19,7 @@
 #include <string>
 
 #include "imgui.h"
+#include "render/ui_widgets.h"
 
 #include "lua/mailbox.h"
 #include "lua/pump.h"
@@ -538,7 +539,7 @@ void draw_ui()
     // stays a human action, and it lapses on its own.
     ImGui::Separator();
     bool open = g_cli_armed_at.load(std::memory_order_relaxed) != 0;
-    if (ImGui::Checkbox("Autoriser le shell", &open)) {
+    if (render::case_a_cocher("Autoriser le shell", &open)) {
         if (open) {
             arm_cli();
         } else {

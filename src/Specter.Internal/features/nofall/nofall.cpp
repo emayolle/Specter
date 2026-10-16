@@ -4,6 +4,7 @@
 
 #include "features/nofall/nofall.h"
 #include "imgui.h"
+#include "render/ui_widgets.h"
 
 namespace specter::features {
 namespace nofall {
@@ -44,7 +45,7 @@ bool enabled()
 void draw_ui()
 {
     bool on = g_enabled;
-    if (ImGui::Checkbox("No fall damage", &on)) {
+    if (render::case_a_cocher("No fall damage", &on)) {
         set_enabled(on);
     }
     ImGui::SameLine();

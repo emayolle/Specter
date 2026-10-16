@@ -32,7 +32,7 @@ plupart des scripts ont leurs réglages dans des constantes en tête de fichier)
 | `entities-classes.lua` | **combien de chaque type** (entités vivantes par classe) |
 | `entities-near.lua` | qu'y a-t-il autour de moi (rayon réglable) |
 | `entity-dump.lua` | tous les champs d'une entité (joueur / plus proche / par classe) |
-| `quest-waypoints.lua` | **waypoints des missions** : 3 sources — `tracked` (marques affichées sur la carte), `accepted` (toutes les quêtes en cours, position résolue par le jeu), `catalogue` (mesuré : vide, cf. plus bas) |
+| `quest-waypoints.lua` | **waypoints des missions** : 4 sources — `tracked` (marques affichées sur la carte), `accepted` (toutes les quêtes en cours, position résolue par le jeu), `catalogue` (mesuré : vide, cf. plus bas), `coord` (que donne `MAPCOORDINATE_x_z`) |
 
 ## Conventions de sortie
 
@@ -129,6 +129,35 @@ expose 34 sections / 118 quêtes en mémoire, mais **0** d'entre elles a
 acceptée : la config ne se matérialise que pour les quêtes du joueur. La liste
 de *toutes* les missions du jeu n'est donc pas extractible par ce chemin (mode
 `catalogue` du script, qui rend 0 ligne et le dit).
+
+### `MAPCOORDINATE_x_z` — l'identifiant d'un point épinglé
+
+Sur la carte, l'épingle d'une marque écrit dans le presse-papier
+`MAPCOORDINATE_<x>_<z>` (`MapCtrl.onPinBtnClick`, `%04d` / `-%04d` — donc
+**signe obligatoire et 4 chiffres**, pas de `+`). C'est la forme à utiliser pour
+demander un point : `MAPCOORDINATE_-0411_0763`.
+
+Le mode `coord` du script le relit et dit ce qu'il y a là, en interrogeant les
+trois tables (marque de quête, objectif de quête, marque monde). Mesuré :
+
+```
+$ MODE='coord' TARGET='MAPCOORDINATE_-0411_0763'
+W objective 3000 2607003 101 -410.98 64.63 763.13 MAPCOORDINATE_-0411_0763 Allez à la Mer florale et trouvez Wally.
+W questmark 3000 2607003 101 -410.98 64.63 763.13 MAPCOORDINATE_-0411_0763
+W worldmark 3000 cfg10511 type0 - - -410.98 64.63 763.13 MAPCOORDINATE_-0411_0763 Défi de Nomade d'élite
+```
+
+Trois réponses pour un point : une **marque de quête** (`tempMarkPointData`,
+marque n°`2607003101`, icône `$UI_Hud_Icon_MainLine_Grayed.png`), l'
+**objectif** correspondant, et une **marque monde** (`cfg 10511` =
+« Défi de Nomade d'élite ») posée exactement au même endroit. Une marque de
+quête et une marque monde peuvent donc désigner la même chose.
+
+Corollaire : les quêtes de la chaîne principale (`questType 1`, icône
+`MainLine`) **n'ont pas de `name`** — `getQuestConfig(2607003).name` est `nil`,
+`shortDesc` et `fullDesc` aussi. Leur seul texte lisible est
+`objectives[objId].desc` (« Allez à la Mer florale et trouvez Wally. »). Ne pas
+chercher le nom de la mission sur ces quêtes : il n'est pas côté client.
 
 ## Pièges (vécus)
 

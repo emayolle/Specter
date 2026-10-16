@@ -4,6 +4,7 @@
 
 #include "features/autofarm/autofarm.h"
 #include "imgui.h"
+#include "render/ui_widgets.h"
 
 namespace specter::features {
 namespace autofarm {
@@ -66,7 +67,7 @@ const char* phase_label(int v)
 void draw_ui()
 {
     bool on = g_enabled;
-    if (ImGui::Checkbox("Auto-farm\n"
+    if (render::case_a_cocher("Auto-farm\n"
                         "(ramasse ce qui s'interagit, SAUF les coffres)",
                         &on)) {
         set_enabled(on);

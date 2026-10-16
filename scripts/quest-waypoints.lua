@@ -20,15 +20,20 @@
 --              (c'est par elle qu'on resout GOTO_POSITION, cf. plus bas).
 --
 -- Reglages :
-local MODE      = 'accepted'  -- tracked | accepted | catalogue
+local MODE      = 'accepted'  -- tracked | accepted | catalogue | coord
 local SCENES    = {3000, 3003}-- escenas ou chercher les positions du catalogue
 local MAX_ROWS  = 800         -- 0 = illimite (attention au buffer de 48 Ko)
 local WITH_NAME = true        -- nom localise de la quete (text id -> texte)
 
+-- Mode 'coord' : le point a retrouver, tel que le jeu le met dans le
+-- presse-papier quand on epingle un point sur la carte (MapCtrl.onPinBtnClick
+-- ecrit `MAPCOORDINATE_%s_%s`). -411 / 763 -> MAPCOORDINATE_-0411_0763.
+local TARGET    = 'MAPCOORDINATE_-0411_0763'
+
 -- Usage : tools/lua.sh -f scripts/quest-waypoints.lua
 --
--- Sortie : W <source> <scene> <questId> <objId> <x> <y> <z> <nom>
---          TOTAL=<n> par source
+-- Sortie : W <source> <scene> <questId> <objId> <x> <y> <z> <coordId> <nom>
+--          TOTAL_<SOURCE>=<n>
 
 -- Les waypoints de mission ne sont PAS des marques monde : dans la scene 3000,
 -- getSceneMarkPointData() renvoie 2323 marques (coffres 10506, floraisons 10410,
@@ -55,13 +60,24 @@ local function v3(p)
   return a, b, c
 end
 
+-- Le jeu formate les coordonnees de carte « -%04d » / « %04d » (MapCtrl :
+-- `%04d`, `abs`, `-%04d`, `format`) puis les colle en MAPCOORDINATE_<x>_<z>.
+local function coordId(x, z)
+  local function fmt(v)
+    v = math.floor(v)
+    if v < 0 then return string.format('-%04d', math.abs(v)) end
+    return string.format('%04d', v)
+  end
+  return string.format('MAPCOORDINATE_%s_%s', fmt(x), fmt(z))
+end
+
 local function add(source, scene, questId, objId, p, name)
   local x, y, z = v3(p)
   if not x then return end
   counts[source] = (counts[source] or 0) + 1
-  rows[#rows + 1] = string.format('W %s %s %s %s %.2f %.2f %.2f %s',
+  rows[#rows + 1] = string.format('W %s %s %s %s %.2f %.2f %.2f %s %s',
     source, tostring(scene), tostring(questId), tostring(objId),
-    x, y, z, name or '')
+    x, y, z, coordId(x, z), name or '')
 end
 
 --------------------------------------------------------------------------
@@ -161,10 +177,85 @@ local function mode_catalogue()
   end
 end
 
+--------------------------------------------------------------------------
+-- coord : le point epingle sur la carte, retrouve par son identifiant
+--
+-- MAPCOORDINATE_<x>_<z> est ce que le jeu ecrit dans le presse-papier quand on
+-- clique sur l'epingle d'une marque (MapCtrl.onPinBtnClick). On le relit, et on
+-- dit ce qu'il y a la : marque de quete, marque monde, ou les deux.
+--------------------------------------------------------------------------
+local function mode_coord()
+  local sx, sz = TARGET:match('^MAPCOORDINATE_(-?%d+)_(-?%d+)$')
+  if not (sx and sz) then
+    print('! TARGET illisible: ' .. tostring(TARGET))
+    return
+  end
+  local tx, tz = tonumber(sx), tonumber(sz)
+
+  -- 1. les marques de quete
+  local t = pg.game.map.tempMarkPointData
+  if type(t) == 'table' then
+    for markId, m in pairs(t) do
+      if m and m.markPosition and coordId(m.markPosition[1], m.markPosition[3]) == TARGET then
+        local cfg = QU.getQuestConfig(m.questId)
+        add('questmark', m.sceneId, m.questId, m.objId, m.markPosition,
+            cfg and localize(cfg.name) or localize(m.infoTitle))
+        print(string.format('  (marque de quete n°%s, cfg%s, icône %s)',
+          tostring(markId), tostring(m.markConfigId), tostring(m.icon)))
+      end
+    end
+  end
+
+  -- 2. les objectifs des quetes en cours
+  local accepted = QU.getAllAcceptedQuestsData()
+  if type(accepted) == 'table' then
+    for questId, questData in pairs(accepted) do
+      for objId in pairs((questData and questData.objectives) or {}) do
+        local ok, info = pcall(QU.getQuestTargetInfo, questData, objId)
+        if ok and info and info.posInfo then
+          for i = 1, 64 do
+            local pi = info.posInfo[i]
+            if not pi then break end
+            local p = pi.pos or (pi.posConfig and pi.posConfig.position)
+            if p and coordId(p[1], p[3]) == TARGET then
+              local cfg = QU.getQuestConfig(questId)
+              local desc = ''
+              if cfg and cfg.objectives then
+                local o = cfg.objectives[pi.objId or objId]
+                if o then desc = localize(o.desc) end
+              end
+              add('objective', pg.me.sceneId, questId, pi.objId or objId, p, desc)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  -- 3. les marques monde, au meme point (les deux peuvent designer la meme
+  --    chose : un point de quete pose sur un evenement du monde).
+  for _, scene in ipairs(SCENES) do
+    local marks = SU.getSceneMarkPointData(scene)
+    for _, p in pairs(marks) do
+      local mp = p.markPosition
+      if mp and coordId(mp[1], mp[3]) == TARGET then
+        counts.worldmark = (counts.worldmark or 0) + 1
+        rows[#rows + 1] = string.format(
+          'W worldmark %s cfg%s type%s - - %.2f %.2f %.2f %s %s',
+          tostring(scene), tostring(p.markConfigId), tostring(p.markType),
+          mp[1], mp[2], mp[3], TARGET, localize(p.infoTitle))
+      end
+    end
+  end
+
+  local _ = tx, tz
+end
+
 local MODES = {
   tracked = mode_tracked,
   accepted = mode_accepted,
   catalogue = mode_catalogue,
+  coord = mode_coord,
 }
 
 local run = MODES[MODE]
@@ -175,7 +266,9 @@ end
 run()
 
 table.sort(rows)
-print('# ' .. MODE .. ' : ' .. tostring(counts[MODE] or 0) .. ' waypoint(s)')
+local total = 0
+for _, n in pairs(counts) do total = total + n end
+print('# ' .. MODE .. ' : ' .. total .. ' waypoint(s)')
 for i, r in ipairs(rows) do
   if MAX_ROWS > 0 and i > MAX_ROWS then
     print(string.format('... (%d de plus, releve MAX_ROWS)', #rows - MAX_ROWS))
