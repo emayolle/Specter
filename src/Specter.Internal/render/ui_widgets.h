@@ -234,7 +234,7 @@ public:
         ImGui::PushStyleColor(ImGuiCol_Border, bordure());
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(11.0f, 9.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(13.0f, 12.0f));
 
         ImGui::BeginChild(titre, ImVec2(dispo.x, 0.0f),
                           ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY,
@@ -242,7 +242,7 @@ public:
                               ImGuiWindowFlags_NoScrollWithMouse);
 
         ImGui::TextColored(accent(), "%s", titre_);
-        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
     }
 
     ~Panneau()
@@ -250,7 +250,7 @@ public:
         ImGui::EndChild();
         ImGui::PopStyleVar(3);
         ImGui::PopStyleColor(2);
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::Dummy(ImVec2(0.0f, 12.0f));
     }
 
     Panneau(const Panneau&) = delete;
@@ -296,36 +296,24 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
                     r, 0, survole ? 2.0f : 1.6f);
     }
 
-    // Le libelle, CENTRE SUR LA CASE — et c'est le detail qui se voyait.
+    // Le libelle, centre sur la case.
     //
-    // AlignTextToFramePadding() decale le texte de la hauteur du cadre d'un
-    // widget normal. Or notre case n'est pas un cadre : elle fait exactement la
-    // taille d'une ligne de texte. Le libelle se retrouvait donc plus bas que
-    // la coche, de la valeur exacte du padding vertical du style.
+    // On ne convertit RIEN. `p` est deja en coordonnees ECRAN, donc on ecrit
+    // en coordonnees ecran. C'est la seule facon de ne pas se tromper, et ca
+    // resout d'un coup les trois versions de ce bug :
     //
-    // On replace le curseur a la verticale voulue, plutot que de demander un
-    // alignement qui suppose un cadre qu'il n'y a pas. `p` est le coin haut
-    // gauche de la case ; 11 px, c'est l'espace entre les deux.
+    //   1. lire en ecran et ecrire en local  -> decalage = position fenetre
+    //   2. ecran moins position fenetre, sans le scroll
+    //      -> decalage = defilement, et le libelle remonte des qu'on scrolle
+    //   3. le correctif 2, qui marchait... jusqu'au premier scroll
     //
-    // LE MEME PIEGE QU'AVEC LA NAVIGATION, une seconde fois.
-    //
-    // `p` vient de GetItemRectMin(), qui parle ABSOLU ; GetCursorPosY() parle
-    // LOCAL. Les soustraire l'un de l'autre ne donne pas une hauteur : ça donne
-    // la distance du haut de l'ECRAN, c'est-a-dire la position de la fenetre.
-    // Le libelle partait donc 300 px plus bas que la case.
-    //
-    // Pour convertir un point ecran en point local, on retire la position de la
-    // fenetre — c'est la seule soustraction legitime des deux systemes.
-    ImGui::SameLine(0.0f, 11.0f);
-    const float haut_case_local = p.y - ImGui::GetWindowPos().y;
+    // Le correctif 2 etait deja faux et il a tenu : il ne se voyait qu'en
+    // faisant defiler la fenetre, ce qu'on ne fait pas d'habitude.
     const float h_texte = ImGui::GetTextLineHeight();
-    ImGui::SetCursorPosY(haut_case_local + (t.y - h_texte) * 0.5f);
-
-    if (*valeur) {
-        ImGui::TextColored(texte(), "%s", libelle);
-    } else {
-        ImGui::TextColored(texte_faible(), "%s", libelle);
-    }
+    ImGui::SameLine(0.0f, 11.0f);
+    ImGui::SetCursorScreenPos(
+        ImVec2(p.x + t.x + 11.0f, p.y + (t.y - h_texte) * 0.5f));
+    ImGui::TextColored(*valeur ? texte() : texte_faible(), "%s", libelle);
 
     ImGui::PopID();
     return change;
