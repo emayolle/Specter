@@ -312,6 +312,9 @@ void open_worker_api(lua_State* L, Job* job)
 // `table.concat` means exactly what it meant. That is the whole trick, and it is
 // why the function form can work at all.
 
+// Defined below, next to the rest of the flag table.
+const char* flag_name(int f);
+
 // The whole worker, as ONE protected call.
 //
 // This used to be inline C in worker_main, with no pcall anywhere around it. So
@@ -368,6 +371,7 @@ DWORD WINAPI worker_main(LPVOID arg)
 
     Slot& slot = g_slots[job->slot];
     int terminal = kDone;
+    const ULONGLONG t0 = GetTickCount64();
 
     lua_State* L = p_lua_newstate(&worker_alloc, &job->alloc);
     if (!L) {
@@ -395,13 +399,21 @@ DWORD WINAPI worker_main(LPVOID arg)
         p_lua_close(L);
     }
 
-    if (job->alloc.live != 0) {
-        // lua_close frees everything it knows about. Anything left is LuaJIT
-        // holding a cache -- and now the number is THIS worker's, not the sum
-        // of every worker's, which is what made it meaningless before.
-        log::info("[worker %d] fermeture : %zu bloc(s) / %zu o encore vivant(s)",
-                  job->slot, job->alloc.live, job->alloc.bytes);
-    }
+    // ALWAYS printed, never only on failure.
+    //
+    // It used to be logged only when something was left, which is exactly the
+    // way to miss a result: there is no line to read, and "nothing here" has to
+    // be interpreted rather than read. A measurement you have to infer is not a
+    // measurement. So the line states the numbers, 0 included, every time.
+    //
+    // The count is per worker -- carried by the allocator's `ud` -- so it means
+    // something. It was a single global counter once, and the descending run
+    // 2605, 2084, 1563, 1042, 521 that got printed back then was that one
+    // counter draining, not six leaks.
+    log::info("[worker %d] fin : %s en %.1f s, %zu bloc(s) / %zu o non rendu(s)",
+              job->slot, flag_name(terminal),
+              (GetTickCount64() - t0) / 1000.0, job->alloc.live,
+              job->alloc.bytes);
 
     // Publish the message before the terminal flag: the reader only looks at
     // `error` once the flag is terminal, and release/acquire on the flag is what

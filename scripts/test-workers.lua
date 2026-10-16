@@ -18,12 +18,13 @@
 --
 --   tail -f specter.log | grep '\[worker'
 --
--- ...et en particulier, apres l'arret :
+-- ...et en particulier, a la fin de chaque worker :
 --
---   [worker N] fermeture : N bloc(s) / N o encore vivant(s)
+--   [worker N] fin : <status> en <duree> s, <N> bloc(s) / <N> o non rendu(s)
 --
--- Ce nombre doit etre 0. S'il ne l'est pas, l'etat de ce worker a garde
--- des blocs apres lua_close, et on a une vraie fuite a regarder.
+-- Cette ligne est TOUJOURS ecrite, succes compris : les deux derniers nombres
+-- doivent etre 0. Ce qui veut dire que l'etat n'a rien garde apres lua_close.
+-- S'ils ne le sont pas, on a une vraie fuite a regarder, et elle est nommee.
 --
 -- !!! ATTENTION, API COTE JEU
 --
