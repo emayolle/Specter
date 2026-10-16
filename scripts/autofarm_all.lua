@@ -42,8 +42,8 @@
 -- Arreter une chaine :  specter.store.chests.cancel = true
 --
 -- Réglages :
-local CHAIN_OPENS  = 5      -- nb de coffres à ouvrir par exécution (0 = tout)
-local BREATH       = 0.5     -- s, pause entre deux ouvertures
+local CHAIN_OPENS  = 75      -- nb de coffres à ouvrir par exécution (0 = tout)
+local BREATH       = 0.1     -- s, pause entre deux ouvertures
 -- Plus de fenetre d'attente apres le TP. Elle mangait la fenetre de vie de
 -- l'unite d'interaction, qui est de l'ordre de 0.3 s sur un Ambre lumin --
 -- voir le bloc commente dans startPoll().
