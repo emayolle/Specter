@@ -77,4 +77,24 @@ constexpr std::uintptr_t kXluaLoadBufferRva = 0x879010;
 // que la question se tranche en comptant.
 constexpr std::uintptr_t kGetPerfDistanceRva = 0x184D5F0;
 
+// XSRBlockTile::CalcThisTileLodLevel(int agentTileX, int agentTileZ) -> int
+//
+// Le second plafond, et le plus dur : celui qui borne la distance elle-meme.
+//
+//   0x...7db  mov  ecx, 0Ch      <- l'immediat "12"
+//   0x...7e5  cmp  eax, ecx
+//   0x...7e7  cmovg eax, ecx
+//   0x...7ea  retn
+//
+// L'octet du plafond est donc a RVA 0x18457DC, soit fonction + 0x2C. C'est le
+// SEUL endroit a ecrire pour lever la limite, et un octet se remet en ecrivant
+// 0x0C.
+//
+// On patche l'octet plutot que de reecrire la fonction : on garde le code du
+// jeu, donc on ne peut pas se tromper sur le max(|dx|,|dz|) ni sur les branches
+// cmovs, et le retour a l'original est immediat.
+constexpr std::uintptr_t kCalcThisTileLodLevelRva = 0x18457B0;
+constexpr std::uintptr_t kLodCapOffset = 0x2C;
+constexpr uint8_t kLodCapOriginal = 12;
+
 }  // namespace specter::target

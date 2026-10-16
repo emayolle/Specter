@@ -2,6 +2,8 @@
 
 #include "pch-il2cpp.h"
 
+#include <windows.h>
+
 #include <cstdint>
 #include <cstdio>
 
@@ -56,6 +58,32 @@ const char* label_for(int v)
     }
     std::snprintf(buf, sizeof(buf), "%d tuile%s", v, v > 1 ? "s" : "");
     return buf;
+}
+
+// ---- le second plafond : UN OCTET -----------------------------------------
+//
+// CalcThisTileLodLevel fait, dans le code du jeu :
+//
+//     mov  ecx, 0Ch      <- l'immediat du plafond
+//     cmp  eax, ecx
+//     cmovg eax, ecx
+//
+// L'immediat est a RVA 0x18457DC, soit kCalcThisTileLodLevelRva + 0x2C.
+// Ecrire 0x0C dedans remet l'original ; ecrire autre chose leve le plafond.
+//
+// Un octet, et non une reecriture de la fonction : le calcul de
+// max(|dx|,|dz|) et les branches cmovs restent ceux du jeu, donc on ne peut
+// pas les faux, et le retour a l'original est immediat.
+int g_lod_cap = target::kLodCapOriginal;
+
+uint8_t* cap_octet()
+{
+    const std::uintptr_t base = il2cpp::module_base();
+    if (base == 0) {
+        return nullptr;
+    }
+    return reinterpret_cast<uint8_t*>(
+        base + target::kCalcThisTileLodLevelRva + target::kLodCapOffset);
 }
 
 }  // namespace
@@ -119,6 +147,56 @@ const char* current_label()
     return label_for(g_chunks);
 }
 
+int* lod_cap()
+{
+    return &g_lod_cap;
+}
+
+int lod_cap_now()
+{
+    return g_lod_cap;
+}
+
+bool set_lod_cap(int valeur)
+{
+    if (valeur < 0 || valeur > 255) {
+        return false;
+    }
+    uint8_t* p = cap_octet();
+    if (p == nullptr) {
+        return false;
+    }
+    // LA GARDE. On ne doit pas ecrire dans le jeu sans avoir vu ce qu'on
+    // croit ecrire : si l'octet devant n'est pas le B9 du `mov ecx, imm32`,
+    // c'est que le jeu a change et l'ecriture tomberait n'importe ou.
+    if (p[-1] != 0xB9) {
+        log::error("streaming: garde du plafond -- attendu B9 (mov ecx), vu %02X"
+                   " a RVA %llx. Patch refuse.",
+                   static_cast<unsigned>(p[-1]),
+                   static_cast<unsigned long long>(target::kCalcThisTileLodLevelRva +
+                                                   target::kLodCapOffset - 1));
+        return false;
+    }
+    if (*p == static_cast<uint8_t>(valeur)) {
+        g_lod_cap = valeur;
+        return true;
+    }
+
+    DWORD old_protect = 0;
+    if (!::VirtualProtect(p, 1, PAGE_EXECUTE_READWRITE, &old_protect)) {
+        log::error("streaming: VirtualProtect refuse sur le plafond");
+        return false;
+    }
+    *p = static_cast<uint8_t>(valeur);
+    ::FlushInstructionCache(::GetCurrentProcess(), p, 1);
+    ::VirtualProtect(p, 1, old_protect, &old_protect);
+
+    g_lod_cap = valeur;
+    log::info("streaming: plafond du moteur porte de %u a %d",
+              static_cast<unsigned>(target::kLodCapOriginal), valeur);
+    return true;
+}
+
 void draw_ui()
 {
     if (!installed()) {
@@ -149,6 +227,37 @@ void draw_ui()
 
     if (g_game_value > 0) {
         ImGui::TextDisabled("le jeu demande %d", g_game_value);
+    }
+
+    // ---- LE SECOND PLAFOND ----
+    //
+    // Celui-la n'est pas un detour : c'est l'immediat du `mov ecx, 12` dans le
+    // code du moteur, a un octet. Un detour sur GetPerfDistance ne le passe
+    // pas -- la valeur serait ramenee a 12 en aval, exactement comme le
+    // moteur le fait pour tout le monde.
+    ImGui::Separator();
+    int cap = g_lod_cap;
+    if (ImGui::SliderInt("Plafond du moteur", &cap, 3, 64, "%d")) {
+        if (!set_lod_cap(cap)) {
+            cap = lod_cap_now();
+        }
+    }
+    ImGui::SameLine();
+    if (g_lod_cap == static_cast<int>(target::kLodCapOriginal)) {
+        ImGui::TextDisabled("original");
+    } else {
+        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "MODIFIE");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Le moteur ecrase la distance a 12 dans SON PROPRE CODE :\n"
+            "  mov ecx, 0Ch ; cmp eax, ecx ; cmovg eax, ecx\n\n"
+            "On ecrit dans cet immediat -- UN octet, RVA 0x18457DC. On garde le\n"
+            "code du jeu, donc le max(|dx|,|dz|) reste correct, et remettre 12\n"
+            "restaure l'original.\n\n"
+            "ATTENTION : on ne sait pas si le systeme de tuiles a 13 niveaux de\n"
+            "LOD ou davantage. Au-dela, on demande un niveau qui peut ne pas\n"
+            "exister, et le comportement est inconnu. 12 = valeur d'origine.");
     }
 
     if (ImGui::IsItemHovered()) {
