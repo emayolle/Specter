@@ -682,6 +682,10 @@ void build_ui()
         // que la coque dessine son propre bord. Sans ca, les dernieres pages de
         // la nav touchaient le bas du cadre.
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 14.0f));
+        // ZERO ESPACEMENT D'ITEM : chaque page reserve deja sa hauteur dans
+        // entree_nav. Avec les 9 px du style en plus, quatre pages prenaient
+        // autant de place que huit.
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 0.0f));
         ImGui::BeginChild("nav", ImVec2(l_nav, taille.y),
                           ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoScrollbar |
@@ -755,19 +759,20 @@ void build_ui()
                     trouvee = true;
 
                     if (o > 0) {
-                        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+                        ImGui::Dummy(ImVec2(0.0f, 5.0f));
                     }
 
-                    const float h = ImGui::GetTextLineHeight() + 11.0f;
-                    entree_nav(g_icon_font, pages[i].label, kOrdre[o].glyphe,
-                               (i == choisie), l_nav - 28.0f, h, 14.0f, i);
-                    if (ImGui::IsItemClicked()) {
+                    const float h = ImGui::GetTextLineHeight() + 7.0f;
+                    if (entree_nav(g_icon_font, pages[i].label,
+                                   kOrdre[o].glyphe, (i == choisie),
+                                   l_nav - 28.0f, h, 14.0f, i)) {
                         choisie = i;
                     }
                 }
             }
         }
         ImGui::EndChild();
+        ImGui::PopStyleVar();
         // Sans ce Pop, ImGui dit « Missing PopStyleVar() » a chaque frame et
         // chaque page herite de la marge de la nav — c'est ce que la capture
         // montrait : tout le contenu colle au bord.

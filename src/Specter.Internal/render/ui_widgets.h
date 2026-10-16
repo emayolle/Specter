@@ -149,7 +149,13 @@ inline void glyphe_dessine(unsigned int cp, ImVec4 couleur)
 // cliquable est posee au point de depart. Le curseur descend d'exactement
 // `hauteur` par ligne, quoi qu'il arrive.
 
-inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
+// REND LE CLIC, ET NE LAISSE PAS L'APPELANT LE DEMANDER.
+//
+// L'appelant faisait IsItemClicked() juste apres. Ca marchait quand le bouton
+// etait le dernier item ; depuis que le Dummy l'est — et il doit l'etre, sinon
+// ImGui reclame — IsItemClicked() portait sur le Dummy, qui n'est pas cliquable.
+// La navigation etait donc morte.
+inline bool entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
                        bool actif, float largeur, float hauteur, float marge,
                        int id)
 {
@@ -220,11 +226,13 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
     // reservee, et le curseur finit exactement sur le contenu.
     ImGui::SetCursorScreenPos(depart);
     ImGui::InvisibleButton("##zone", ImVec2(largeur + marge, hauteur));
+    const bool clic = ImGui::IsItemClicked();
 
     ImGui::SetCursorScreenPos(depart);
     ImGui::Dummy(ImVec2(largeur + marge, hauteur));
 
     ImGui::PopID();
+    return clic;
 }
 
 // Un PANNEAU DE GROUPE : titre a l'accent, contenu en dessous.
