@@ -28,7 +28,10 @@ namespace specter::features {
 namespace console {
 namespace {
 
-constexpr int kMaxCode = 32 * 1024;
+// Meme valeur que lua/pump.cpp : le tampon de la boite et celui du chunk
+// sont le meme objet. tools/embed-lua.sh lit CETTE ligne pour verifier la
+// taille des scripts -- une recopie serait un second endroit a maintenir.
+constexpr int kMaxCode = 64 * 1024;
 constexpr int kMaxOut = 48 * 1024;
 
 // POD payloads, stored inline by the mailbox. Kept in lockstep with the caps

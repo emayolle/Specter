@@ -189,6 +189,7 @@ for spec in \
   "$SRC/features/lua_dump/lua_dump.cpp:features-lua_dump" \
   "$SRC/features/teleport/teleport.cpp:features-teleport" \
   "$SRC/features/teleport/teleport_ui.cpp:features-teleport_ui" \
+  "$SRC/features/autofarm/autofarm.cpp:features-autofarm" \
   "$SRC/features/inf_stamina/inf_stamina.cpp:features-inf_stamina" \
   "$SRC/features/registry.cpp:features-registry" \
   "$SRC/features/init/init.cpp:features-init" \
@@ -199,7 +200,16 @@ for spec in \
   "$SRC/lua/bind.cpp:lua-bind" \
   "$SRC/lua/worker.cpp:lua-worker"; do
   src="${spec%:*}"; name="${spec##*:}"; obj="$OBJ/$name.obj"
-  build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework"
+  # "$ROOT/generated" est dans la liste, et c'est IMPORTANT : c'est la que
+  # vivent lua_init.h et lua_autofarm.h, produits par tools/embed-lua.sh a
+  # chaque build. Sans eux, editer scripts/init.lua ne recompilait rien, et la
+  # DLL continuait de porter le script perime.
+  #
+  # Mesure : features-init.obj faisait 1611 octets -- un script Lua de 18 Ko y
+  # logeait en aucun cas. La DLL avait 'kAutofarmLoop' absent, et rien ne
+  # l'avait signale parce que le build etait vert.
+  build_obj "$name" "$obj" "$src" pch "$SRC" "$GEN/appdata" "$GEN/framework" \
+    "$ROOT/generated"
   OUR_OBJS+=("$obj")
 done
 

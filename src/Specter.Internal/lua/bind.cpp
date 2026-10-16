@@ -8,6 +8,7 @@
 #include "lua/bridge.h"
 #include "lua/worker.h"
 
+#include "features/autofarm/autofarm.h"
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/nofall/nofall.h"
 #include "features/teleport/teleport.h"
@@ -185,6 +186,18 @@ bool install(lua_State* L, int specter_idx)
 // there needs a registered property and a rebuild, for nothing.
             .addProperty("stamina", features::stamina::flag(),
                          features::stamina::flag())
+            // Le booleen de la case. En lecture ET en ecriture : le pilote Lua
+            // le LIT, la case l'ECRIT, et les deux operent sur le meme octet.
+            // Deux copies se desynchronisent a un relog ; une seule ne peut pas.
+            .addProperty("autofarm", features::autofarm::flag(),
+                         features::autofarm::flag())
+            // Ecrit par le script quand une cible a reellement disparu, lu par
+            // la case pour s'afficher. Un compteur qui compterait les APPELS
+            // d'API serait le mensonge qu'on a deja retire une fois.
+            .addProperty("autofarm_ouverts", features::autofarm::ouverts(),
+                         features::autofarm::ouverts())
+            .addProperty("autofarm_phase", features::autofarm::phase(),
+                         features::autofarm::phase())
             // The lerp settings. Read by scripts/init.lua's specter.tp.here on
             // every teleport: the player tunes them in the overlay, so they are
             // C++'s, and passing them as call arguments would mean formatting

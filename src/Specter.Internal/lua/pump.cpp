@@ -211,7 +211,18 @@ bool resolve_xlua()
 
 // ---- chunk execution (runs on the Lua thread) ------------------------------
 
-constexpr int kMaxCode = 32 * 1024;
+constexpr int kMaxCode = 64 * 1024;
+//
+// 64 Ko, et pas 32. La limite avait ete heritee d'un temps ou un chunk
+// etait « un script court ». Ca n'est plus le cas : le bootstrap —
+// scripts/init.lua + scripts/autofarm_loop.lua fait deja 33 Ko, et il a
+// ete TronQUE en silence -- deux fois dans la meme journee, pour la meme
+// raison. Le cout du plafond, lui, est nul : 64 Ko x 4 canaux = 256 Ko
+// statiques, et il n'est pas dans le chemin chaud.
+//
+// La regle : le plafond doit etre soit au-dessus de ce qu'on ecrit, soit
+// verifie par le build. tools/embed-lua.sh fait le deuxieme, sur la SOMME
+// des deux scripts, parce que c'est la somme qui est transmise.
 
 // The chunk is a FACTORY. C hands it everything it needs, by value: the
 // specter table, the real globals, and the standard library functions. The

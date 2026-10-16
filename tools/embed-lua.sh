@@ -25,9 +25,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${ROOT}/scripts/init.lua"
+AUTOFARM="${ROOT}/scripts/autofarm_loop.lua"
 OUT="${ROOT}/generated/lua_init.h"
+OUT_AF="${ROOT}/generated/lua_autofarm.h"
 
 [[ -f "${SRC}" ]] || { echo "ERREUR: absent ${SRC}" >&2; exit 1; }
+[[ -f "${AUTOFARM}" ]] || { echo "ERREUR: absent ${AUTOFARM}" >&2; exit 1; }
 
 # ---- 0. TOUS les scripts : ils compilent, et ils tiennent dans le tampon -----
 #
@@ -52,14 +55,20 @@ KMAX="$(sed -n 's/^constexpr int kMaxCode = \([0-9]*\) \* \([0-9]*\);/\1 \2/p' \
         | head -1 | awk '{print $1 * $2}')"
 [[ -n "${KMAX}" ]] || { echo "ERREUR: kMaxCode introuvable dans console.cpp" >&2; exit 1; }
 
-echo "-- scripts : compilation + taille (max ${KMAX} o) --"
+# LE BOOTSTRAP EST LA SOMME DES DEUX. C'est ce que features/init/init.cpp
+# transmet, donc c'est la somme qu'il faut comparer au plafond -- pas chaque
+# fichier separement. 18 Ko + 15 Ko passent individuellement et juntos non, ce
+# qui est exactement le piege d'aujourd'hui.
+SUM=0
+echo "-- scripts : compilation + taille (plafond ${KMAX} o, on verifie la SOMME) --"
 for f in "${ROOT}"/scripts/*.lua; do
   [[ -f "$f" ]] || continue
   n=$(wc -c < "$f")
+  if [[ "$f" == "${SRC}" || "$f" == "${AUTOFARM}" ]]; then SUM=$((SUM + n)); fi
   if [[ "$n" -gt "$KMAX" ]]; then
-    echo "ERREUR: ${f##*/} fait ${n} octets, la console n'en accepte que ${KMAX}." >&2
-    echo "         Il sera tronque en silence au collage, et l'erreur qui en" >&2
-    echo "         sortira ne parlera pas de la taille." >&2
+    echo "ERREUR: ${f##*/} fait ${n} octets, le canal n'en accepte que ${KMAX}." >&2
+    echo "         Il sera tronque en silence, et l'erreur qui en sortira" >&2
+    echo "         ne parlera pas de la taille." >&2
     exit 1
   fi
   if command -v luajit >/dev/null 2>&1; then
@@ -69,7 +78,22 @@ for f in "${ROOT}"/scripts/*.lua; do
   printf '   %-24s %6d o\n' "${f##*/}" "$n"
 done
 
+if [[ "$SUM" -gt "$KMAX" ]]; then
+  echo "ERREUR: le bootstrap fait ${SUM} octets (init.lua + autofarm_loop.lua)," >&2
+  echo "       et le canal n'en accepte que ${KMAX}. Il sera tronque :" >&2
+  echo "       erreur de compilation au milieu d'une chaine, dans un fichier" >&2
+  echo "       qui n'est pas celui du script." >&2
+  exit 1
+fi
+printf '   %-24s %6d o  (plafond %s, marge %s)\n' "BOOTSTRAP (somme)" "$SUM" \
+       "$KMAX" "$((KMAX - SUM))"
+
 # ---- 1. le litteral C ne doit pas pouvoir se refermer tout seul ------------
+if grep -q ')LUA_AF' "${AUTOFARM}"; then
+    echo "ERREUR: ${AUTOFARM} contient ')LUA_AF', ce qui fermerait le litteral." >&2
+    exit 1
+fi
+
 if grep -q ')LUA_INIT' "${SRC}"; then
     echo "ERREUR: ${SRC} contient ')LUA_INIT', ce qui fermerait le litteral." >&2
     exit 1
@@ -115,5 +139,23 @@ mkdir -p "$(dirname "${OUT}")"
     echo "}  // namespace specter::lua::init"
 } > "${OUT}"
 
-printf "init embarque : scripts/init.lua -> generated/lua_init.h (%s lignes, %s)\n" \
+# ---- 4. le deuxieme script --------------------------------------------------
+mkdir -p "$(dirname "${OUT_AF}")"
+{
+    echo "// AUTO-GENERE par tools/embed-lua.sh depuis scripts/autofarm_loop.lua."
+    echo "// Ne pas editer a la main : editer le script et reconstruire."
+    echo "#pragma once"
+    echo
+    echo "namespace specter::lua::init {"
+    echo
+    echo "static constexpr const char* kAutofarmLoop = R\"LUA_AF("
+    cat "${AUTOFARM}"
+    echo ")LUA_AF\";"
+    echo
+    echo "}  // namespace specter::lua::init"
+} > "${OUT_AF}"
+
+printf "init embarque     : scripts/init.lua -> generated/lua_init.h (%s lignes, %s)\n" \
     "$(wc -l < "${SRC}")" "${CHECKED}"
+printf "autofarm embarque : scripts/autofarm_loop.lua -> generated/lua_autofarm.h (%s lignes)\n" \
+    "$(wc -l < "${AUTOFARM}")"

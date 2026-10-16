@@ -10,6 +10,7 @@
 
 #include "features/feature.h"
 
+#include "features/autofarm/autofarm.h"
 #include "features/console/console.h"
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/init/init.h"
@@ -51,6 +52,14 @@ const Feature kStamina{
     "inf_stamina", "Movement", nullptr, &stamina::draw_ui, nullptr,
 };
 
+// The auto-farm toggle. The LOOP lives in scripts/autofarm_loop.lua, which
+// runs on every new lua_State and reads `specter.var.autofarm` -- so nullptr
+// install is right: there is nothing to hook at startup, only a checkbox and
+// the flag it writes.
+const Feature kAutofarm{
+    "autofarm", "Auto-farm", nullptr, &autofarm::draw_ui, nullptr,
+};
+
 // Runs scripts/init.lua once per new lua_State. No tab: it is a bootstrap, not
 // something a person interacts with.
 const Feature kInit{
@@ -65,8 +74,9 @@ const Feature kLuaDump{"lua_dump", nullptr, &lua_dump::install, nullptr,
 // The list, in menu order.
 // kInit comes FIRST on purpose: it re-arms the per-session patches, and those
 // want to be in place before anything else runs on a fresh state.
-const Feature* const kFeatures[] = {&kInit,      &kConsole, &kTeleport,
-                                    &kWaypoints, &kStamina, &kNoFall, &kLuaDump};
+const Feature* const kFeatures[] = {&kInit,     &kConsole, &kTeleport,
+                                    &kWaypoints, &kStamina, &kNoFall,
+                                    &kAutofarm, &kLuaDump};
 
 }  // namespace
 
