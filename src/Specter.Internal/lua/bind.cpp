@@ -8,6 +8,7 @@
 #include "lua/bridge.h"
 #include "lua/worker.h"
 
+#include "features/aniai/aniai.h"
 #include "features/autofarm/autofarm.h"
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/nofall/nofall.h"
@@ -189,6 +190,12 @@ bool install(lua_State* L, int specter_idx)
             // Le booleen de la case. En lecture ET en ecriture : le pilote Lua
             // le LIT, la case l'ECRIT, et les deux operent sur le meme octet.
             // Deux copies se desynchronisent a un relog ; une seule ne peut pas.
+            // L'IA des Aniimoe. Meme stockage que la case, pour la meme
+            // raison : deux copies, et l'une finit par diverger au relog.
+            .addProperty("ani_ia", features::aniai::flag(),
+                         features::aniai::flag())
+            .addProperty("ani_ia_etat", features::aniai::etat(),
+                         features::aniai::etat())
             .addProperty("autofarm", features::autofarm::flag(),
                          features::autofarm::flag())
             // Ecrit par le script quand une cible a reellement disparu, lu par

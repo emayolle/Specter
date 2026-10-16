@@ -10,6 +10,7 @@
 
 #include "features/feature.h"
 
+#include "features/aniai/aniai.h"
 #include "features/autofarm/autofarm.h"
 #include "features/console/console.h"
 #include "features/inf_stamina/inf_stamina.h"
@@ -74,9 +75,17 @@ const Feature kLuaDump{"lua_dump", nullptr, &lua_dump::install, nullptr,
 // The list, in menu order.
 // kInit comes FIRST on purpose: it re-arms the per-session patches, and those
 // want to be in place before anything else runs on a fresh state.
+// Onglet propre : « Auto-farm » est une boucle qui ramasse, ca n'a rien a voir
+// avec le fait qu'un creature pense ou non. Deux entrees de MEME libelle
+// seraient un seul onglet (c'est l'ID ImGui qui compte) -- donc si on veut les
+// voir separees, il faut deux libelles.
+const Feature kAniAi{
+    "ani_ai", "Aniimoe", nullptr, &aniai::draw_ui, nullptr,
+};
+
 const Feature* const kFeatures[] = {&kInit,      &kConsole, &kTeleport,
                                     &kWaypoints, &kStamina, &kNoFall,
-                                    &kAutofarm,  &kLuaDump};
+                                    &kAutofarm,  &kAniAi,   &kLuaDump};
 }  // namespace
 
 const Feature* const* registry()

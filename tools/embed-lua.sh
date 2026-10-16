@@ -26,11 +26,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${ROOT}/scripts/init.lua"
 AUTOFARM="${ROOT}/scripts/autofarm_loop.lua"
+ANI_AI="${ROOT}/scripts/ani_ai.lua"
 OUT="${ROOT}/generated/lua_init.h"
 OUT_AF="${ROOT}/generated/lua_autofarm.h"
+OUT_AI="${ROOT}/generated/lua_aniai.h"
 
 [[ -f "${SRC}" ]] || { echo "ERREUR: absent ${SRC}" >&2; exit 1; }
 [[ -f "${AUTOFARM}" ]] || { echo "ERREUR: absent ${AUTOFARM}" >&2; exit 1; }
+[[ -f "${ANI_AI}" ]] || { echo "ERREUR: absent ${ANI_AI}" >&2; exit 1; }
 
 # ---- 0. TOUS les scripts : ils compilent, et ils tiennent dans le tampon -----
 #
@@ -64,7 +67,7 @@ echo "-- scripts : compilation + taille (plafond ${KMAX} o, on verifie la SOMME)
 for f in "${ROOT}"/scripts/*.lua; do
   [[ -f "$f" ]] || continue
   n=$(wc -c < "$f")
-  if [[ "$f" == "${SRC}" || "$f" == "${AUTOFARM}" ]]; then SUM=$((SUM + n)); fi
+  if [[ "$f" == "${SRC}" || "$f" == "${AUTOFARM}" || "$f" == "${ANI_AI}" ]]; then SUM=$((SUM + n)); fi
   if [[ "$n" -gt "$KMAX" ]]; then
     echo "ERREUR: ${f##*/} fait ${n} octets, le canal n'en accepte que ${KMAX}." >&2
     echo "         Il sera tronque en silence, et l'erreur qui en sortira" >&2
@@ -79,7 +82,7 @@ for f in "${ROOT}"/scripts/*.lua; do
 done
 
 if [[ "$SUM" -gt "$KMAX" ]]; then
-  echo "ERREUR: le bootstrap fait ${SUM} octets (init.lua + autofarm_loop.lua)," >&2
+  echo "ERREUR: le bootstrap fait ${SUM} octets (init.lua + autofarm_loop.lua + ani_ai.lua)," >&2
   echo "       et le canal n'en accepte que ${KMAX}. Il sera tronque :" >&2
   echo "       erreur de compilation au milieu d'une chaine, dans un fichier" >&2
   echo "       qui n'est pas celui du script." >&2
@@ -91,6 +94,11 @@ printf '   %-24s %6d o  (plafond %s, marge %s)\n' "BOOTSTRAP (somme)" "$SUM" \
 # ---- 1. le litteral C ne doit pas pouvoir se refermer tout seul ------------
 if grep -q ')LUA_AF' "${AUTOFARM}"; then
     echo "ERREUR: ${AUTOFARM} contient ')LUA_AF', ce qui fermerait le litteral." >&2
+    exit 1
+fi
+
+if grep -q ')LUA_AI' "${ANI_AI}"; then
+    echo "ERREUR: ${ANI_AI} contient ')LUA_AI', ce qui fermerait le litteral." >&2
     exit 1
 fi
 
@@ -155,7 +163,25 @@ mkdir -p "$(dirname "${OUT_AF}")"
     echo "}  // namespace specter::lua::init"
 } > "${OUT_AF}"
 
+# ---- 5. le troisieme script -------------------------------------------------
+mkdir -p "$(dirname "${OUT_AI}")"
+{
+    echo "// AUTO-GENERE par tools/embed-lua.sh depuis scripts/ani_ai.lua."
+    echo "// Ne pas editer a la main : editer le script et reconstruire."
+    echo "#pragma once"
+    echo
+    echo "namespace specter::lua::init {"
+    echo
+    echo "static constexpr const char* kAniAiLoop = R\"LUA_AI("
+    cat "${ANI_AI}"
+    echo ")LUA_AI\";"
+    echo
+    echo "}  // namespace specter::lua::init"
+} > "${OUT_AI}"
+
 printf "init embarque     : scripts/init.lua -> generated/lua_init.h (%s lignes, %s)\n" \
     "$(wc -l < "${SRC}")" "${CHECKED}"
 printf "autofarm embarque : scripts/autofarm_loop.lua -> generated/lua_autofarm.h (%s lignes)\n" \
     "$(wc -l < "${AUTOFARM}")"
+printf "ani_ai embarque   : scripts/ani_ai.lua -> generated/lua_aniai.h (%s lignes)\n" \
+    "$(wc -l < "${ANI_AI}")"
