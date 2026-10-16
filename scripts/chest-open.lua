@@ -4,35 +4,70 @@
 --   1. coffres non ouverts = marques Coffre (cfg 10506) du registre
 --      "déverrouillé" (pg.game.map.markUnlocker.unlockChunkMap) + entités
 --      vivantes ClientChest (préférées quand présentes) ;
---   2. TP en lerp vers le plus proche (TM.addRepeatTimer, comme tp.cpp) ;
+--   2. TP vers le plus proche, via `specter.tp.here` — PAS un lerp local ;
 --   3. à l'arrivée, on cherche l'entité puis son unité d'interaction dans
 --      pg.game.interaction.unitMap[1] et on déclenche
 --      pg.game.interaction:doUnitInteractive(unit) (chemin de la touche F) ;
 --   4. dès que l'interaction aboutit, l'id est marqué "ouvert" dans le cache
---      local (pg.me.__specterChestOpened) et on enchaîne immédiatement sur le
---      coffre suivant — SANS attendre l'animation de despawn ni la purge du
---      registre (l'un et l'autre sont lents ; le cache est la source de
---      vérité, l'entité d'un coffre déjà ouvert peut encore traîner avec
---      chestValid=true, elle ne fait plus "repasser" l'id en disponible).
+--      et on enchaîne immédiatement — SANS attendre l'animation de despawn ni
+--      la purge du registre (l'un et l'autre sont lents ; le cache est la
+--      source de vérité).
+--
+-- LE TP EST CELUI DE L'OVERLAY.
+--
+-- Cette version utilisait son propre lerp, écrit DEUX fois dans le fichier,
+-- 5.5/120 en dur — donc les réglages de l'onglet Teleport ne lui
+-- parlaient pas. Et son état de déplacement était sur `e.__specter_tp`, ce qui
+-- ne cohabite pas avec `specter.store.tpMove` que `specter.tp.here` utilise :
+-- deux timers indépendants pouvait déplacer le joueur en même temps.
+--
+-- Maintenant : `specter.tp.here(x, y, z)`, et l'arrivée se detecte par la
+-- distance — ce que le script faisait déjà pour désynchroniser.
+--
+-- AUCUN NOM À NOUS SUR UNE TABLE DU JEU.
+--
+-- Le cache des coffres ouverts et l'état de la chaîne vivent dans
+-- `specter.store.chests`. Ils étaient sur `pg.me.__specterChestOpened`,
+-- `pg.me.__specterOpenState` et `pg.me.__specterLastOpen` : visibles par
+-- quiconque parcourt l'entité, et disparus au relog.
 --
 -- Réglages :
-local LERP_STEP  = 5.5      -- unités par tick (mêmes valeurs que le menu TP)
-local LERP_SPEED = 120      -- ticks par seconde (~660 u/s)
-local CHEST_CONFIG = 10506  -- markConfigId "Coffre"
-local MAX_LIST   = 40       -- lignes imprimées au plus
-local INTERACT_TYPE = 1     -- interactionType du coffre (actif / ENT_FUNC)
-local TRY_SECONDS = 5       -- fenêtre pour trouver l'entité + son unité
-local WAIT_AFTER_TP = 0.8  -- s, à attendre APRÈS le TP avant d'interagir
-local CHAIN_OPENS = 10       -- nb de coffres à ouvrir par exécution (0 = tout)
-local BREATH = 1.6          -- s, pause entre deux ouvertures
-local OPEN_ENABLED = true   -- false = TP seulement (vers le plus proche)
+local CHAIN_OPENS  = 10      -- nb de coffres à ouvrir par exécution (0 = tout)
+local BREATH       = 1.6     -- s, pause entre deux ouvertures
+local WAIT_AFTER_TP = 0.8    -- s, à attendre APRÈS le TP avant d'interagir
+local TRY_SECONDS  = 5       -- fenêtre pour trouver l'entité + son unité
+local INTERACT_TYPE = 1      -- interactionType du coffre (actif / ENT_FUNC)
+local MAX_LIST     = 40      -- lignes imprimées au plus
+local ARRIVED_D    = 2.5     -- u : on considère arrivé en dessous
+local OPEN_ENABLED = true    -- false = TP seulement (vers le plus proche)
 
 -- Usage : tools/lua.sh -f scripts/chest-open.lua   (En jeu uniquement)
+--
+-- Pour arrêter une chaîne déjà lancée, depuis un autre chunk :
+--     specter.store.chests.cancel = true
 
 local SU  = require('Common.Utils.SceneUtils')
 local CTU = require('Utils.ClientTextUtils')
 local TM  = require('Core.Timer.TimerManager')
-local V   = Vector3
+
+-- ---------------------------------------------------------- garde : le TP existe
+if type(specter.tp) ~= 'table' or type(specter.tp.here) ~= 'function' then
+  print('ERROR: specter.tp.here absent. scripts/init.lua ne tourne pas ?')
+  return
+end
+
+local function tpHere(x, y, z)
+  -- Le pas et la vitesse viennent de l'onglet Teleport (specter.var.tp_step /
+  -- tp_speed), pas de constantes ici : c'est le meme déplacement que celui du
+  -- menu, donc les memes réglages.
+  specter.tp.here(x, y, z)
+end
+
+local function tpStop()
+  if specter.tp and type(specter.tp.stop) == 'function' then
+    pcall(specter.tp.stop)
+  end
+end
 
 local function localize(id)
   if not id then return nil end
@@ -47,21 +82,63 @@ if not e or not e.getPosition then
   return
 end
 
--- ------------------------------------------------- cache local "déjà ouverts"
--- Champ d'instance sur le joueur : persiste entre les chunks, JAMAIS
--- réinitialisé s'il existe déjà. Source de vérité pour la liste des non
--- ouverts. Reset si besoin : pg.me.__specterChestOpened = nil
-local CACHE_KEY = '__specterChestOpened'
-local SEED_RADIUS = 4   -- u : coffre du registre très proche SANS entité
-                        -- vivante => considéré comme déjà ouvert (désync)
-local opened = pg.me[CACHE_KEY]
-if type(opened) ~= 'table' then
-  opened = {}
-  pg.me[CACHE_KEY] = opened
+local function maPosition()
+  local ok, p = pcall(function() return e:getPosition() end)
+  if ok and p then return p end
+  return nil
 end
+
+local function distance(p, x, y, z)
+  return ((p[1] - x) ^ 2 + (p[2] - y) ^ 2 + (p[3] - z) ^ 2) ^ 0.5
+end
+
+-- ------------------------------------------------------------------ notre état
+local ETAT = specter.store.chests
+if type(ETAT) ~= 'table' then
+  ETAT = {}
+  specter.store.chests = ETAT
+end
+
+-- Un run precedent peut avoir laisse des timers si le jeu a crashé ou si le
+-- joueur s'est déconnecté. On les récupère avant tout, sinon `running'
+-- resterait vrai indéfiniment et personne ne pourrait plus relancer.
+local function nettoyerTimers()
+  for _, nom in ipairs({ 'poll', 'breath' }) do
+    local t = ETAT[nom]
+    if t then
+      pcall(function() TM.removeTimer(t) end)
+      ETAT[nom] = nil
+    end
+  end
+end
+nettoyerTimers()
+
+-- Un run peut mourir SANS laisser le verrou : le jeu a crashé, le joueur s'est
+-- deconnecté, une erreur a tue un timer. Dans ce cas il ne reste aucun timer
+-- vivant, et refuser indefiniment serait la seule facon de ne jamais relancer.
+-- On recycle donc un verrou sans timer plutot que de coincer le script.
+if ETAT.running and not ETAT.poll and not ETAT.breath then
+  print('ETAT: chaine orpheline sans timer, on repart')
+  ETAT.running = false
+end
+
+if ETAT.running then
+  print('ERROR: une chaine est deja en cours.')
+  print('       Pour l arreter :  specter.store.chests.cancel = true')
+  return
+end
+
+ETAT.running = true
+ETAT.cancel = false
+ETAT.done = 0
+local opened = type(ETAT.opened) == 'table' and ETAT.opened or {}
+ETAT.opened = opened
 
 -- Que les VRAIS coffres (markConfigId 10506) : isChest couvre aussi
 -- ramassages / Ambre lumin / Aniipods.
+local CHEST_CONFIG = 10506
+local SEED_RADIUS = 4   -- u : coffre du registre très proche SANS entité
+                        -- vivante => considéré comme déjà ouvert (désync)
 local markCfg = {}
 local okm, mpts = pcall(SU.getSceneMarkPointData, e.sceneId)
 if okm and type(mpts) == 'table' then
@@ -85,7 +162,8 @@ end
 
 -- ----------------------------------------------------------- collecte cible
 local function collectTargets()
-  local pnow = e:getPosition()
+  local pnow = maPosition()
+  if not pnow then return {}, {} end
 
   -- Priorité 1 : entités ClientChest VIVANTES donc disponibles (ouvertes par
   -- construction). Un coffre déjà ouvert par nous est caché par `opened`
@@ -95,11 +173,10 @@ local function collectTargets()
     if en.isChest and en.chestValid and isCoffre(en.markBindStaticId) then
       local okp, p = pcall(function() return en:getPosition() end)
       if okp and p then
-        local dx, dy, dz = p[1] - pnow[1], p[2] - pnow[2], p[3] - pnow[3]
         byLive[#byLive + 1] = {
           id = en.markBindStaticId,
           x = p[1], y = p[2], z = p[3],
-          d = (dx * dx + dy * dy + dz * dz) ^ 0.5,
+          d = distance(pnow, p[1], p[2], p[3]),
           name = localize(en.configName) or 'Coffre',
         }
       end
@@ -126,16 +203,16 @@ local function collectTargets()
     for id, p in pairs(pts) do
       if p.markConfigId == CHEST_CONFIG and p.markPosition and unlocked[id] then
         local mp = p.markPosition
-        local dx, dy, dz = mp[1] - pnow[1], mp[2] - pnow[2], mp[3] - pnow[3]
         rows[#rows + 1] = {
           id = id,
           x = mp[1], y = mp[2], z = mp[3],
-          d = (dx * dx + dy * dy + dz * dz) ^ 0.5,
+          d = distance(pnow, mp[1], mp[2], mp[3]),
           name = localize(p.infoTitle) or '',
         }
       end
     end
   end
+
   -- Réconciliation : un coffre du registre quasi-collé au joueur SANS entité
   -- vivante est déjà ouvert (registre pas purgé en temps réel).
   local liveNow = liveChestIds()
@@ -145,8 +222,8 @@ local function collectTargets()
     end
   end
 
-  -- Filtre cache : les ids déjà ouverts par nous ne réapparaissent jamais par
-  -- la simple présence d'une entité (despawn lent) — source de vérité.
+  -- Filtre cache : les ids déjà ouverts ne réapparaissent jamais par la seule
+  -- présence d'une entité (despawn lent) — c'est la source de vérité.
   local function dropCached(listIn)
     local out = {}
     for _, r in ipairs(listIn) do
@@ -156,84 +233,81 @@ local function collectTargets()
     end
     return out
   end
-  byLive = dropCached(byLive)
-  rows = dropCached(rows)
 
-  return byLive, rows
+  return dropCached(byLive), dropCached(rows)
 end
 
 -- ------------------------------------------------------------------ machine
-local opensDone = 0
 local curTarget
-local curArrived
-local curTp
-local curPoll
 local chainActive = true
-
-local function stopPoll()
-  if curPoll then
-    pcall(function() TM.removeTimer(curPoll) end)
-    curPoll = nil
-  end
-end
-
-local function cancelTp()
-  if curTp then
-    if curTp.tid then
-      pcall(function() TM.removeTimer(curTp.tid) end)
-    end
-    curTp.active = false
-    curTp = nil
-  end
-end
 
 local function finish(reason)
   chainActive = false
-  stopPoll()
-  cancelTp()
-  pg.me.__specterOpenState = {
-    done = opensDone,
-    lastId = pg.me.__specterLastOpen and pg.me.__specterLastOpen.id or nil,
-    finish = reason,
-    at = (os and os.time and os.time()) or 0,
-  }
+  nettoyerTimers()
+  tpStop()
+  ETAT.running = false
+  ETAT.finish = reason
+  ETAT.done = ETAT.done or 0
+  print('FIN ' .. tostring(reason) .. ' ouverts=' .. tostring(ETAT.done))
 end
 
--- Choisit la cible, TP-lerp si besoin, puis lance le polling d'interaction.
+-- Choisit la cible, lance le TP si besoin, puis le polling d'interaction.
 local startCycle
 
 local function onOpened()
-  opensDone = opensDone + 1
+  ETAT.done = (ETAT.done or 0) + 1
   opened[curTarget.id] = true
-  pg.me.__specterLastOpen = { id = curTarget.id, t = (os and os.time and os.time()) or 0 }
-  pg.me.__specterOpenState = { done = opensDone, lastId = curTarget.id }
-  -- petite pause (laisse l'ouverture se poser) puis cible suivante
-  local tid
-  tid = TM.addRepeatTimer(BREATH, function()
-    pcall(function() TM.removeTimer(tid) end)
+  ETAT.lastId = curTarget.id
+  local n = ETAT.done
+  ETAT.breath = TM.addRepeatTimer(BREATH, function()
+    nettoyerTimers()
     if chainActive then
       startCycle()
     end
   end)
+  print(string.format('CHAIN %d ok id=%s', n, tostring(curTarget.id)))
 end
 
 local function startPoll()
-  stopPoll()
+  nettoyerTimers()
   local tries = 0
-  local marker = curTarget.id
-  local mkx, mky, mkz = curTarget.x, curTarget.y, curTarget.z
-  local waitTicks = math.max(0, math.floor(WAIT_AFTER_TP / 0.15))
   local waited = 0
-  curPoll = TM.addRepeatTimer(0.15, function()
-    -- pas encore arrivé ?
-    if not curArrived and curTp and curTp.active then
+  local target = curTarget
+  local marker, mx, my, mz = target.id, target.x, target.y, target.z
+  local waitTicks = math.max(0, math.floor(WAIT_AFTER_TP / 0.15))
+
+  ETAT.poll = TM.addRepeatTimer(0.15, function()
+    -- Toute la logique est sous pcall. Une erreur ici laisserait le timer
+    -- alive et `running' a true, et la seule facon de s'enULES sortir serait
+    -- de relancer le jeu : un script doit toujours pouvoir s'arreter lui-meme.
+    local ok, err = pcall(function()
+      if not chainActive or ETAT.cancel then
+      finish(ETAT.cancel and 'CANCEL' or 'STOP')
       return
     end
-    -- attendre la fenêtre configurée APRÈS le TP avant d'interagir
+
+    -- Attente de l'arrivée. C'est une MESURE DE DISTANCE, pas un drapeau de
+    -- lerp : le déplacement appartient à specter.tp.here, et ce script n'a
+    -- rien à savoir de son état interne.
+    local pnow = maPosition()
+    if not pnow then
+      tries = tries + 1
+      if tries * 0.15 > TRY_SECONDS then finish('NOPOS') end
+      return
+    end
+    local d = distance(pnow, mx, my, mz)
+    if d > ARRIVED_D then
+      tries = tries + 1
+      if tries * 0.15 > TRY_SECONDS then finish('TP_TIMEOUT') end
+      return
+    end
+
+    -- Fenêtre configurée après le TP avant d'interagir.
     if waited < waitTicks then
       waited = waited + 1
       return
     end
+
     -- 1) l'entité liée à la marque
     local ent
     for _, en in pairs(pg.getEntities() or {}) do
@@ -242,6 +316,7 @@ local function startPoll()
         break
       end
     end
+
     -- 2) son unité d'interaction
     local it = pg.game and pg.game.interaction
     local unit
@@ -256,181 +331,115 @@ local function startPoll()
         end
       end
     end
+
     if not unit then
       tries = tries + 1
       if tries * 0.15 > TRY_SECONDS then
-        -- entité morte/absente : si on est collé au point, c'est un coffre du
-        -- registre déjà ouvert (désync) => on le marque et on enchaîne
-        local okp, p = pcall(function() return e:getPosition() end)
-        local d0 = okp and p and
-          ((p[1]-mkx)^2 + (p[2]-mky)^2 + (p[3]-mkz)^2) ^ 0.5
-        if d0 and d0 <= 3 then
+        -- Entité morte ou absente. Si on est collé au point, c'est un coffre
+        -- du registre déjà ouvert (désync) : on le marque et on enchaîne.
+        if d <= 3 then
           opened[marker] = true
         end
-        if chainActive then
-          startCycle()
-        end
+        startCycle()
       end
       return
     end
-    stopPoll()
+
+    nettoyerTimers()
     local okr, res = pcall(function() return it:doUnitInteractive(unit) end)
     print('OPEN_INTERACT ok=' .. tostring(okr) .. ' id=' .. tostring(marker))
-    pg.me.__specterOpenState = pg.me.__specterOpenState or {}
-    pg.me.__specterOpenState.lastInteractOk = okr
+    ETAT.lastInteractOk = okr
     if okr then
       onOpened()
     else
-      -- interaction en échec : on s'arrête (évite une boucle sur la même cible)
       finish('OPEN_ERR')
+    end
+    end)
+
+    if not ok then
+      print('ERREUR dans le cycle : ' .. tostring(err))
+      finish('ERROR')
     end
   end)
 end
 
 startCycle = function()
-  if not chainActive or (CHAIN_OPENS > 0 and opensDone >= CHAIN_OPENS) then
+  if not chainActive then return end
+  if ETAT.cancel then finish('CANCEL') return end
+  if CHAIN_OPENS > 0 and (ETAT.done or 0) >= CHAIN_OPENS then
     finish('OK')
     return
   end
+
   local byLive, rows = collectTargets()
   local list = #byLive > 0 and byLive or rows
   if #list == 0 then
     finish('NP')
     return
   end
+
   local t = list[1]
-  local pnow = e:getPosition()
-  local dx, dy, dz = t.x - pnow[1], t.y - pnow[2], t.z - pnow[3]
-  local dist = (dx * dx + dy * dy + dz * dz) ^ 0.5
+  local pnow = maPosition()
+  if not pnow then finish('NOPOS') return end
+  local dist = distance(pnow, t.x, t.y, t.z)
+
   curTarget = t
-  curArrived = dist < 2.0
-  if opensDone > 0 then
+  if (ETAT.done or 0) > 0 then
     print(string.format('CHAIN %d -> id=%s d=%6.1f',
-                        opensDone + 1, tostring(t.id), dist))
+                        ETAT.done + 1, tostring(t.id), dist))
   end
-  if not curArrived then
-    cancelTp()
-    local st = {
-      active = true, i = 0, step = LERP_STEP,
-      x0 = pnow[1], y0 = pnow[2], z0 = pnow[3],
-      x1 = t.x, y1 = t.y, z1 = t.z,
-    }
-    e.__specter_tp = st
-    local n = math.ceil(dist / st.step)
-    if n < 1 then n = 1 end
-    if n > 20000 then n = 20000 end
-    st.n = n
-    local tid
-    tid = TM.addRepeatTimer(1 / LERP_SPEED, function()
-      if not st.active then
-        return
-      end
-      st.i = st.i + 1
-      local a = st.i / st.n
-      if a > 1 then a = 1 end
-      local v = V.ForceNew(st.x0 + (st.x1 - st.x0) * a,
-                           st.y0 + (st.y1 - st.y0) * a,
-                           st.z0 + (st.z1 - st.z0) * a)
-      if e.forceSetPos then
-        e:forceSetPos(v, true)
-      else
-        e:setPosition(v)
-      end
-      if st.i >= st.n then
-        st.active = false
-        pcall(function() TM.removeTimer(tid) end)
-      end
-    end)
-    st.tid = tid
-    curTp = st
-    print(string.format('TP_TO id=%s d=%6.1f (~%.0f u/s)',
-                        tostring(t.id), dist, LERP_STEP * LERP_SPEED))
+
+  if dist >= ARRIVED_D then
+    tpStop()                       -- annule un éventuel déplacement en cours
+    tpHere(t.x, t.y, t.z)
+    print(string.format('TP_TO id=%s d=%6.1f', tostring(t.id), dist))
   end
+
   startPoll()
 end
 
--- ---------------------------------------------------------- lancement
--- Liste initiale (affichage synchrone) + démarrage de la chaîne.
-local c0 = pg.me[CACHE_KEY]
+-- ---------------------------------------------------------- affichage initial
 local nCache = 0
-if type(c0) == 'table' then
-  for _ in pairs(c0) do nCache = nCache + 1 end
-end
+for _ in pairs(opened) do nCache = nCache + 1 end
 
 local byLive0, rows0 = collectTargets()
 local list0 = #byLive0 > 0 and byLive0 or rows0
 local source0 = #byLive0 > 0 and 'entités vivantes' or 'registre déverrouillé'
 
-print('# coffres NON OUVERTS (scene ' .. tostring(e.sceneId) .. ', source: '
-      .. source0 .. ') : ' .. #list0
-      .. '  [cache déjà ouverts: ' .. nCache .. ']')
+print(string.format('# coffres NON OUVERTS (scene %s, source: %s) : %d  [cache déjà ouverts: %d]',
+                     tostring(e.sceneId), source0, #list0, nCache))
 for i, r in ipairs(list0) do
   if i > MAX_LIST then
     print(string.format('... (%d de plus)', #list0 - MAX_LIST))
     break
   end
   print(string.format('U %s %.2f %.2f %.2f d=%7.1f %s',
-                       tostring(r.id), r.x, r.y, r.z, r.d, r.name))
+                     tostring(r.id), r.x, r.y, r.z, r.d, r.name))
 end
 print('TOTAL_UNLOCKED=' .. #list0)
 
-if not OPEN_ENABLED then
-  -- mode TP seulement : on se pose sur le plus proche, sans ouvrir
-  if #list0 == 0 then
-    print('NP: aucun coffre non ouvert trouvé')
-    return
-  end
-  local t = list0[1]
-  local pnow = e:getPosition()
-  local dx, dy, dz = t.x - pnow[1], t.y - pnow[2], t.z - pnow[3]
-  local dist = (dx * dx + dy * dy + dz * dz) ^ 0.5
-  if dist < 2.0 then
-    print('ALREADY_HERE id=' .. tostring(t.id))
-    return
-  end
-  local st = {
-    active = true, i = 0, step = LERP_STEP,
-    x0 = pnow[1], y0 = pnow[2], z0 = pnow[3],
-    x1 = t.x, y1 = t.y, z1 = t.z,
-  }
-  e.__specter_tp = st
-  local n = math.ceil(dist / st.step)
-  if n < 1 then n = 1 end
-  if n > 20000 then n = 20000 end
-  st.n = n
-  local tid
-  tid = TM.addRepeatTimer(1 / LERP_SPEED, function()
-    if not st.active then
-      return
-    end
-    st.i = st.i + 1
-    local a = st.i / st.n
-    if a > 1 then a = 1 end
-    local v = V.ForceNew(st.x0 + (st.x1 - st.x0) * a,
-                         st.y0 + (st.y1 - st.y0) * a,
-                         st.z0 + (st.z1 - st.z0) * a)
-    if e.forceSetPos then
-      e:forceSetPos(v, true)
-    else
-      e:setPosition(v)
-    end
-    if st.i >= st.n then
-      st.active = false
-      pcall(function() TM.removeTimer(tid) end)
-    end
-  end)
-  st.tid = tid
-  print(string.format('TP_TO id=%s d=%6.1f (~%.0f u/s)',
-                      tostring(t.id), dist, LERP_STEP * LERP_SPEED))
+if #list0 == 0 then
+  finish('NP')
   return
 end
 
-if #list0 == 0 then
-  print('NP: aucun coffre non ouvert trouvé')
+if not OPEN_ENABLED then
+  -- Mode TP seulement : on se pose sur le plus proche, sans ouvrir.
+  local t = list0[1]
+  local pnow = maPosition()
+  if pnow and distance(pnow, t.x, t.y, t.z) < ARRIVED_D then
+    print('ALREADY_HERE id=' .. tostring(t.id))
+    finish('OK')
+    return
+  end
+  tpHere(t.x, t.y, t.z)
+  print(string.format('TP_ONLY id=%s', tostring(t.id)))
+  finish('OK')
   return
 end
 
 if CHAIN_OPENS > 0 then
   print('CHAIN_OPENS=' .. CHAIN_OPENS)
 end
+print('ANNULER :  specter.store.chests.cancel = true')
 startCycle()
