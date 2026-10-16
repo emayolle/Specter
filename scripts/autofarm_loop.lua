@@ -239,6 +239,24 @@ local function arreter()
 end
 
 local function surOuverture()
+    -- ARRETER LE POLL, ICI, AVANT DE COMPTER.
+    --
+    -- Sans ce nettoyer(), le timer de poll survit a l'ouverture. `interagi`
+    -- reste vrai, l'entite a disparu, donc surOuverture() est rappelee a CHAQUE
+    -- tick -- 0.15 s plus tard -- jusqu'a ce que la respiration se déclenche. Mesure
+    -- : 225 "ouvertures" affichees la ou il y en avait 75. Trois fois trop, et
+    -- autant de timers de respiration empiles.
+    --
+    -- Le meme piege que pour le TMP lent : un truc qui survit a ce qu'il a
+    -- fini de faire, il le repete.
+    nettoyer()
+
+    -- Le cache des ouverts. Sans cette ligne, la seule protection contre une
+    -- cible qui traine apres avoir ete consommee disparait -- et le despawn du
+    -- jeu est lent. C'est aussi ce qui permet de ne pas recounts une entite
+    -- encore chargee mais deja vide.
+    opened[curTarget.id] = true
+
     E.ouverts = (E.ouverts or 0) + 1
     if type(specter.var.autofarm_ouverts) == 'number' then
         pcall(function() specter.var.autofarm_ouverts = E.ouverts end)
