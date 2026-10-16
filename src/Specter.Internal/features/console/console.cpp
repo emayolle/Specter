@@ -156,22 +156,56 @@ std::atomic<unsigned long long> g_cli_first_use = 0;
 // The chunk taken from the shell, owned by the Lua thread.
 char g_cli_code[kMaxCode];
 int g_cli_len = 0;
+// TRUE when the request filled the buffer: the chunk we received is a prefix of
+// the file the shell sent. See read_file.
+bool g_cli_truncated = false;
 
 // Read a whole file, or fail. Returns false if it is absent or unreadable —
+// Read a whole file, or fail. Returns false if it is absent or unreadable —
 // which is the normal case, every frame, for the whole time the window is shut.
-bool read_file(const char* path, char* out, int cap, int* out_len)
+//
+// A file that does not fit is NOT read partially. ReadFile fills `cap - 1`
+// bytes and reports success, and the caller would then run a prefix of the
+// chunk: the parse dies somewhere in the middle, on a line the user never
+// wrote, under a chunk name that is ours and theirs. That happened twice in
+// one session — `unfinished string near 'TP_ONLY '`, then a state that looked
+// like a live run but was the previous run's leftovers.
+//
+// So `out_truncated` (optional) says "this did not fit" and the caller refuses.
+bool read_file(const char* path, char* out, int cap, int* out_len,
+               bool* out_truncated = nullptr)
 {
+    if (out_truncated) {
+        *out_truncated = false;
+    }
     HANDLE h = ::CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                              nullptr, OPEN_EXISTING,
                              FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         return false;
     }
+    DWORD want = static_cast<DWORD>(cap - 1);
     DWORD got = 0;
-    const BOOL ok = ::ReadFile(h, out, static_cast<DWORD>(cap - 1), &got, nullptr);
+    const BOOL ok = ::ReadFile(h, out, want, &got, nullptr);
     ::CloseHandle(h);
     if (!ok) {
         return false;
+    }
+    if (got == want) {
+        // Full buffer. Either the file is exactly cap-1 bytes, or it is longer.
+        // One byte more settles it, and it is cheaper than being wrong.
+        HANDLE h2 = ::CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                  nullptr, OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h2 != INVALID_HANDLE_VALUE) {
+            char probe;
+            DWORD extra = 0;
+            ::SetFilePointer(h2, static_cast<LONG>(want), nullptr, FILE_BEGIN);
+            if (::ReadFile(h2, &probe, 1, &extra, nullptr) && extra > 0 && out_truncated) {
+                *out_truncated = true;
+            }
+            ::CloseHandle(h2);
+        }
     }
     out[got] = '\0';
     *out_len = static_cast<int>(got);
@@ -257,9 +291,22 @@ bool claim_request()
         return false;
     }
     int n = 0;
-    const bool ok = read_file(claimed, g_cli_code, kMaxCode, &n);
+    bool tropGrand = false;
+    const bool ok = read_file(claimed, g_cli_code, kMaxCode, &n, &tropGrand);
     ::DeleteFileA(claimed);
     if (!ok) {
+        return false;
+    }
+    if (tropGrand) {
+        // On refuse, et on le DIT. Le refus est publish_cli_result(false, ...)
+        // pour que la commande responde au lieu de timeout.
+        const char* msg =
+            "ERREUR: le script depasse kMaxCode (32767 octets).\n"
+            "       Recu tel quel : il serait coupe en plein milieu d'une chaine,\n"
+            "       et l'erreur de compilation nommerait un fichier qui n'est pas\n"
+            "       le votre. Coupez-le, ou lancez le en plusieurs morceaux.";
+        log::error("cli: requete trop grande (%d octets et plus), refusee", n);
+        publish_cli_result(false, msg, static_cast<int>(std::strlen(msg)));
         return false;
     }
     g_cli_len = n;
