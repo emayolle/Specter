@@ -66,6 +66,7 @@ const char* phase_label(int v)
 
 void draw_ui()
 {
+    { render::Panneau p("RAMASSAGE AUTOMATIQUE");
     bool on = g_enabled;
     if (render::case_a_cocher("Auto-farm\n"
                         "(ramasse ce qui s'interagit, SAUF les coffres)",
@@ -94,6 +95,7 @@ void draw_ui()
             "Une cible n'est comptee qu'APRES la disparition de son entite. Un "
             "appel d'interaction qui rend sans erreur ne prouve rien.");
     }
+    }  // du panneau
 }
 
 }  // namespace autofarm

@@ -508,7 +508,11 @@ void draw_ui()
 {
     drain_result();
 
-    ImGui::Text("bridge: %s", status());
+    // La ligne « bridge: ready » a ete retiree d'ici. Elle etait en tete de la
+    // console, donc sur la page qu'on ouvre pour ECRIRE du Lua — et une ligne
+    // d'etat technique y occupe la premiere ligne de l'ecran. Elle vit desormais
+    // dans Divers, avec le reste de l'etat du client, ou elle sert a quelque
+    // chose : quand le pont ne repond plus.
     ImGui::InputTextMultiline("##lua_src", g_src, sizeof(g_src),
                               ImVec2(-1.0f, 180.0f));
 

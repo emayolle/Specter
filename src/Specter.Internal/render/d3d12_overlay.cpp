@@ -38,6 +38,7 @@
 
 #include "imgui.h"
 #include "icon_font.h"            // generated/, from third_party/lucide/
+#include "ui_font.h"              // generated/, from third_party/inter/
 #include "render/ui_widgets.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
@@ -441,7 +442,20 @@ InitResult init_once(IDXGISwapChain* sc)
     if (!polices_ajoutees) {
         polices_ajoutees = true;
 
-        ImFont* defaut = ImGui::GetIO().Fonts->AddFontDefault();
+        // Le TEXTE, en Inter. Sans elle, tout sort en ProggyClean — le pixel
+        // font par defaut d'ImGui — et c'est la premiere chose qui faisait
+        // dire que le menu n'etait pas fini. 16.5 px : Inter a des x-height
+        // plus petits que ProggyClean, a la meme taille il paraissait plus
+        // petit.
+        static const ImWchar kPlageTexte[] = {0x0020, 0x00FF, 0x2013, 0x2014,
+                                              0x2018, 0x2019, 0x201C, 0x201D,
+                                              0x2022, 0x2026, 0x20AC, 0x00B0,
+                                              0x2013, 0xFFFF};
+        ImFontConfig cfg_txt;
+        cfg_txt.FontDataOwnedByAtlas = false;
+        ImFont* defaut = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
+            render::kUiFont, static_cast<int>(render::kUiFontSize),
+            16.5f, &cfg_txt, kPlageTexte);
 
         // Lucide place ses glyphes dans la zone privee d'Unicode. On cuit donc
         // E000-F8FF : 6400 emplacements, dont 107 dessines. La plage complete
@@ -707,42 +721,47 @@ void build_ui()
                 ImGui::Dummy(ImVec2(0.0f, 12.0f));
             }
 
-            // Titres de section : DEPLACEMENT, puis JEU.
-            bool deja_jeu = false;
-            bool deja_deplacement = true;
+            // L'ORDRE DES PAGES EST DONNE ICI, et nulle part ailleurs.
+            //
+            // Le registre donne les FONCTIONS, pas l'ordre : Teleport et
+            // Waypoints passent tous deux par teleport::init, et rien dans le
+            // registre ne dit lequel s'affiche en premier. Sans cette liste,
+            // l'ordre venait de l'ordre du registre, et un ajout de feature le
+            // changeait sans qu'on le voie.
+            static const struct {
+                const char* label;
+                unsigned int glyphe;
+            } kOrdre[] = {
+                {"Joueur",    ico::vise},
+                {"Monde",     ico::robot},
+                {"Outils",    ico::terminal},
+                {"Divers",    ico::reglages},
+            };
+            constexpr int kNOrdre = 4;
 
-            for (int i = 0; i < npages; ++i) {
-                const bool est_mouvement =
-                    (std::strcmp(pages[i].label, "Teleport") == 0 ||
-                     std::strcmp(pages[i].label, "Waypoints") == 0);
+            // On affiche dans l'ordre ci-dessus, et seulement les pages qui
+            // existent encore : ajouter une feature au registre ne doit pas
+            // necessiter de toucher cette liste pour apparaitre.
+            for (int o = 0; o < kNOrdre; ++o) {
+                bool trouvee = false;
+                for (int i = 0; i < npages; ++i) {
+                    if (std::strcmp(pages[i].label, kOrdre[o].label) != 0) {
+                        continue;
+                    }
+                    trouvee = true;
 
-                if (!est_mouvement && !deja_jeu) {
-                    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-                    ImGui::SetCursorPosX(14.0f);
-                    ImGui::TextColored(texte_faible(), "JEU");
-                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-                    deja_jeu = true;
-                    deja_deplacement = false;
-                }
+                    if (o > 0) {
+                        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+                    }
 
-                unsigned int glyphe = ico::reglages;
-                if (std::strcmp(pages[i].label, "Teleport") == 0) glyphe = ico::vise;
-                else if (std::strcmp(pages[i].label, "Waypoints") == 0) glyphe = ico::carte;
-                else if (std::strcmp(pages[i].label, "Movement") == 0) glyphe = ico::eclair;
-                else if (std::strcmp(pages[i].label, "Auto-farm") == 0) glyphe = ico::robot;
-                else if (std::strcmp(pages[i].label, "Aniimoe") == 0) glyphe = ico::bug;
-                else if (std::strcmp(pages[i].label, "Lua Editor") == 0) glyphe = ico::terminal;
-                else if (std::strcmp(pages[i].label, "Divers") == 0) glyphe = ico::outil;
-
-                const float h = ImGui::GetTextLineHeight() + 11.0f;
-                entree_nav(g_icon_font, pages[i].label, glyphe, (i == choisie),
-                           l_nav - 28.0f, h, 14.0f, i);
-
-                if (ImGui::IsItemClicked()) {
-                    choisie = i;
+                    const float h = ImGui::GetTextLineHeight() + 11.0f;
+                    entree_nav(g_icon_font, pages[i].label, kOrdre[o].glyphe,
+                               (i == choisie), l_nav - 28.0f, h, 14.0f, i);
+                    if (ImGui::IsItemClicked()) {
+                        choisie = i;
+                    }
                 }
             }
-            (void)deja_deplacement;
         }
         ImGui::EndChild();
 
@@ -756,7 +775,9 @@ void build_ui()
             if (std::strcmp(pages[choisie].label, "Divers") == 0) {
                 {
                     Panneau p1("ETAT DU CLIENT");
-                    ImGui::TextUnformatted(g_snapshot);
+                    ImGui::TextColored(texte(), "%s", g_ui_enabled ? "overlay actif" : "overlay en pause");
+                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                    ImGui::TextColored(texte_faible(), "%s", g_snapshot);
                 }
                 {
                     Panneau p2("RENDU");

@@ -51,6 +51,7 @@ const char* etat_label(int v)
 
 void draw_ui()
 {
+    { render::Panneau p("COMPORTEMENT DES ANIIMOE");
     bool on = g_enabled;
     if (render::case_a_cocher("IA des Aniimoe", &on)) {
         g_enabled = on;
@@ -79,6 +80,7 @@ void draw_ui()
             "entre deux passages, et une ecriture conditionnelle ne le "
             "remarkerait pas.");
     }
+    }  // du panneau
 }
 
 }  // namespace aniai
