@@ -426,31 +426,42 @@ InitResult init_once(IDXGISwapChain* sc)
     io.MouseDrawCursor = true;
     ImGui::StyleColorsDark();
 
-    // La police d icones, AVANT le premier ImGui_ImplDX12_NewFrame : c'est lui
-    // qui cuit l'atlas, et un glyphe ajoute apres ne peut plus l'etre.
+    // LES DEUX POLICES, DANS L'ORDRE.
     //
-    // Elle est AJOUTEE, pas mise par defaut. La version d'avant faisait
-    // SetDefaultFont() dessus, ce qui veut dire que TOUT le texte du menu
-    // aurait ete rendu avec une police de glyphes uniques : les libelles
-    // seraient devenues des rectangles vides. Le defaut reste celui d'ImGui, et
-    // les icones se demandent une par une avec PushFont.
+    // ImFontAtlas n'ajoute sa police par defaut QUE s'il n'y a aucune police.
+    // Donc ajouter la police d'icones — comme je le faisais — SUPPRIME la
+    // police normale, et ImGui se retrouve avec une seule police : celle des
+    // glyphes. Tout le texte du menu passe alors par elle, et les libelles
+    // s'affichent en glyphes vides. C'est exactement ce qu'on voit a l'ecran :
+    // la mise en page est la, et plus un seul mot.
     //
-    // Lucide place ses glyphes dans la zone privee d'Unicode, donc
-    // la plage se construit a la main : passer 0xFFFF ferait cuire 65 000
-    // glyphes dont on n'en utilise qu'une dizaine.
-    static const ImWchar kPlageIcones[] = {0xE000, 0xF8FF};
-    static bool police_ajoutee = false;
-    if (!police_ajoutee) {
-        police_ajoutee = true;
+    // L'ordre compte donc : le defaut d'abord, l'icone ensuite. Les icones se
+    // demandent avec PushFont(police) ; tout le reste utilise Fonts[0].
+    static bool polices_ajoutees = false;
+    if (!polices_ajoutees) {
+        polices_ajoutees = true;
+
+        ImFont* defaut = ImGui::GetIO().Fonts->AddFontDefault();
+
+        // Lucide place ses glyphes dans la zone privee d'Unicode. On cuit donc
+        // E000-F8FF : 6400 emplacements, dont 107 dessines. La plage complete
+        // de la police, pas juste nos icones — un libelle qui deborderait du
+        // sous-ensemble doit s'afficher proprement, pas disparaitre.
+        static const ImWchar kPlageIcones[] = {0xE000, 0xF8FF};
         ImFontConfig cfg;
-        // kIconFont est statique : ImGui ne doit surtout pas tenter de la
-        // liberer a la destruction de l'atlas.
+        // kIconFont est un tableau statique : ImGui ne doit surtout pas tenter
+        // de le liberer a la destruction de l'atlas.
         cfg.FontDataOwnedByAtlas = false;
         g_icon_font = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
             render::kIconFont, static_cast<int>(render::kIconFontSize),
             16.0f, &cfg, kPlageIcones);
+
         if (g_icon_font == nullptr) {
             log_once("police d icones refusee -- le menu tournera sans icone");
+        } else if (defaut == nullptr) {
+            // Le defaut en tete reste la seule police du texte, c'est lui
+            // qu'ImGuiira chercher Fonts[0].
+            ImGui::GetIO().Fonts->SetTexID(ImTextureID());
         }
     }
 
@@ -664,9 +675,15 @@ void build_ui()
                 const float c = 30.0f;
                 ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + c, p.y + c),
                                                           coul(accent()), 8.0f);
-                Icone logo(g_icon_font, 17.0f);
-                ImGui::SetCursorPos(ImVec2(p.x + 7.0f, p.y + 6.0f));
-                ImGui::TextColored(fond(), "%c", static_cast<unsigned short>(ico::vise));
+                {
+                    // BLOC A PART : Icone pose la police d'icones, et son
+                    // destructeur la retire en sortant d'ici. Sans ce bloc,
+                    // "SPECTER" et "Aniimoe" sortaient eux aussi avec elle.
+                    Icone logo(g_icon_font, 17.0f);
+                    ImGui::SetCursorPos(ImVec2(p.x + 7.0f, p.y + 6.0f));
+                    ImGui::TextColored(fond(), "%c",
+                                       static_cast<unsigned short>(ico::vise));
+                }
                 ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f));
                 ImGui::TextColored(texte(), "SPECTER");
                 ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f +
