@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstdarg>
 #include <cstring>
 #include <string>
 
@@ -296,6 +297,39 @@ bool install()
 bool ready()
 {
     return lua::pump::ready();
+}
+
+bool submit_call(Channel ch, const char* name, int ndoubles, ...)
+{
+    if (!name || !*name) {
+        return false;
+    }
+    // 128 for the name, 32 per argument: "%.17g" of a double never exceeds 24
+    // characters plus a sign, a decimal point and an exponent.
+    char code[128 + 32 * (ndoubles > 0 ? ndoubles : 0)];
+    int n = std::snprintf(code, sizeof(code), "%s(", name);
+    if (n <= 0 || n >= static_cast<int>(sizeof(code))) {
+        return false;
+    }
+    va_list ap;
+    va_start(ap, ndoubles);
+    for (int i = 0; i < ndoubles; ++i) {
+        const double v = va_arg(ap, double);
+        const int w = std::snprintf(code + n, sizeof(code) - static_cast<std::size_t>(n),
+                                    i ? ", %.17g" : "%.17g", v);
+        if (w <= 0 || n + w >= static_cast<int>(sizeof(code))) {
+            va_end(ap);
+            return false;
+        }
+        n += w;
+    }
+    va_end(ap);
+    const int tail = std::snprintf(code + n, sizeof(code) - static_cast<std::size_t>(n), ")");
+    if (tail != 1) {
+        return false;
+    }
+    n += tail;
+    return submit(ch, code, n);
 }
 
 bool submit(Channel ch, const char* code, int len)

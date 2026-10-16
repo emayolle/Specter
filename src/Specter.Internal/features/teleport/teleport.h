@@ -3,6 +3,23 @@
 namespace specter::features {
 namespace teleport {
 
+// The lerp step and rate, as ADDRESSES, for the binding layer to hand to Lua.
+//
+// Named _addr and not lerp_step(), because there is already a float lerp_step()
+// getter above: two functions differing only by return type do not overload.
+//
+// The same reason `stamina::flag()` exists: the checkbox writes a C++ float the
+// player tunes in the overlay, and scripts/init.lua reads it through
+// `specter.var.tp_step`. A getter plus a setter would put two copies of one
+// truth on two sides, which is the problem this whole design is avoiding.
+//
+// They are NOT arguments of specter.tp.here(x, y, z) on purpose: those three
+// are the target. The step and the rate are settings the player changes, so
+// formatting them into the chunk on every click would be the very thing the
+// migration removes.
+float* lerp_step_addr();
+float* lerp_speed_addr();
+
 // Install: load the saved slots and the cached mark lists. Called once from
 // specter::start(), through the feature registry. Safe to call again.
 bool init();

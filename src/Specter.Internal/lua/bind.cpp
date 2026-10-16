@@ -9,6 +9,7 @@
 #include "lua/worker.h"
 
 #include "features/inf_stamina/inf_stamina.h"
+#include "features/teleport/teleport.h"
 #include "platform/log.h"
 
 namespace specter::lua::bind {
@@ -183,6 +184,15 @@ bool install(lua_State* L, int specter_idx)
 // there needs a registered property and a rebuild, for nothing.
             .addProperty("stamina", features::stamina::flag(),
                          features::stamina::flag())
+            // The lerp settings. Read by scripts/init.lua's specter.tp.here on
+            // every teleport: the player tunes them in the overlay, so they are
+            // C++'s, and passing them as call arguments would mean formatting
+            // them into a chunk on every click -- the thing this migration
+            // exists to remove.
+            .addProperty("tp_step", features::teleport::lerp_step_addr(),
+                         features::teleport::lerp_step_addr())
+            .addProperty("tp_speed", features::teleport::lerp_speed_addr(),
+                         features::teleport::lerp_speed_addr())
         .endNamespace()
         .addFunction("reset", &api_reset);
 

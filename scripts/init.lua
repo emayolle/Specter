@@ -89,4 +89,119 @@ end
 -- SPECTER_INIT = SPECTER_INIT or {}
 -- SPECTER_INIT.nbEtats = (SPECTER_INIT.nbEtats or 0) + 1
 
+-- ── 2. teleport ──────────────────────────────────────────────────
+-- Ce que le C++ faisait en construisant un chunk de 40 lignes a chaque
+-- clic. Ici la logique vit dans un fichier, et le C++ se contente d'appeler
+--
+--     specter.tp.here(x, y, z)
+--
+-- Trois arguments, comme demande. Le pas et la vitesse NE SONT PAS des
+-- arguments : ce sont des reglages que l'utilisateur change depuis l'overlay,
+-- donc ils restent cote C++ et se lisent ici par specter.var. Passer par des
+-- arguments obligerait le C++ a les reformater dans le chunk a chaque clic,
+-- ce qui est exactement ce qu'on supprime.
+do
+    local MAX_STEPS = 20000
+
+    -- L'entite du joueur. Le jeu la met parfois a nil ; on la cherche.
+    local function joueur()
+        local e = pg.me
+        if not e then
+            for _k, _v in pairs(pg.global.actorMgr.uid2Ent) do e = _v break end
+        end
+        return e
+    end
+
+    specter.tp = specter.tp or {}
+
+    -- Position, DANS LE FORMAT QUE LE C++ LIT DEJA.
+    --
+    -- On RETOURNE la chaine au lieu de l'imprimer : le bac a sable capture les
+    -- valeurs de retour, donc handle_result() ne change pas d'une ligne. Changer
+    -- le protocole et le parseur dans le meme commit, pour un gain nul, c'est
+    -- deux choses qui peuvent casser au lieu d'une.
+    specter.tp.pos = function()
+        local e = joueur()
+        if not e then return end
+        local p = e:getPosition()
+        if not p then return end
+        return string.format('P %.2f %.2f %.2f %d', p[1], p[2], p[3], p[4] or 0)
+    end
+
+    -- Un petit setPosition est rejete par le deplacement autoritaire et le
+    -- joueur est rappele en arriere : on marche donc vers la cible par petits
+    -- pas, dans le timer du jeu.
+    --
+    -- L'etat du deplacement vit dans NOTRE store, pas sur l'entite. Il etait
+    -- sur e.__specter_tp : un nom a nous dans une table du jeu, visible par
+    -- quiconque parcourt les champs. C'est le meme probleme que la stamina,
+    -- et la meme correction.
+    specter.tp.here = function(x, y, z)
+        local e = joueur()
+        if not e or not e.getPosition then return 'pas d entite' end
+
+        local TM = require('Core.Timer.TimerManager')
+        local store = specter.store
+
+        -- Un deplacement precedent est annule AVANT de commencer, sinon deux
+        -- timers se disputent la meme position.
+        local prev = store.tpMove
+        if prev and prev.tid then pcall(function() TM.removeTimer(prev.tid) end) end
+        if prev then prev.active = false end
+
+        local p = e:getPosition()
+        if not p then return 'pas de position' end
+
+        local step = tonumber(specter.var.tp_step) or 5.5
+        local speed = tonumber(specter.var.tp_speed) or 120
+        if speed <= 0 then speed = 1 end
+
+        local st = {
+            active = true, i = 0, s = step,
+            x0 = p[1], y0 = p[2], z0 = p[3],
+            x1 = x,    y1 = y,    z1 = z,
+        }
+
+        local dx, dy, dz = st.x1 - st.x0, st.y1 - st.y0, st.z1 - st.z0
+        local dist = (dx * dx + dy * dy + dz * dz) ^ 0.5
+        local n = math.ceil(dist / st.s)
+        if n < 1 then n = 1 end
+        if n > MAX_STEPS then n = MAX_STEPS end
+        st.n = n
+
+        local s = st
+        local tid
+        tid = TM.addRepeatTimer(1 / speed, function()
+            if not s.active then return end
+            s.i = s.i + 1
+            local a = s.i / s.n
+            if a > 1 then a = 1 end
+            local v = Vector3.ForceNew(s.x0 + (s.x1 - s.x0) * a,
+                                       s.y0 + (s.y1 - s.y0) * a,
+                                       s.z0 + (s.z1 - s.z0) * a)
+            if e.forceSetPos then e:forceSetPos(v, true) else e:setPosition(v) end
+            if s.i >= s.n then
+                s.active = false
+                pcall(function() TM.removeTimer(tid) end)
+            end
+        end)
+        st.tid = tid
+        store.tpMove = st
+        return ('deplacement en %d pas de %.2f'):format(n, step)
+    end
+
+    -- Interrompre un deplacement en cours. Le C++ n'en a pas besoin pour
+    -- l'instant, mais c'est le morceau qui manque toujours, et l'ecrire ici
+    -- coute trois lignes.
+    specter.tp.stop = function()
+        local TM = require('Core.Timer.TimerManager')
+        local st = specter.store.tpMove
+        if not st then return 'rien a arreter' end
+        if st.tid then pcall(function() TM.removeTimer(st.tid) end) end
+        st.active = false
+        specter.store.tpMove = nil
+        return 'arrete'
+    end
+end
+
 print('[init] prêt')

@@ -47,6 +47,21 @@ bool ready();
 // one — the user wants the last thing they asked for, not a backlog.
 bool submit(Channel ch, const char* code, int len);
 
+// Call a function of ours from the game thread, with doubles, and run it on the
+// Lua thread on the next tick. Builds the chunk `<name>(a, b, c)` and submits
+// it, which is the whole point: the LOGIC lives in scripts/init.lua, and the
+// caller passes VALUES instead of assembling Lua source.
+//
+// This is what killed the last of the embedded Lua. A feature used to carry a
+// forty-line chunk in a C++ constant and snprintf the numbers into it on every
+// click — the logic, the string format, and the game's API calls, all in one
+// place, all rebuilt per click.
+//
+// `name` must be a dotted path of identifiers only. It is not escaped,
+// because a name containing anything else is a bug in the caller and would be
+// a chunk injection; the numbers are the only things formatted in.
+bool submit_call(Channel ch, const char* name, int ndoubles, ...);
+
 // Copy the newest captured output for `ch` into `out` (NUL-terminated, capacity
 // `cap`). Returns false when nothing fresh is pending; `*out_ok` reports whether
 // the chunk ran without error. Single consumer: the render thread.
