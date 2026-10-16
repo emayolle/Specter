@@ -768,15 +768,22 @@ void build_ui()
             }
         }
         ImGui::EndChild();
+        // Sans ce Pop, ImGui dit « Missing PopStyleVar() » a chaque frame et
+        // chaque page herite de la marge de la nav — c'est ce que la capture
+        // montrait : tout le contenu colle au bord.
+        ImGui::PopStyleVar();
 
         // ---------------- contenu ----------------
         ImGui::SameLine(0.0f, 1.0f);
         // 22 a gauche, 18 en haut, 22 a droite, 20 en bas. La marge de droite
         // et celle du bas etaient les deux qui manquaient : tout le contenu
         // finissait au bord exact du cadre.
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
-                            ImVec2(22.0f, 18.0f));
-        ImGui::BeginChild("page", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
+        // WindowPadding ne prend QUE deux valeurs dans ImGui — il n'y a pas
+        // de marge droite distincte. On pose donc l'ecart du bas et on retirees
+        // la colonne de contenu de la largeur de la marge, ce qui laisse 30 px
+        // a droite.
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 18.0f));
+        ImGui::BeginChild("page", ImVec2(-30.0f, -22.0f), ImGuiChildFlags_None);
         {
             entete(pages[choisie].label);
 

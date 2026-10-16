@@ -331,28 +331,38 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
 inline bool bouton_ligne(const char* libelle)
 {
     ImGui::PushID(libelle);
-    const ImVec2 taille = ImGui::CalcTextSize(libelle);
+    const ImVec2 d = ImGui::GetCursorScreenPos();   // le caller a fait SameLine
     const float h = ImGui::GetTextLineHeight();
+    const ImVec2 taille = ImGui::CalcTextSize(libelle);
+    const ImVec2 q(d.x + taille.x + 14.0f, d.y + h);
 
-    ImGui::Dummy(ImVec2(0.0f, h));   // reserve la ligne
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - h);
-
-    const ImVec2 p = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const bool survole = ImGui::IsMouseHoveringRect(
-        p, ImVec2(p.x + taille.x + 16.0f, p.y + h), true);
+    const bool survole = ImGui::IsMouseHoveringRect(d, q, true);
     if (survole) {
-        dl->AddRectFilled(p, ImVec2(p.x + taille.x + 16.0f, p.y + h),
-                          coul(accent_doux()), 4.0f);
+        dl->AddRectFilled(d, q, coul(accent_doux()), 4.0f);
     }
 
-    ImGui::SetCursorScreenPos(p);
-    ImGui::InvisibleButton("##b", ImVec2(taille.x + 16.0f, h));
+    // LE TEXTE PASSE PAR LE FLUX NORMAL.
+    //
+    // La premiere version reservait la ligne avec un Dummy puis rewindait le Y
+    // de la hauteur du texte. Ca se repetait correct sur le papier et le bouton
+    // RETOMBAIT A LA LIGNE SUIVANTE : un Dummy suivi d'un retour en arriere
+    // n'annule pas le retour a la ligne que le Dummy peut declencher quand il
+    // deborde de la largeur.
+    //
+    // Ici on rend le texte normalement — ca avance le curseur comme il faut,
+    // puisque le caller a deja fait SameLine — et on pose seulement la zone
+    // cliquable par-dessus, en absolu.
+    ImGui::TextColored(survole ? accent() : texte_faible(), "%s", libelle);
+
+    ImGui::SetCursorScreenPos(d);
+    ImGui::InvisibleButton("##b", ImVec2(taille.x + 14.0f, h));
     const bool clic = ImGui::IsItemClicked();
 
-    ImGui::SetCursorScreenPos(
-        ImVec2(p.x + 8.0f, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
-    ImGui::TextColored(survole ? accent() : texte_faible(), "%s", libelle);
+    // On rend la main APRES le bouton, pas a sa place : un appelant qui enfile
+    // un deuxieme bouton sur la meme ligne ne doit pas repartir sur le bouton.
+    ImGui::SetCursorScreenPos(q);
+    ImGui::Dummy(ImVec2(0.0f, h));
 
     ImGui::PopID();
     return clic;
