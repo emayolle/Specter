@@ -14,7 +14,14 @@ namespace {
 // Read by Lua through `specter.var.nofall` at every landing, written by the
 // checkbox. Nothing else stores it, and nothing on the game's side stores a
 // copy — the wrapper asks on each call.
-bool g_enabled = false;
+// ACTIVE PAR DEFAUT.
+//
+// Sans piege, et c'est a verifier avant de le dire : le patch de
+// checkImmuneFallDamage est pose UNE FOIS par init.lua, mais la porte
+// `specter.var.nofall` est relue a CHAQUE appel, et decochee elle retombe sur
+// la fonction d'origine (init.lua:416-423). Donc decocher prend effet
+// immediatement, sans rejouer le script et sans retirer le patch.
+bool g_enabled = true;
 
 }  // namespace
 

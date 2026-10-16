@@ -21,7 +21,12 @@ namespace {
 
 // Cached so the menu can draw the checkbox without going through the Lua thread.
 // It IS g_enabled — not a copy of it. Two copies is what this change removed.
-bool g_enabled = false;
+// ACTIVE PAR DEFAUT.
+//
+// Sans piege, meme raison que nofall : le patch de changeStamina est pose une
+// fois, mais la porte `specter.var.stamina` est relue a chaque modification
+// d'endurance (init.lua:141). Decocher, c'est immediat.
+bool g_enabled = true;
 
 }  // namespace
 

@@ -18,7 +18,13 @@ namespace {
 //            case qui dit « coche » sans dire si l'IA est reellement coupee au
 //            jeu, c'est une case aveugle.
 
-bool g_enabled = false;
+// ACTIVE PAR DEFAUT. L'IA des Aniimoe etait fausse dans le build qu'on a
+// mesure (GLOBAL_OPEN_TICK = false au chargement) ; la case doit retrouver
+// l'etat normal du jeu, pas le figer dans cet etat-la.
+//
+// Sans risque de piege : le pilote relit ce flag toutes les 250 ms et ecrit
+// AiConst.GLOBAL_OPEN_TICK. Decocher, c'est un quart de seconde de plus.
+bool g_enabled = true;
 int g_etat = 0;  // 0 AiConst introuvable, 1 IA activee, 2 IA desactivee
 
 }  // namespace
