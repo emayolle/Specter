@@ -62,37 +62,45 @@ void draw_ui()
                     }
                 }
 
+                // LA PAGE EST EN TROIS PANNEAUX.
+                //
+                // Tout etait dans un seul bloc : la position, les curseurs et la
+                // liste des positions. La liste etant la plus longue, elle
+                // repoussait les deux autres hors de l'ecran — exactement ce que
+                // la capture de la page Monde montrait pour les deux cases.
+                { render::Panneau p0("OU JE SUIS");
                 float cx = 0.0f, cy = 0.0f, cz = 0.0f;
                 int csp = 0;
                 if (features::teleport::have_position()) {
                     features::teleport::position(&cx, &cy, &cz, &csp);
-                    ImGui::Text("Position: (%.2f, %.2f, %.2f)  space %d", cx, cy,
-                                cz, csp);
+                    char buf[96];
+                    std::snprintf(buf, sizeof(buf), "%.0f   %.0f   %.0f", cx, cy, cz);
+                    ImGui::TextColored(render::texte(), "%s", buf);
+                    ImGui::TextColored(render::texte_faible(), "x   y   z   —   scene %d", csp);
                 } else {
-                    ImGui::TextColored(render::texte_faible(), 
-                        "position unknown - wait until you are in-world");
+                    ImGui::TextColored(render::texte_faible(),
+                        "position inconnue — entre dans le monde");
+                }
                 }
 
-                ImGui::SetNextItemWidth(180.0f);
-                ImGui::InputText("Name", g_tp_name, sizeof(g_tp_name));
+                { render::Panneau p1("ENREGISTRER ICI");
+                ImGui::SetNextItemWidth(-1.0f - 200.0f);
+                ImGui::InputText("##nom", g_tp_name, sizeof(g_tp_name));
                 ImGui::SameLine();
-                if (ImGui::Button("Save current position")) {
+                if (render::bouton("Enregistrer", 180.0f,
+                                   "Sauvegarde la position courante sous ce nom")) {
                     if (!features::teleport::save_current(g_tp_name)) {
                         console::note(
-                            "! tp: nothing saved (need a live position or a "
-                            "non-empty name)\n");
+                            "! tp: rien enregistre (position ou nom manquant)\n");
                     }
                 }
+                }
 
-                ImGui::Separator();
-                ImGui::TextUnformatted("Lerp tuning");
-                ImGui::SameLine();
-                ImGui::TextColored(render::texte_faible(), 
-                    "(a teleport walks to the target in small steps)");
+                { render::Panneau p2("TELEPORTATION");
+                ImGui::TextColored(render::texte_faible(),
+                    "le personnage marche vers la cible par petits pas");
                 float stepv = features::teleport::lerp_step();
-                ImGui::SetNextItemWidth(240.0f);
-                if (ImGui::SliderFloat("Step size (u)", &stepv, 0.25f, 20.0f,
-                                       "%.2f u/step")) {
+                if (render::curseur("Pas (unites)", &stepv, 0.25f, 20.0f, "%.2f u")) {
                     features::teleport::set_lerp_step(stepv);
                 }
                 if (ImGui::IsItemHovered()) {
@@ -104,9 +112,8 @@ void draw_ui()
                     features::teleport::persist();
                 }
                 float spdv = features::teleport::lerp_speed();
-                ImGui::SetNextItemWidth(240.0f);
-                if (ImGui::SliderFloat("Speed (steps/s)", &spdv, 5.0f, 120.0f,
-                                       "%.0f steps/s")) {
+                if (render::curseur("Vitesse (pas/s)", &spdv, 5.0f, 120.0f,
+                                    "%.0f")) {
                     features::teleport::set_lerp_speed(spdv);
                 }
                 if (ImGui::IsItemHovered()) {
@@ -121,44 +128,54 @@ void draw_ui()
                 const float cap = fps > 1.0f ? fps : 60.0f;
                 const float sps = features::teleport::lerp_speed();
                 const float eff_speed = sps < cap ? sps : cap;
-                ImGui::TextColored(render::texte_faible(), 
-                    "=> ~%.0f u/s  (step x min(speed, %.0f fps))",
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::TextColored(render::texte_faible(),
+                    "soit ~%.0f u/s  (pas x min(vitesse, %.0f fps))",
                     features::teleport::lerp_step() * eff_speed, cap);
+                }
 
-                ImGui::Separator();
-                ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
+                { render::Panneau p3("MES POSITIONS");
                 if (features::teleport::count() == 0) {
-                    ImGui::TextColored(render::texte_faible(), "no saved positions yet");
+                    ImGui::TextColored(render::texte_faible(),
+                        "rien pour l'instant — enregistre une position ci-dessus");
                 }
                 for (int i = 0; i < features::teleport::count(); ++i) {
                     char nm[36] = {};
                     float sx = 0.0f, sy = 0.0f, sz = 0.0f;
                     features::teleport::get_slot(i, nm, sizeof(nm), &sx, &sy, &sz);
+
                     ImGui::PushID(i);
+                    char xyz[64];
+                    std::snprintf(xyz, sizeof(xyz), "(%.0f, %.0f, %.0f)", sx, sy, sz);
+
+                    // nom + coordonnees a gauche, Teleport et Effacer a droite,
+                    // toujours a la meme colonne : trois lignes, pas six.
+                    const ImVec2 d = ImGui::GetCursorScreenPos();
+                    const float h = ImGui::GetTextLineHeight();
                     ImGui::TextUnformatted(nm);
                     ImGui::SameLine();
-                    ImGui::TextColored(render::texte_faible(), "(%.2f, %.2f, %.2f)", sx, sy, sz);
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Teleport")) {
+                    ImGui::TextColored(render::texte_faible(), "%s", xyz);
+
+                    const float l_boutons = 168.0f;
+                    const float x = d.x + ImGui::GetContentRegionAvail().x - l_boutons;
+                    if (render::bouton_a_x("Aller", x, d.y, 78.0f,
+                                           "Teleporte jusqu'a cette position")) {
                         if (!features::teleport::teleport_to(i)) {
                             console::note("! tp: bridge not ready\n");
                         }
                     }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Delete")) {
+                    if (render::bouton_a_x("Effacer", x + 84.0f, d.y, 84.0f,
+                                           "Supprime cette position")) {
                         features::teleport::remove_at(i);
-                        --i;  // slots shifted left; re-check this index
+                        --i;   // les slots ont recule d'un cran
                     }
+
+                    ImGui::SetCursorScreenPos(d);
+                    ImGui::Dummy(ImVec2(0.0f, h));
                     ImGui::PopID();
                 }
-                ImGui::EndChild();
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip(
-                        "Teleports lerp the player toward the target so the "
-                        "server accepts the move; slots persist in "
-                        "/tmp/specter-tp.json.");
                 }
-}
+                }
 
 void draw_ui_waypoints()
 {
@@ -230,13 +247,17 @@ void draw_ui_waypoints()
                         "scene data. Cached in /tmp/specter-floraisons.json "
                         "and /tmp/specter-waypoints.json.");
                 }
+                // LA LISTE EST BORNEE.
+                //
+                // Elle est en AutoResizeY, donc elle prend toute la hauteur de
+                // son contenu : avec quinze zones, elle poussait l'auto-farm et
+                // l'IA hors de l'ecran. On borne donc la zone de defilement, et
+                // les deux cases restent visibles sans qu'on ait a faire
+                // defiler.
+                const float h = std::max(ImGui::GetContentRegionAvail().y - 92.0f,
+                                         180.0f);
                 { render::Panneau panneau("REPERES DU JEU");
-                // AutoResizeY, et non une taille nulle : ce panneau est
-                // lui-meme AutoResizeY, et un enfant de taille (0, 0) y
-                // disparait completement. C'est ce qui a vide la liste — le
-                // titre restait, la liste etait partie.
-                ImGui::BeginChild("##wp_list", ImVec2(0.0f, 0.0f),
-                                  ImGuiChildFlags_AutoResizeY);
+                ImGui::BeginChild("##wp_list", ImVec2(0.0f, h));
                 if (nz == 0) {
                     ImGui::TextColored(render::texte_faible(),
                         "nothing yet - press Refresh once in-world");

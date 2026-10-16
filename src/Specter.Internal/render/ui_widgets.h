@@ -493,20 +493,105 @@ inline bool ligne_repere(const char* nom, float x, float y, float z,
 // Une case a cocher qui ressemble a une case a cocher : cadre sombre, coche
 // blanche quand elle est pleine, cadre qui s'allume a l'accent au survol, et le
 // libelle qui s'atténue quand elle est décochée.
-// Un curseur qui ressemble a un curseur : piste fine, poignée ronde violette,
-// valeur en clair a droite.
-inline bool curseur(const char* libelle, float* valeur, float mini, float maxi,
-                    const char* format = "%.1f")
+// UN BOUTON PLACE ABSOLUMENT : pour les lignes a colonnes, ou le bouton doit
+// toujours etre au meme endroit quelle que soit la longueur du texte.
+inline bool bouton_a_x(const char* libelle, float x, float y, float largeur,
+                       const char* aide = nullptr)
 {
     ImGui::PushID(libelle);
-    const float l = ImGui::GetContentRegionAvail().x - 62.0f;
+    const float h = ImGui::GetTextLineHeight() + 7.0f;
+    const ImVec2 d(x, y);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const bool survole = ImGui::IsMouseHoveringRect(d, ImVec2(x + largeur, y + h),
+                                                    true);
+    if (survole) {
+        dl->AddRectFilled(d, ImVec2(x + largeur, y + h), coul(accent()), 5.0f);
+    } else {
+        dl->AddRectFilled(d, ImVec2(x + largeur, y + h), coul(panneau()), 5.0f);
+        dl->AddRect(d, ImVec2(x + largeur, y + h), coul(bordure()), 5.0f, 0, 1.0f);
+    }
+
+    ImGui::SetCursorScreenPos(
+        ImVec2(x + 12.0f, y + (h - ImGui::GetTextLineHeight()) * 0.5f));
+    ImGui::TextColored(survole ? fond() : texte(), "%s", libelle);
+
+    ImGui::SetCursorScreenPos(d);
+    ImGui::InvisibleButton("##bx", ImVec2(largeur, h));
+    const bool clic = ImGui::IsItemClicked();
+    if (aide && survole) {
+        ImGui::SetTooltip("%s", aide);
+    }
+    ImGui::PopID();
+    return clic;
+}
+
+// UN CURSEUR : LIBELLE A GAUCHE, PISTE A DROITE.
+//
+// SliderFloat d'ImGui met le libelle APRES la piste — le libelle est passe en
+// parametre et SliderFloat l'ecrit devant. Sur la capture du Teleport, on
+// lisait « 5.50 u/step    Step size (u) » : la piste d'abord, le nom ensuite.
+// C'est l'inverse de tout le reste du menu, et ca se voit.
+//
+// Ici le libelle occupe une colonne fixe a gauche, la piste prend le reste.
+inline bool curseur(const char* libelle, float* valeur, float mini, float maxi,
+                    const char* format = "%.1f", float largeur_nom = 150.0f)
+{
+    ImGui::PushID(libelle);
+    const float h = ImGui::GetTextLineHeight();
+    const ImVec2 depart = ImGui::GetCursorScreenPos();
 
     ImGui::TextUnformatted(libelle);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(std::max(l, 60.0f));
+    ImGui::SameLine(0.0f, 12.0f);
+    ImGui::SetNextItemWidth(
+        std::max(ImGui::GetContentRegionAvail().x - 12.0f, 60.0f));
     const bool change = ImGui::SliderFloat("##v", valeur, mini, maxi, format);
+
+    // On rend la main sur UNE ligne, mesuree : un SliderFloat peut valoir deux
+    // lignes si le style a change, et la ligne suivante se retrouverait decalee.
+    ImGui::SetCursorScreenPos(depart);
+    ImGui::Dummy(ImVec2(0.0f, h + ImGui::GetStyle().FramePadding.y * 2.0f));
+
     ImGui::PopID();
     return change;
+}
+
+// UN BOUTON NORMAL, aux couleurs du menu.
+//
+// Button d'ImGui sort du theme : c'est le seul element du menu qui a l'air
+// d'un widget d'un autre outil. Meme traitement que les capsules de ligne, mais
+// en pleine largeur de ce qu'on demande.
+inline bool bouton(const char* libelle, float largeur = 0.0f,
+                   const char* aide = nullptr)
+{
+    ImGui::PushID(libelle);
+    const ImVec2 t = ImGui::CalcTextSize(libelle);
+    const float pad = 14.0f;
+    const float w = largeur > 0.0f ? largeur : t.x + pad * 2.0f;
+    const float h = ImGui::GetTextLineHeight() + 9.0f;
+
+    ImGui::InvisibleButton("##b", ImVec2(w, h));
+    const bool survole = ImGui::IsItemHovered();
+    const bool clic = ImGui::IsItemClicked();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p = ImGui::GetItemRectMin();
+    const ImVec2 q(p.x + w, p.y + h);
+    if (survole) {
+        dl->AddRectFilled(p, q, coul(accent()), 6.0f);
+    } else {
+        dl->AddRectFilled(p, q, coul(panneau()), 6.0f);
+        dl->AddRect(p, q, coul(bordure()), 6.0f, 0, 1.0f);
+    }
+    ImGui::SetCursorScreenPos(
+        ImVec2(p.x + pad, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
+    ImGui::TextColored(survole ? fond() : texte(), "%s", libelle);
+
+    if (aide && ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", aide);
+    }
+    ImGui::PopID();
+    return clic;
 }
 
 // Titre de page, avec le trait d'accent qui donne le ton.
