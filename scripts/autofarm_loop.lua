@@ -147,8 +147,26 @@ local function indexerMarques()
         end
     end
     grille, grilleScene = g, sid
-    -- Le cache de classification vaut pour une scene : il part avec.
+
+    -- Les caches sont purges AVEC LA SCENE.
+    --
+    -- Ils ne poussaient jamais : sans borne, ils accumulent des ids d'entites
+    -- qui ne reviendront pas -- une entite d'une zone qu'on quitte ne revient
+    -- pas avec le meme id. La scene qui part, ses ids partent avec.
+    --
+    -- Mesure avant correction, sur une session courte : ouverts=0, inertes=46,
+    -- sansEffet=80. Sur plusieurs heures c'est la seule croissance non bornee du
+    -- processus, et elle ne coute rien a supprimer.
+    --
+    -- Pas de purge sur minuterie : une scene qui ne change pas est un etat
+    -- stable, et purger dessus ne ferait que refaire le meme travail.
     for k in pairs(cfgCache) do cfgCache[k] = nil end
+    for k in pairs(opened) do opened[k] = nil end
+    for k in pairs(inertes) do inertes[k] = nil end
+    for k in pairs(sansEffet) do sansEffet[k] = nil end
+    print('[autofarm] changement de scene ' .. tostring(sid) ..
+          ' -- caches purges (marques, ouverts, inertes, sansEffet)')
+
     return g
 end
 
