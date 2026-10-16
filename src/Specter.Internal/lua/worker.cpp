@@ -83,6 +83,16 @@ void unlock()
 // The job description travels to the thread by pointer, allocated here and freed
 // by the worker when it is done. Not a static: 64 KB per spawn would be 384 KB
 // of BSS for something that is usually short-lived.
+// Per-worker allocation accounting. This used to be a pair of global atomics,
+// and the "N blocs encore vivant(s)" line counted every OTHER worker's blocks
+// too -- hence the absurd descending sequence 2605, 2084, 1563, 1042, 521:
+// that is one global counter draining, not six leaks. The allocator's `ud` is
+// exactly the place to keep per-state counters.
+struct AllocCounters {
+    std::size_t live;
+    std::size_t bytes;
+};
+
 struct Job {
     int slot;
     char* code;
@@ -90,6 +100,7 @@ struct Job {
     char* meta;      // upvalue descriptors, or null
     int meta_len;
     char error[256];
+    AllocCounters alloc;
 };
 
 // Where the worker finds its Job*. The Lua registry is per-state, so this is the
@@ -138,13 +149,10 @@ struct AllocHdr {
     unsigned magic;
 };
 
-std::atomic<std::size_t> g_alloc_bytes{0};
-std::atomic<std::size_t> g_alloc_live{0};
-
 void* worker_alloc(void* ud, void* ptr, std::size_t osize, std::size_t nsize)
 {
-    (void)ud;
     (void)osize;  // our header is the authority, not the caller's bookkeeping
+    auto* c = static_cast<AllocCounters*>(ud);
 
     if (ptr == nullptr) {
         if (nsize == 0) {
@@ -157,8 +165,10 @@ void* worker_alloc(void* ud, void* ptr, std::size_t osize, std::size_t nsize)
         }
         h->size = nsize;
         h->magic = kAllocMagic;
-        g_alloc_bytes.fetch_add(nsize, std::memory_order_relaxed);
-        g_alloc_live.fetch_add(1, std::memory_order_relaxed);
+        if (c) {
+            c->bytes += nsize;
+            ++c->live;
+        }
         return h + 1;
     }
 
@@ -171,8 +181,10 @@ void* worker_alloc(void* ud, void* ptr, std::size_t osize, std::size_t nsize)
 
     const std::size_t old = h->size;
     if (nsize == 0) {
-        g_alloc_bytes.fetch_sub(old, std::memory_order_relaxed);
-        g_alloc_live.fetch_sub(1, std::memory_order_relaxed);
+        if (c) {
+            c->bytes -= old;
+            --c->live;
+        }
         h->magic = 0;
         _aligned_free(h);
         return nullptr;
@@ -184,8 +196,10 @@ void* worker_alloc(void* ud, void* ptr, std::size_t osize, std::size_t nsize)
     }
     auto* nh = static_cast<AllocHdr*>(moved);
     nh->size = nsize;
-    g_alloc_bytes.fetch_add(nsize, std::memory_order_relaxed);
-    g_alloc_bytes.fetch_sub(old, std::memory_order_relaxed);
+    if (c) {
+        c->bytes += nsize;
+        c->bytes -= old;
+    }
     return nh + 1;
 }
 
@@ -298,6 +312,55 @@ void open_worker_api(lua_State* L, Job* job)
 // `table.concat` means exactly what it meant. That is the whole trick, and it is
 // why the function form can work at all.
 
+// The whole worker, as ONE protected call.
+//
+// This used to be inline C in worker_main, with no pcall anywhere around it. So
+// any raise at all -- in luaL_openlibs, in a debug.* of the worker's own world,
+// in something nobody thought of -- longjmped into nothing, LuaJIT printed
+// PANIC, and the game died with it. Twice, and neither time with a log line
+// pointing here.
+//
+// It is now a C function called under a pcall, and its single return value is
+// either the error message or nil. A worker that misbehaves is a worker in
+// error, with something to read.
+int run_all(lua_State* L)
+{
+    Job* job =
+        static_cast<Job*>(p_lua_touserdata(L, lua_upvalueindex(1)));
+    if (!job) {
+        return 0;
+    }
+
+    p_luaL_openlibs(L);
+    open_worker_api(L, job);
+
+    if (p_luaL_loadbuffer(L, job->code, job->len, "=specter-worker") != 0) {
+        return 1;  // the message from loadbuffer is already on top
+    }
+
+    const int chunk = p_lua_gettop(L);
+    char why[192] = "";
+    if (job->meta && job->meta_len > 0 &&
+        (meta::apply_meta(L, chunk, job->meta, job->meta_len, true, why,
+                         sizeof(why)) < 0 ||
+         meta::apply_meta(L, chunk, job->meta, job->meta_len, false, why,
+                          sizeof(why)) < 0)) {
+        p_lua_pushstring(L, why);
+        return 1;
+    }
+    const int nargs = p_lua_gettop(L) - chunk;
+
+    // The body runs under its OWN pcall: a kill raises from inside
+    // specter.sleep(), and the state has to survive that to be closed
+    // cleanly. This pcall is what returns that message, rather than the outer
+    // one, so "killed" and "crashed" stay distinguishable.
+    p_lua_pushvalue(L, chunk);
+    if (p_lua_pcall(L, nargs, 0, 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 DWORD WINAPI worker_main(LPVOID arg)
 {
     Job* job = static_cast<Job*>(arg);
@@ -306,67 +369,38 @@ DWORD WINAPI worker_main(LPVOID arg)
     Slot& slot = g_slots[job->slot];
     int terminal = kDone;
 
-    lua_State* L = p_lua_newstate(&worker_alloc, nullptr);
+    lua_State* L = p_lua_newstate(&worker_alloc, &job->alloc);
     if (!L) {
         set_error(job, "lua_newstate a rendu NULL");
         terminal = kError;
     } else {
-        p_lua_setallocf(L, &worker_alloc, nullptr);  // explicit, and survives a
-                                                     // future lua_newstate default
-        p_luaL_openlibs(L);
-        open_worker_api(L, job);
-
-        const int base = p_lua_gettop(L);
-        if (p_luaL_loadbuffer(L, job->code, job->len, "=specter-worker") != 0) {
+        // The single point that can raise. Everything else about the worker's
+        // life happens inside this one call.
+        p_lua_pushlightuserdata(L, job);
+        p_lua_pushcclosure(L, &run_all, 1);
+        if (p_lua_pcall(L, 0, 1, 0) != 0) {
             set_error(job, p_lua_tolstring(L, -1, nullptr));
             terminal = kError;
+        } else if (p_lua_type(L, -1) == LUA_TNIL) {
+            terminal = (slot.flag.load(std::memory_order_acquire) == kKillAsked)
+                           ? kKilled
+                           : kDone;
         } else {
-            // Upvalues first (they replace slots on the chunk), then the call
-            // arguments (they are pushed for lua_pcall). apply_meta raises
-            // through lua_error on a bad descriptor, which this pcall catches.
-            const int chunk_idx = p_lua_gettop(L);
-            int nargs = 0;
-            char why[192] = "";
-            if (job->meta && job->meta_len > 0) {
-                if (meta::apply_meta(L, chunk_idx, job->meta, job->meta_len,
-                                     true, why, sizeof(why)) < 0 ||
-                    (nargs = meta::apply_meta(L, chunk_idx, job->meta,
-                                              job->meta_len, false, why,
-                                              sizeof(why))) < 0) {
-                    // On ne leve ICI. apply_meta retourne son echec, parce
-                    // qu'un raise a cet endroit partirait en longjmp sans
-                    // aucun pcall autour -- le worker n'en a pas encore -- et
-                    // un worker qui fait ca emmene le jeu avec lui.
-                    set_error(job, why);
-                    p_lua_settop(L, base);
-                    terminal = kError;
-                }
-            }
-            if (terminal != kError && p_lua_pcall(L, nargs, 0, 0) != 0) {
-                const char* msg = p_lua_tolstring(L, -1, nullptr);
-                set_error(job, msg);
-                // A raise at sleep() is a kill landing, not a failure: say
-                // which, because "killed" and "crashed" are very different to
-                // a reader.
-                terminal =
-                    (slot.flag.load(std::memory_order_acquire) == kKillAsked)
-                        ? kKilled
-                        : kError;
-            } else if (slot.flag.load(std::memory_order_acquire) == kKillAsked) {
-                terminal = kKilled;
-            }
+            // run_all raised, or the body did: either way it is a message.
+            set_error(job, p_lua_tolstring(L, -1, nullptr));
+            terminal = (slot.flag.load(std::memory_order_acquire) == kKillAsked)
+                           ? kKilled
+                           : kError;
         }
-        p_lua_settop(L, base);
-
         p_lua_close(L);
     }
 
-    const std::size_t live = g_alloc_live.load(std::memory_order_relaxed);
-    if (live != 0) {
+    if (job->alloc.live != 0) {
         // lua_close frees everything it knows about. Anything left is LuaJIT
-        // holding a cache, and it is worth naming rather than discovering later.
-        log::info("[worker %d] fermeture : %zu bloc(s) encore vivant(s)",
-                  job->slot, live);
+        // holding a cache -- and now the number is THIS worker's, not the sum
+        // of every worker's, which is what made it meaningless before.
+        log::info("[worker %d] fermeture : %zu bloc(s) / %zu o encore vivant(s)",
+                  job->slot, job->alloc.live, job->alloc.bytes);
     }
 
     // Publish the message before the terminal flag: the reader only looks at

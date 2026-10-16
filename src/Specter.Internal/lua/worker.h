@@ -13,6 +13,20 @@
 // with a SEPARATE lua_State. It can burn three seconds and the game does not
 // know it exists.
 //
+// THE PRICE OF A SECOND LUA UNIVERSE: A WORKER CAN NO LONGER TAKE THE GAME
+// DOWN.
+//
+// Measured twice, the hard way. A worker's code runs on a thread with no
+// protected call around it, so any raise -- in luaL_openlibs, in a debug.* of
+// its own world, in something nobody thought of -- longjmped into nothing,
+// LuaJIT printed PANIC, and the process went with it. Both times the log's last
+// line was a worker saying it had started, and nothing said why.
+//
+// So the whole life of a worker now happens inside ONE pcall: run_all is a C
+// function, and the single call that can raise is the one that invokes it.
+// Everything else returns a message instead. `specter.thread.error(h)` is the
+// oracle; the game staying alive is not in question.
+//
 // WHAT A WORKER CANNOT DO — and this is not negotiable
 //
 // It cannot touch the game. Its _G is a fresh universe: no `require`, no `pg`,
