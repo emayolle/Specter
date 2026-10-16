@@ -249,5 +249,4 @@ if type(specter.tp.stop) == 'function' then
 end
 specter.tp.here(target.x, target.y, target.z)
 
-print(string.format('TP_TO id=%s d=%6.1f (~%.0f u/s)', tostring(target.id),
-                     dist, LERP_STEP * LERP_SPEED))
+print(string.format('TP_TO id=%s d=%6.1f', tostring(target.id), dist))
