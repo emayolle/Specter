@@ -16,6 +16,7 @@
 #include "features/init/init.h"
 #include "features/lua_dump/lua_dump.h"
 #include "features/nofall/nofall.h"
+#include "features/streaming/streaming.h"
 #include "features/teleport/teleport.h"
 #include "features/teleport/teleport_ui.h"
 
@@ -60,6 +61,13 @@ const Feature kAutofarm{
     "autofarm", "Auto-farm", nullptr, &autofarm::draw_ui, nullptr,
 };
 
+// Streaming radius. The detour is installed at startup like teleport's, so
+// this entry DOES have an install -- there is a function to detour, and an
+// install that returns false is the feature honestly reporting "off".
+const Feature kStreaming{
+    "streaming", "Teleport", &streaming::install, &streaming::draw_ui, nullptr,
+};
+
 // Runs scripts/init.lua once per new lua_State. No tab: it is a bootstrap, not
 // something a person interacts with.
 const Feature kInit{
@@ -74,10 +82,9 @@ const Feature kLuaDump{"lua_dump", nullptr, &lua_dump::install, nullptr,
 // The list, in menu order.
 // kInit comes FIRST on purpose: it re-arms the per-session patches, and those
 // want to be in place before anything else runs on a fresh state.
-const Feature* const kFeatures[] = {&kInit,     &kConsole, &kTeleport,
+const Feature* const kFeatures[] = {&kInit,      &kConsole, &kTeleport,
                                     &kWaypoints, &kStamina, &kNoFall,
-                                    &kAutofarm, &kLuaDump};
-
+                                    &kAutofarm,  &kStreaming, &kLuaDump};
 }  // namespace
 
 const Feature* const* registry()

@@ -48,4 +48,32 @@ constexpr std::uintptr_t kCommonUpdateRva = 0x172ADC0;
 // shipped bytecode. It marshals `name` and then calls the xlua.dll export.
 constexpr std::uintptr_t kXluaLoadBufferRva = 0x879010;
 
+// XSRGlobalManager::GetPerfDistance(int perfLevel) -> int
+//
+// Le RAYON DE STREAMING de la carte, en CHUNKS. Trouve par decompile dans
+// generated/input/GameAssembly.dll.i64, base annotee a cette adresse :
+//
+//     if ( perfLevel <= 10 ) return 3;
+//     if ( perfLevel <= 30 ) return 4;
+//     if ( perfLevel <= 50 ) return 5;
+//     result = 6;
+//     if ( perfLevel >  70 ) return 12;
+//     return result;
+//
+// L'argument est le niveau de performance du jeu : un int statique ecrit par
+// XSRGlobalManager::SetPerformanceLevel et clamp dans [0, 100].
+//
+// Le chunk fait 256 u : TeleportCheckNeedLoadByCollider calcule
+// Mathf::FloorToInt(pos.x * 0.00390625), et 0.00390625 == 1/256.
+//
+//   perfLevel 0    -> 3 chunks -> ~768 u
+//   perfLevel 100  -> 12 chunks -> ~3072 u
+//
+// CE QUE C'EST, ET CE QUE CE N'EST PAS : ceci regit le streaming de BLOCS, pas
+// l'apparition des ENTITES. Les entites viennent du serveur. Charger plus de
+// terrain ne garantit donc aucun coffre de plus -- ca coute des FPS, c'est
+// tout. A MESURER, pas a supposer : c'est pourquoi la valeur est une variable
+// et pas une constante.
+constexpr std::uintptr_t kGetPerfDistanceRva = 0x184D5F0;
+
 }  // namespace specter::target

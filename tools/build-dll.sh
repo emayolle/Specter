@@ -187,6 +187,7 @@ for spec in \
   "$SRC/render/input.cpp:render-input" \
   "$SRC/features/console/console.cpp:features-console" \
   "$SRC/features/lua_dump/lua_dump.cpp:features-lua_dump" \
+  "$SRC/features/streaming/streaming.cpp:features-streaming" \
   "$SRC/features/teleport/teleport.cpp:features-teleport" \
   "$SRC/features/teleport/teleport_ui.cpp:features-teleport_ui" \
   "$SRC/features/autofarm/autofarm.cpp:features-autofarm" \
