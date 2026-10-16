@@ -231,8 +231,12 @@ void draw_ui_waypoints()
                         "and /tmp/specter-waypoints.json.");
                 }
                 { render::Panneau panneau("REPERES DU JEU");
+                // AutoResizeY, et non une taille nulle : ce panneau est
+                // lui-meme AutoResizeY, et un enfant de taille (0, 0) y
+                // disparait completement. C'est ce qui a vide la liste — le
+                // titre restait, la liste etait partie.
                 ImGui::BeginChild("##wp_list", ImVec2(0.0f, 0.0f),
-                                  ImGuiChildFlags_None);
+                                  ImGuiChildFlags_AutoResizeY);
                 if (nz == 0) {
                     ImGui::TextColored(render::texte_faible(),
                         "nothing yet - press Refresh once in-world");

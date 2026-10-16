@@ -678,6 +678,10 @@ void build_ui()
         bool affiche_mouvement = false;
 
         // ---------------- colonne de navigation ----------------
+        // VINGT POUITS DE MARGE : le style global a un WindowPadding nul, parce
+        // que la coque dessine son propre bord. Sans ca, les dernieres pages de
+        // la nav touchaient le bas du cadre.
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 14.0f));
         ImGui::BeginChild("nav", ImVec2(l_nav, taille.y),
                           ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoScrollbar |
@@ -767,9 +771,13 @@ void build_ui()
 
         // ---------------- contenu ----------------
         ImGui::SameLine(0.0f, 1.0f);
+        // 22 a gauche, 18 en haut, 22 a droite, 20 en bas. La marge de droite
+        // et celle du bas etaient les deux qui manquaient : tout le contenu
+        // finissait au bord exact du cadre.
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                            ImVec2(22.0f, 18.0f));
         ImGui::BeginChild("page", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
         {
-            ImGui::Dummy(ImVec2(18.0f, 0.0f));
             entete(pages[choisie].label);
 
             if (std::strcmp(pages[choisie].label, "Divers") == 0) {
@@ -806,6 +814,7 @@ void build_ui()
             }
         }
         ImGui::EndChild();
+        ImGui::PopStyleVar();
     }
     ImGui::End();
 
