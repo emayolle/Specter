@@ -32,8 +32,6 @@ constexpr int kMaxFlora = 256;
 // Array crystals. Every scene's mark data is queried from Lua on request;
 // keeping the list short makes the scan effectively instant (a wrong scene id
 // is simply skipped).
-constexpr int kWorldScenes[] = {3000, 3003};
-
 // Waypoints (the "Teleportation Array" crystals) also live in their own file.
 const wchar_t* kWpFile = L"Z:\\tmp\\specter-waypoints.json";
 const wchar_t* kWpFileTmp = L"Z:\\tmp\\specter-waypoints.json.tmp";
@@ -43,8 +41,6 @@ constexpr int kMaxWpName = 64;
 // POIIcon $UI_Icon_POI_Explore_Transmit.png). Unlike the Floraisons these are
 // not a distinct markType: they share markType 0 with other map marks, so the
 // scan filters on the config id instead.
-constexpr int kWpMarkConfig = 10406;
-
 // Lerp tuning bounds (defaults are the fastest values found to hold live:
 // step 5.5 u at 120 steps/s ~= 660 u/s).
 constexpr float kLerpStepDef = 5.5f;
@@ -445,65 +441,25 @@ bool send_setpos(float x, float y, float z)
         static_cast<double>(x), static_cast<double>(y), static_cast<double>(z));
 }
 
-// Builds and queues one scan for both fast-travel lists. It walks the
-// open-world scenes once, printing a "F <zone> <x> <y> <z>" line per Leyline
-// Flower (markType 26) and a "W <zone> <x> <y> <z> <name>" line per
-// Teleportation Array crystal (markConfigId 10406), then "MARKS_DONE".
-// handle_result() parses it. Doing both in one chunk matters: the TP channel
-// keeps a single result buffer, so two queued probes would clobber each other.
-// The scan is bounded to a handful of scenes, so it returns within a frame.
+// Scan the open world for both fast-travel lists, by CALLING the Lua side.
+//
+// The last of the embedded Lua. This one assembled a chunk out of a std::string
+// on every press, injecting the scene ids one at a time with std::to_string --
+// so a list of two integers was paid for with string building, and the list
+// itself was duplicated between a C++ array and the code that used it.
+//
+// Now: a name, no arguments. `specter.tp.marks()` in scripts/init.lua walks
+// the scenes and prints one line per Leyline Flower ("F <zone> <x> <y> <z>")
+// and per Teleportation Array crystal ("W <zone> <x> <y> <z> <name>"), ending
+// with "MARKS_DONE". The sandbox captures print, so handle_result() reads
+// exactly what it read before.
+//
+// Both probes share one result buffer, which is why they were one chunk and
+// stay one call: two queued probes would clobber each other.
 bool send_marks_probe()
 {
-    std::string code;
-    code.reserve(1800);
-    code +=
-        "local SU=require('Common.Utils.SceneUtils')\n"
-        "local CTU=require('Utils.ClientTextUtils')\n"
-        "local e=pg.me\n"
-        "local set={}\n"
-        "local function add(s) if s and s>100 then set[s]=true end end\n"
-        "if e and e.sceneId then add(e.sceneId) end\n"
-        "local m=pg.game and pg.game.map\n"
-        "if m then add(m.sceneId) add(m.mainSceneId) end\n";
-    for (int sid : kWorldScenes) {
-        code += "add(";
-        code += std::to_string(sid);
-        code += ")\n";
-    }
-    code +=
-        "local seen={}\n"
-        "for sid in pairs(set) do\n"
-        "  local ok,pts=pcall(SU.getSceneMarkPointData,sid)\n"
-        "  if ok and type(pts)=='table' then\n"
-        "    for id,p in pairs(pts) do\n"
-        "      if seen[id] then\n"
-        "      elseif p.markType==26 then\n"
-        "        seen[id]=true\n"
-        "        local mp=p.markPosition\n"
-        "        if mp then print(string.format('F %d %.2f %.2f %.2f',"
-        "p.largeAreaId or 0,mp[1],mp[2],mp[3])) end\n"
-        "      elseif p.markConfigId==";
-    code += std::to_string(kWpMarkConfig);
-    code +=
-        " then\n"
-        "        seen[id]=true\n"
-        "        local mp=p.markPosition\n"
-        "        if mp then\n"
-        "          local nm=''\n"
-        "          if p.infoTitle then\n"
-        "            local o,t=pcall(CTU.getLocalizationText,p.infoTitle)\n"
-        "            if o and t then nm=tostring(t) end\n"
-        "          end\n"
-        "          nm=nm:gsub('%s+',' ')\n"
-        "          print(string.format('W %d %.2f %.2f %.2f %s',"
-        "p.largeAreaId or 0,mp[1],mp[2],mp[3],nm))\n"
-        "        end\n"
-        "      end\n"
-        "    end\n"
-        "  end\n"
-        "end\n"
-        "print('MARKS_DONE')\n";
-    return features::console::submit(features::console::kChannelTeleport, code.c_str(), static_cast<int>(code.size()));
+    return features::console::submit_call(
+        features::console::kChannelTeleport, "specter.tp.marks", 0);
 }
 
 }  // namespace

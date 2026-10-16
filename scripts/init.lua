@@ -202,6 +202,67 @@ do
         specter.store.tpMove = nil
         return 'arrete'
     end
+
+    -- ── reperer les floraisons et les teleporteurs ──────────────────────
+    -- Un scan par appui sur le bouton, dans les scenes du monde ouvert.
+    -- Les identifiants de scenes et de marque sont de la CONNAISSANCE DU
+    -- JEU, pas de la logique : ils etaient en constantes C++ et le C++
+    -- les formatait un par un dans le chunk. Ils sont ici, a cote du reste.
+    local SCENES = { 3000, 3003 }
+    local CRYSTAL_MARK_CONFIG = 10406
+    local FLORAL_MARK_TYPE = 26
+
+    -- Chaque ligne imprimee est une entree. Le bac a sable capture le print,
+    -- donc handle_result() lit exactement ce qu'il lisait avant : meme
+    -- protocole, meme parseur. Seul le qui produit les lignes change.
+    specter.tp.marks = function()
+        local SU = require('Common.Utils.SceneUtils')
+        local CTU = require('Utils.ClientTextUtils')
+
+        local set = {}
+        local function add(s)
+            if s and s > 100 then set[s] = true end
+        end
+
+        local e = pg.me
+        if e and e.sceneId then add(e.sceneId) end
+        local m = pg.game and pg.game.map
+        if m then add(m.sceneId); add(m.mainSceneId) end
+        for _, sid in ipairs(SCENES) do add(sid) end
+
+        local seen = {}
+        for sid in pairs(set) do
+            local ok, pts = pcall(SU.getSceneMarkPointData, sid)
+            if ok and type(pts) == 'table' then
+                for id, p in pairs(pts) do
+                    if seen[id] then
+                        -- deja vu
+                    elseif p.markType == FLORAL_MARK_TYPE then
+                        seen[id] = true
+                        local mp = p.markPosition
+                        if mp then
+                            print(string.format('F %d %.2f %.2f %.2f',
+                                                p.largeAreaId or 0, mp[1], mp[2], mp[3]))
+                        end
+                    elseif p.markConfigId == CRYSTAL_MARK_CONFIG then
+                        seen[id] = true
+                        local mp = p.markPosition
+                        if mp then
+                            local nm = ''
+                            if p.infoTitle then
+                                local good, t = pcall(CTU.getLocalizationText, p.infoTitle)
+                                if good and t then nm = tostring(t) end
+                            end
+                            nm = nm:gsub('%s+', ' ')
+                            print(string.format('W %d %.2f %.2f %.2f %s',
+                                                p.largeAreaId or 0, mp[1], mp[2], mp[3], nm))
+                        end
+                    end
+                end
+            end
+        end
+        print('MARKS_DONE')
+    end
 end
 
 print('[init] prêt')
