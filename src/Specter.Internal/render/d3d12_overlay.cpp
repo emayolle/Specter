@@ -641,7 +641,7 @@ void build_ui()
             const char* label;
         };
         static Page pages[16];
-        static int choisie = 0;
+        static int choisie = 0;   // JOUEUR par defaut : c'est la page qu'on utilise le plus
         int npages = 0;
 
         for (int i = 0; i < features::registry_count(); ++i) {

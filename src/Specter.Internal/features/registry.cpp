@@ -83,9 +83,18 @@ const Feature kAniAi{
     "ani_ai", "Monde", nullptr, &aniai::draw_ui, nullptr,
 };
 
-const Feature* const kFeatures[] = {&kInit,      &kConsole, &kTeleport,
-                                    &kWaypoints, &kStamina, &kNoFall,
-                                    &kAutofarm,  &kAniAi,   &kLuaDump};
+// L'ORDRE DANS LE REGISTRE EST L'ORDRE D'AFFICHAGE DANS UNE PAGE.
+//
+// Il n'avait aucune incidence tant que chaque feature avait son propre onglet.
+// Maintenant que « Joueur » regroupe Teleport, Waypoints, stamina et chute,
+// l'ordre du registre EST l'ordre dans lequel on les voit — et les deux cases
+// d'abord, parce que ce sont elles qu'on cherche.
+//
+//   Joueur   chute, stamina, teleport, waypoints
+//   Monde    IA, auto-farm
+const Feature* const kFeatures[] = {
+    &kInit,     &kConsole,   &kNoFall, &kStamina,
+    &kTeleport, &kWaypoints, &kAniAi,  &kAutofarm, &kLuaDump};
 }  // namespace
 
 const Feature* const* registry()
