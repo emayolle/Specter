@@ -306,10 +306,20 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
     // On replace le curseur a la verticale voulue, plutot que de demander un
     // alignement qui suppose un cadre qu'il n'y a pas. `p` est le coin haut
     // gauche de la case ; 11 px, c'est l'espace entre les deux.
+    //
+    // LE MEME PIEGE QU'AVEC LA NAVIGATION, une seconde fois.
+    //
+    // `p` vient de GetItemRectMin(), qui parle ABSOLU ; GetCursorPosY() parle
+    // LOCAL. Les soustraire l'un de l'autre ne donne pas une hauteur : ça donne
+    // la distance du haut de l'ECRAN, c'est-a-dire la position de la fenetre.
+    // Le libelle partait donc 300 px plus bas que la case.
+    //
+    // Pour convertir un point ecran en point local, on retire la position de la
+    // fenetre — c'est la seule soustraction legitime des deux systemes.
     ImGui::SameLine(0.0f, 11.0f);
-    const float haut_case = p.y - ImGui::GetCursorPosY();
+    const float haut_case_local = p.y - ImGui::GetWindowPos().y;
     const float h_texte = ImGui::GetTextLineHeight();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + haut_case + (t.y - h_texte) * 0.5f);
+    ImGui::SetCursorPosY(haut_case_local + (t.y - h_texte) * 0.5f);
 
     if (*valeur) {
         ImGui::TextColored(texte(), "%s", libelle);
