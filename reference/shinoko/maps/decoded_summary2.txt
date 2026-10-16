@@ -1,0 +1,93 @@
+180004EC0	sub_180004EC0	len=122	local pg=require("Pg").local U=require("Common.Utils.Utils").local me=pg.me.local target=m
+180005340	sub_180005340	len=543	.local count=0.for _,e in pairs(pg.global.entityMgr.getAllEntities()) do.    if e and e~=m
+180005A20	sub_180005A20	len=84	local C=require("Const.ClientConst").pg.me:setModelScale(C.MODEL_SCALE_KEY.DEFAULT, 
+180005E90	sub_180005E90	len=1	)
+1800062F0	sub_1800062F0	len=86	local C=require("Const.ClientConst").pg.me:setModelScale(C.MODEL_SCALE_KEY.DEFAULT, 1)
+1800069D0	sub_1800069D0	len=126	local C=require("Const.ClientConst").local p=pg.me:getCurPetEntity().if p then.    p:setMo
+180006E50	sub_180006E50	len=5	).end
+180007540	sub_180007540	len=132	local C=require("Const.ClientConst").local p=pg.me:getCurPetEntity().if p then.    p:setMo
+1800079D0	sub_1800079D0	len=388	local ClientDyingComponent = require("Entities.SpaceEntities.CommonComponent.ClientDyingCo
+180007E40	sub_180007E40	len=337	local ClientDyingComponent = require("Entities.SpaceEntities.CommonComponent.ClientDyingCo
+1800082B0	sub_1800082B0	len=293	do.    local AiConst = package.loaded["Common.Const.AiConst"].    if type(AiConst) ~= "tab
+180008720	sub_180008720	len=292	do.    local AiConst = package.loaded["Common.Const.AiConst"].    if type(AiConst) ~= "tab
+180008B90	sub_180008B90	len=959	.do.    local AbilityConst = require("Common.Const.AbilityConst").    local Const = requir
+180009000	sub_180009000	len=4971	,.            origCheckValidTarget = Utils.checkValidTarget,.            origCalcResult = 
+180009470	sub_180009470	len=216	.    end..    if pg and pg.me then.        pcall(function().            pg.me:doGmCmd("mod
+180009D80	sub_180009D80	len=249	.do.    local CombatActionTool = require("Common.Ability.CombatActionTool").    local Clie
+18000A1F0	sub_18000A1F0	len=21	.    local ENABLED = 
+18000A660	sub_18000A660	len=3435	..    local state = rawget(_G, "__DX12_MULTI_HIT").    if state == nil then.        state 
+18000AAD0	sub_18000AAD0	len=114	.do.    local ActorCombatAttribute = require("Common.Ability.Attribute.ActorCombatAttribut
+18000AF50	sub_18000AF50	len=965	.    local state = rawget(_G, "__INF_STAMINA").    if not state then.        state = {.   
+18000B3C0	sub_18000B3C0	len=114	.do.    local ActorCombatAttribute = require("Common.Ability.Attribute.ActorCombatAttribut
+18000B840	sub_18000B840	len=1108	.    local state = rawget(_G, "__INF_ENERGY").    if not state then.        state = {.    
+18000C160	sub_18000C160	len=3161	.do.    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg").    _G.pg = p
+18000C5D0	sub_18000C5D0	len=24	.    state.petEnabled = 
+18000CA30	sub_18000CA30	len=107	.    print("[No Cooldown] Player:", tostring(state.playerEnabled), "Pet:", tostring(state.
+18000D580	sub_18000D580	len=269	.do.    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg").    _G.pg = p
+18000D9F0	sub_18000D9F0	len=20	.    local RADIUS = 
+18000DE60	sub_18000DE60	len=22	.    local INTERVAL = 
+18000E2D0	sub_18000E2D0	len=3277	..    local state = rawget(_G, "__KILL_AURA").    if not state then.        state = {.    
+18000EE10	sub_18000EE10	len=384	.do.    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg").    _G.pg = p
+18000F280	sub_18000F280	len=20	.    local RADIUS = 
+18000F6F0	sub_18000F6F0	len=22	.    local INTERVAL = 
+18000FB60	sub_18000FB60	len=2833	..    local state = rawget(_G, "__CATCH_AURA").    if not state then.        state = {.   
+1800102A0	sub_1800102A0	len=420	.do.    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg").    _G.pg = p
+180010710	sub_180010710	len=2630	..    local state = rawget(_G, "__ONE_HIT").    if not state then.        state = {.      
+180010E50	sub_180010E50	len=430	.do.    local ok1, PawnController = pcall(require, "GameApp.Controller.PawnController").  
+1800112C0	sub_1800112C0	len=2220	..    local state = rawget(_G, "__UNLIMITED_DASH").    if not state then.        state = {
+180011E10	sub_180011E10	len=314	.do.    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg").    _G.pg = p
+180012280	sub_180012280	len=20	.    local RADIUS = 
+1800126F0	sub_1800126F0	len=22	.    local INTERVAL = 
+180012B60	sub_180012B60	len=3757	.    local RETRY_DELAY = 1.0..    local state = rawget(_G, "__AUTO_LOOT").    if not state
+180014A30	sub_180014A30	len=48	local pg=require("Pg");pg.me:tryTeleportToScene(
+180014EA0	sub_180014EA0	len=10	, 0, true)
+180016E20	sub_180016E20	len=127	.do.    local ok, ClientSwitch = pcall(require, "Common.ClientSwitch").    if ok and Clien
+1800172A0	sub_1800172A0	len=1051	..        local state = rawget(_G, "__RATE_LIMIT_BYPASS").        if not state then.      
+180017A10	sub_180017A10	len=536	.do.    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg").    if pg and
+18001AB40	sub_18001AB40	len=49	require("Utils.GmToolUtils").enableOBCamera(true)
+18001AFB0	sub_18001AFB0	len=50	require("Utils.GmToolUtils").enableOBCamera(false)
+18001B420	sub_18001B420	len=39	pg.global.ui.tips:showBossCatchWarning(
+18001B890	sub_18001B890	len=3	, "
+18001BCF0	sub_18001BCF0	len=4	", "
+18001C150	sub_18001C150	len=2	")
+18001C5B0	sub_18001C5B0	len=40	pg.global.ui.tips:hideBossCatchWarning()
+18001CA20	sub_18001CA20	len=35	pg.global.ui.tips:showCommonInput("
+18001CE90	sub_18001CE90	len=91	", function(text).    print("INPUT:", text).    pg.global.ui.tips:showTextTip(text, 5).end
+18001D300	sub_18001D300	len=31	pg.global.ui.tips:showConfirm("
+18001D760	sub_18001D760	len=4	", "
+18001DBC0	sub_18001DBC0	len=209	",.    function().        print("YES").        pg.global.ui.tips:showTextTip("ENABLED", 3)
+18001E030	sub_18001E030	len=35	pg.global.ui.tips:showMarqueeText("
+18001E4A0	sub_18001E4A0	len=3	", 
+18001E900	sub_18001E900	len=6	, nil)
+18001ED60	sub_18001ED60	len=31	pg.global.ui.tips:showTextTip("
+18001F1C0	sub_18001F1C0	len=3	", 
+18001F620	sub_18001F620	len=1	)
+18001FA80	sub_18001FA80	len=207	local UI=require("Const.UIConst").local E=require("Const.EventConst").pg.me:ensureToplogoC
+18001FEF0	sub_18001FEF0	len=23	",.    false,.    nil.)
+180020360	sub_180020360	len=114	local E=require("Const.EventConst").pg.me.eventEmitter:emit(.    E.TOPLOGO_PLAYER_CHAT_BUB
+1800207E0	sub_1800207E0	len=261	local UI=require("Const.UIConst").local E=require("Const.EventConst").local p=pg.me:getCur
+180020C50	sub_180020C50	len=39	",.        false,.        nil.    ).end
+1800210C0	sub_1800210C0	len=176	local E=require("Const.EventConst").local p=pg.me:getCurPetEntity().if p then.    p.eventE
+180021530	sub_180021530	len=41	pg.game.effect:playEffectAt(.    0,.    "
+1800219A0	sub_1800219A0	len=71	",.    pg.me:getPosition(),.    nil,.    pg.me,.    {.        duration=
+180021E10	sub_180021E10	len=21	,.        extraScale=
+180022280	sub_180022280	len=18	.    },.    true.)
+180026010	sub_180026010	len=103	CS.FunPlus.WorldX.Utils.GmToolUtils.OpenDebugConsole().require("Utils.GmToolUtils").setGUI
+180026720	sub_180026720	len=44	require("Utils.GmToolUtils").openHierarchy()
+180026E20	sub_180026E20	len=44	require("Utils.GmToolUtils").openInspector()
+180027520	sub_180027520	len=42	require("Utils.GmToolUtils").openAIDebug()
+180027C70	sub_180027C70	len=61	require("Utils.GmToolUtils").onAbilityDataInspectChange(true)
+1800280E0	sub_1800280E0	len=62	require("Utils.GmToolUtils").onAbilityDataInspectChange(false)
+180029500	sub_180029500	len=8	@Shinoko
+18002A620	sub_18002A620	len=8	xlua.dll
+18002AA80	sub_18002AA80	len=16	xluaL_loadbuffer
+18002AEE0	sub_18002AEE0	len=10	lua_gettop
+18002B340	sub_18002B340	len=10	lua_settop
+18002B7A0	sub_18002B7A0	len=9	lua_pcall
+18002BC00	sub_18002BC00	len=13	lua_tolstring
+18002C340	sub_18002C340	len=16	GameAssembly.dll
+180030C10	sub_180030C10	len=28	C:\Windows\Fonts\consola.ttf
+180031070	sub_180031070	len=28	C:\Windows\Fonts\consola.ttf
+180033570	sub_180033570	len=6	STATIC
+1800339D0	sub_1800339D0	len=8	DummyWnd
+180033E50	sub_180033E50	len=16	GameAssembly.dll

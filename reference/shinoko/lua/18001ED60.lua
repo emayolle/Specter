@@ -1,0 +1,1 @@
+pg.global.ui.tips:showTextTip("

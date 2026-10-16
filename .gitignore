@@ -5,6 +5,9 @@
 # Binaire de l'outil (~80 Mo, non versionne)
 /tools/Il2CppInspector
 
+# --- Reference : binaires lourds non versionnes (texte versionne) ---
+/reference/*/binary/
+
 # Divers
 *.raw
 /specter.log

@@ -1,0 +1,63 @@
+180012FD0	bool	God Mode##chk_god_mode	byte_1800FABEA	1800FABEA
+180012FD0	bool	One Hit Kill##chk_one_hit	byte_1800FAC14	1800FAC14
+180012FD0	bool	Kill Aura##chk_kill_aura	byte_1800FABF2	1800FABF2
+180012FD0	float	Radius##val_kill_aura_rad	dword_1800FABF4	1800FABF4
+180012FD0	float	Interval##val_kill_aura_int	dword_1800FABF8	1800FABF8
+180012FD0	bool	Catch Aura##chk_catch_aura	byte_1800FABFC	1800FABFC
+180012FD0	float	Radius##val_catch_aura_rad	dword_1800FAC00	1800FAC00
+180012FD0	float	Interval##val_catch_aura_int	dword_1800FAC04	1800FAC04
+180012FD0	bool	Auto Loot##chk_auto_loot	byte_1800FAC08	1800FAC08
+180012FD0	float	Radius##val_auto_loot_rad	dword_1800FAC0C	1800FAC0C
+180012FD0	float	Interval##val_auto_loot_int	dword_1800FAC10	1800FAC10
+180012FD0	bool	Unlimited Dash##chk_unlim_dash	byte_1800FAC15	1800FAC15
+180012FD0	bool	Multi-Hit##chk_multi_hit	byte_1800FABEB	1800FABEB
+180012FD0	int	Hit Multiplier##val_multi_hit	dword_1800FABEC	1800FABEC
+180012FD0	bool	No Fall Damage##chk_nofall	byte_1800FABE8	1800FABE8
+180012FD0	bool	No Cooldown##chk_nocd_full	byte_1800FAC17	1800FAC17
+180012FD0	bool	Player No Cooldown##chk_nocd_player	byte_1800FAC18	1800FAC18
+180012FD0	bool	Pet No CD##chk_nocd_pet	byte_1800FAC19	1800FAC19
+180012FD0	bool	Infinite Stamina##chk_inf_stamina	byte_1800FABF0	1800FABF0
+180012FD0	bool	Infinite Energy (EP + SP)##chk_inf_energy	byte_1800FABF1	1800FABF1
+180012FD0	bool	Dumb Enemy##chk_dumb_enemy	byte_1800FABE9	1800FABE9
+180012FD0	bool	Mob Vacuum##chk_mob_vacuum	byte_1800FABDC	1800FABDC
+180012FD0	float	Distance in front##val_vacuum_dist	dword_1800FABE0	1800FABE0
+180012FD0	bool	Continuous Auto Vacuum##chk_auto_vacuum	byte_1800FABDD	1800FABDD
+180012FD0	int	%d	dword_1800FABE4	1800FABE4
+180017E80	bool	Packet Rate Limit Bypass##chk_rate_limit	byte_1800FAC16	1800FAC16
+180017E80	bool	Global Speed Multiplier##gspd_enable	byte_1800FABBD	1800FABBD
+180017E80	float	Speed Multiplier##gspd_mult	dword_1800FABC0	1800FABC0
+180017E80	bool	Camera FOV Override##fov_enable	byte_1800FABC4	1800FABC4
+180017E80	float	FOV Angle##fov_value	dword_1800FABC8	1800FABC8
+180017E80	bool	Free Camera##chk_freecam	byte_1800FAC34	1800FAC34
+180017E80	bool	Player Model Scale##chk_char_scale	byte_1800FABCC	1800FABCC
+180017E80	float	Scale Factor##val_char_scale	dword_1800FABD0	1800FABD0
+180017E80	bool	Aniimo Model Scale##chk_aniimo_scale	byte_1800FABD4	1800FABD4
+180017E80	float	Aniimo Scale Factor##val_aniimo_scale	dword_1800FABD8	1800FABD8
+180017E80	bool	Enable Warning Spawner##chk_warning	byte_18010C509	18010C509
+180017E80	int	Duration (sec)##warn_dur	dword_1800FB550	1800FB550
+180017E80	bool	Enable Input Window##chk_input	byte_18010C50C	18010C50C
+180017E80	bool	Enable Confirm Window##chk_confirm	byte_18010C508	18010C508
+180017E80	bool	Enable Marquee##chk_marquee	byte_18010C50A	18010C50A
+180017E80	int	Duration (sec)##mrq_dur	dword_1800FAC48	1800FAC48
+180017E80	bool	Enable Message Tip##chk_msg	byte_18010C50B	18010C50B
+180017E80	int	Duration (sec)##msg_dur	dword_1800FAC4C	1800FAC4C
+180017E80	bool	Enable Bubble##chk_bubble	byte_18010C48F	18010C48F
+180017E80	bool	Enable Aniimo Bubble##chk_bubble_aniimo	byte_18010C50D	18010C50D
+180017E80	bool	Enable Effect Spawner##chk_effect	byte_18010C50E	18010C50E
+180017E80	int	Duration (sec)##eff_dur	dword_1800FB554	1800FB554
+180017E80	float	Scale##eff_scale	dword_1800FAC44	1800FAC44
+180024E80	bool	Enable ESP##esp_enable	byte_1800FAB38	1800FAB38
+180024E80	bool	  Players##esp_players	byte_1800FAB39	1800FAB39
+180024E80	bool	  NPC##esp_npc	byte_1800FAB3A	1800FAB3A
+180024E80	bool	  Pets##esp_pets	byte_1800FAB3B	1800FAB3B
+180024E80	bool	  Loot##esp_loot	byte_1800FAB3C	1800FAB3C
+180024E80	bool	  All Objects##esp_allobjs	byte_1800FAB3D	1800FAB3D
+180024E80	bool	  Box##esp_box	byte_1800FAB3E	1800FAB3E
+180024E80	bool	  Lines##esp_lines	byte_1800FAB41	1800FAB41
+180024E80	bool	  Name##esp_name	byte_1800FAB3F	1800FAB3F
+180024E80	bool	  Distance##esp_dist	byte_1800FAB40	1800FAB40
+180024E80	bool	Custom Line Color##chk_col_lines	byte_1800FAB98	1800FAB98
+180024E80	bool	Custom Box Color##chk_col_box	byte_1800FABBC	1800FABBC
+180024E80	float	Max Distance##esp_maxdist	dword_1800FAB44	1800FAB44
+180028550	bool	Ability Data Inspect##chk_gm_ability	v49	FFFFFFFFFFFFFFFF
+18002CB40	bool	Auto-scroll##lua_autoscroll	byte_1800FAB20	1800FAB20

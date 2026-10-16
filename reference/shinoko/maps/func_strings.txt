@@ -1,0 +1,829 @@
+FUNC 180001510 StartAddress
+    1800C8428  'GameAssembly.dll'
+    1800C8440  '--- DLL Injected: MainThread started ---'
+    1800C8470  'GameAssembly.dll detected at 0x%p'
+    1800C8498  'Calling SetupGameHooks()...'
+    1800C84B8  '[ERROR] SetupGameHooks() returned false!'
+    1800C84E8  'SetupGameHooks() succeeded.'
+    1800C8508  'Calling SetupRenderHooks()...'
+    1800C8528  'SetupRenderHooks() completed.'
+    1800C8548  'Unloading DLL: TeardownAllHooks()...'
+    1800C8570  'DLL unloaded cleanly.'
+    1800D3E10  '[HOOK] Found GameManager::CommonUpdate at 0x%p. Attaching Detour...'
+    1800D3E58  '[ERROR] DetourAttach failed for GameManager::CommonUpdate: %ld'
+    1800D3EE0  '[ERROR] DetourTransactionCommit failed for GameManager::CommonUpdate: %ld'
+    1800D3F78  '[HOOK] GameManager::CommonUpdate hooked at 0x%p'
+    1800D3FF0  '[LUA] LuaExecutor::Start called'
+    1800D97A8  'Forgot to shutdown Platform backend?'
+    1800D97D0  'Forgot to shutdown Renderer backend?'
+FUNC 180002920 sub_180002920
+    1800C8588  '=== DllMain: DLL_PROCESS_ATTACH ==='
+FUNC 180002B00 sub_180002B00
+    1800C8690  'bad array new length'
+FUNC 180002BD0 ?_Xlen@?$vector@PEAXV?$allocator@PEAX@std@@@std@@IEBAXXZ
+    1800C86A8  'string too long'
+FUNC 180002BF0 sub_180002BF0
+    1800C85B0  '00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899Unknown exception'
+FUNC 180003370 sub_180003370
+    1800D4D88  'Calling PopItemWidth() too many times!'
+FUNC 180003720 sub_180003720
+    1800D9AB8  'Calling PopTextWrapPos() too many times!'
+FUNC 1800048E0 sub_1800048E0
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 1800072B0 sub_1800072B0
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 1800098E0 sub_1800098E0
+    1800C86D8  'false'
+FUNC 18000BCB0 sub_18000BCB0
+    1800C86D8  'false'
+FUNC 18000CEA0 sub_18000CEA0
+    1800C86D8  'false'
+FUNC 18000E740 sub_18000E740
+    1800C86D8  'false'
+FUNC 18000F280 sub_18000F280
+    1800E3C40  'k\x1bU@C$'
+FUNC 18000FFD0 sub_18000FFD0
+    1800C86D8  'false'
+FUNC 180010B80 sub_180010B80
+    1800C86D8  'false'
+FUNC 180011730 sub_180011730
+    1800C86D8  'false'
+FUNC 180012280 sub_180012280
+    1800D1A20  '$BK`U_wO'
+FUNC 180012FD0 _write_nolock
+    1800C86D8  'false'
+    1800C86E0  'God Mode'
+    1800C86F0  'Full invincibility: blocks combat damage, fall damage, rob egg damage, and enemy targeting.'
+    1800C8750  'God Mode##chk_god_mode'
+    1800C8768  'One Hit Kill'
+    1800C8778  'Instantly eliminates enemies upon weapon attack.'
+    1800C87B0  'One Hit Kill##chk_one_hit'
+    1800C87D0  'Kill Aura'
+    1800C87E0  'Kill all enemy monsters in range.'
+    1800C8808  'Kill Aura##chk_kill_aura'
+    1800C8828  'Distance around player to target monsters.'
+    1800C8854  '%.1f m'
+    1800C8860  'Radius##val_kill_aura_rad'
+    1800C8880  'Timer tick interval in seconds.'
+    1800C88A0  '%.2f s'
+    1800C88A8  'Interval##val_kill_aura_int'
+    1800C88C8  'Catch Aura'
+    1800C88E0  'Periodically detects and quick-captures catchable wild puppets in range.'
+    1800C8930  'Catch Aura##chk_catch_aura'
+    1800C8950  'Distance around player to detect wild puppets.'
+    1800C8980  'Radius##val_catch_aura_rad'
+    1800C89A0  'Interval##val_catch_aura_int'
+    1800C89C0  'Auto Loot'
+    1800C89D0  'Automatically interacts with dropped items, chests, and resource boxes in range.'
+    1800C8A28  'Auto Loot##chk_auto_loot'
+    1800C8A48  'Distance around player to interact with loot and chests.'
+    1800C8A88  'Radius##val_auto_loot_rad'
+    1800C8AA8  'Interaction check timer interval in seconds.'
+    1800C8AD8  'Interval##val_auto_loot_int'
+    1800C8AF8  'Unlimited Dash'
+    1800C8B08  'Removes dash limit, resets dash count and cooldown on press.'
+    1800C8B48  'Unlimited Dash##chk_unlim_dash'
+    1800C8B68  'Multi-Hit'
+    1800C8B78  'Multiplies weapon attacks and projectile hits.'
+    1800C8BA8  'Multi-Hit##chk_multi_hit'
+    1800C8BC8  'Number of times to replicate attack/projectile hits.'
+    1800C8C08  'Hit Multiplier##val_multi_hit'
+    1800C8C28  'No Fall Damage'
+    1800C8C38  'Blocks all fall damage when hitting the ground.'
+    1800C8C68  'No Fall Damage##chk_nofall'
+    1800C8C88  'No Cooldown'
+    1800C8CA0  'Removes all skill cooldowns for both the player character and pet abilities.'
+    1800C8CF0  'No Cooldown##chk_nocd_full'
+    1800C8D10  'Removes cooldowns for player weapon and character skills.'
+    1800C8D50  'Player No Cooldown##chk_nocd_player'
+    1800C8D78  'Removes cooldowns for pet support abilities.'
+    1800C8DA8  'Pet No CD##chk_nocd_pet'
+    1800C8DC0  'Infinite Stamina'
+    1800C8DE0  'Blocks all stamina consumption for local player and pet while running, climbing, dodging.'
+    1800C8E40  'Infinite Stamina##chk_inf_stamina'
+    1800C8E68  'Infinite Energy'
+    1800C8E80  'Locks Energy Points and Special / Ultimate Points to maximum capacity.'
+    1800C8EC8  'Infinite Energy (EP + SP)##chk_inf_energy'
+    1800C8EF8  'Dumb Enemy'
+    1800C8F08  'Disables AI global tick so enemies stop attacking and moving.'
+    1800C8F48  'Dumb Enemy##chk_dumb_enemy'
+    1800C8F68  'Mob Vacuum'
+    1800C8F78  'Pulls wild enemies in front of you.'
+    1800C8FA0  'Mob Vacuum##chk_mob_vacuum'
+    1800C8FC0  'Distance ahead of player to pull enemies.'
+    1800C8FF0  'Distance in front##val_vacuum_dist'
+    1800C9018  'Continuously pulls enemies in front as you move.'
+    1800C9050  'Continuous Auto Vacuum##chk_auto_vacuum'
+    1800C9078  'Pull Mobs Now##btn_vacuum_pull'
+    1800C9098  'Scene Teleport'
+    1800C90A8  'Scene ID:'
+    1800C90C8  'Teleport to Scene ID##tp_scene_btn'
+FUNC 1800164D0 ?_Xlen@?$vector@PEAXV?$allocator@PEAX@std@@@std@@IEBAXXZ_0
+    1800C90F8  'vector too long'
+FUNC 180016B50 sub_180016B50
+    1800C86D8  'false'
+FUNC 180017710 sub_180017710
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180017E80 sub_180017E80
+    1800C86D8  'false'
+    1800D1A60  'Packet Rate Limit Bypass'
+    1800D1A80  'Disables RateLimit.'
+    1800D1A98  'Packet Rate Limit Bypass##chk_rate_limit'
+    1800D1AC8  'Global Speed Multiplier'
+    1800D1AE0  'Multiply world and player simulation speed.'
+    1800D1B10  'Global Speed Multiplier##gspd_enable'
+    1800D1B38  'Game speed scale factor'
+    1800D1B50  '%.2fx'
+    1800D1B58  'Speed Multiplier##gspd_mult'
+    1800D1B78  '  Time scale: %.3f'
+    1800D1B90  'Camera FOV Override'
+    1800D1BA8  'Change camera FOV.'
+    1800D1BC0  'Camera FOV Override##fov_enable'
+    1800D1BE0  'Target camera field of view in degrees.'
+    1800D1C10  'FOV Angle##fov_value'
+    1800D1C28  ' Camera FOV: %.2f deg'
+    1800D1C40  'Free Camera'
+    1800D1C50  'Toggle Free Orbit Camera.'
+    1800D1C70  'Free Camera##chk_freecam'
+    1800D1C90  'Player Model Scale'
+    1800D1CA8  'Resizes player model.'
+    1800D1CC0  'Player Model Scale##chk_char_scale'
+    1800D1CE8  'Player model scale multiplier.'
+    1800D1D08  'Scale Factor##val_char_scale'
+    1800D1D28  'Aniimo Model Scale'
+    1800D1D40  'Resizes current Aniimo model.'
+    1800D1D60  'Aniimo Model Scale##chk_aniimo_scale'
+    1800D1D88  'Aniimo model scale multiplier.'
+    1800D1DA8  'Aniimo Scale Factor##val_aniimo_scale'
+    1800D1DD0  'Custom Warning'
+    1800D1DE0  'Enable Warning Spawner##chk_warning'
+    1800D1E04  'Title:'
+    1800D1E0C  'Title'
+    1800D1E18  '##warn_title'
+    1800D1E28  'Subtitle:'
+    1800D1E38  'Subtitle'
+    1800D1E48  '##warn_sub'
+    1800D1E58  'Duration (sec)##warn_dur'
+    1800D1E78  'Spawn##sp_warn'
+    1800D1E88  'Hide##hd_warn'
+    1800D1E98  'Custom Input Window'
+    1800D1EB0  'Enable Input Window##chk_input'
+    1800D1ED0  'Prompt text:'
+    1800D1EE0  'Prompt text'
+    1800D1EF0  '##inp_prompt'
+    1800D1F00  'Spawn##sp_input'
+    1800D1F10  'Custom OK/NO Window'
+    1800D1F28  'Enable Confirm Window##chk_confirm'
+    1800D1F50  'Window Title:'
+    1800D1F60  'Window Title'
+    1800D1F70  '##conf_title'
+    1800D1F80  'Question / Message:'
+    1800D1F98  'Question / Message'
+    1800D1FB0  '##conf_msg'
+    1800D1FC0  'Spawn##sp_confirm'
+    1800D1FD8  'Custom Marquee Msg'
+    1800D1FF0  'Enable Marquee##chk_marquee'
+    1800D2010  'Marquee text:'
+    1800D2020  'Marquee text'
+    1800D2030  '##mrq_text'
+    1800D2040  'Duration (sec)##mrq_dur'
+    1800D2058  'Spawn##sp_marquee'
+    1800D2070  'Custom Msg'
+    1800D2080  'Enable Message Tip##chk_msg'
+    1800D20A0  'Message text:'
+    1800D20B0  'Message text'
+    1800D20C0  '##msg_text'
+    1800D20D0  'Duration (sec)##msg_dur'
+    1800D20E8  'Spawn##sp_msg'
+    1800D20F8  'Custom Bubble Msg'
+    1800D2110  'Enable Bubble##chk_bubble'
+    1800D2130  'Bubble text:'
+    1800D2140  'Bubble text'
+    1800D2150  '##bubble_text'
+    1800D2160  'Spawn##sp_bubble'
+    1800D2178  'Hide##hd_bubble'
+    1800D2188  'Custom Bubble Aniimo Msg'
+    1800D21A8  'Enable Aniimo Bubble##chk_bubble_aniimo'
+    1800D21D0  'Aniimo text:'
+    1800D21E0  'Aniimo text'
+    1800D21F0  '##bubble_aniimo_text'
+    1800D2208  'Spawn##sp_bubble_aniimo'
+    1800D2220  'Hide##hd_bubble_aniimo'
+    1800D2238  'Custom Effect'
+    1800D2248  'Enable Effect Spawner##chk_effect'
+    1800D2270  'Effect Name:'
+    1800D2280  'Effect Name'
+    1800D2290  '##eff_name'
+    1800D22A0  'Duration (sec)##eff_dur'
+    1800D22B8  '%.1fx'
+    1800D22C0  'Scale##eff_scale'
+    1800D22D8  'Spawn##sp_effect'
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+    1800FAE50  'Enter custom text'
+    1800FAF50  'Enter custom text'
+    1800FB050  'Enter custom text'
+    1800FB150  'Enter custom text'
+    1800FB250  'Enter custom text'
+    1800FB350  'Eff_Common_Target_Red'
+    1800FB450  'Enter custom text'
+    1800FB560  'Enter custom text'
+FUNC 18001D760 sub_18001D760
+    1800D2CF0  '"%=I\r'
+FUNC 18001E4A0 sub_18001E4A0
+    1800D2AB0  '&Y"`I'
+FUNC 180023300 sub_180023300
+    1800D3138  'player'
+    1800D3140  'Players'
+    1800D3148  'Players - '
+    1800D315C  'NPC - '
+    1800D3178  'Pets - '
+    1800D3190  'Loot - '
+FUNC 180024610 sub_180024610
+    1800D3198  '%.0fm'
+    1800D98A0  '##Background'
+FUNC 180024E80 sub_180024E80
+    1800D3140  'Players'
+    1800D31A8  'Draw ESP boxes, names, distances and snaplines over entities.'
+    1800D31E8  'Enable ESP##esp_enable'
+    1800D3200  'Filters'
+    1800D3208  'Show other players (marked as Players).'
+    1800D3230  '  Players##esp_players'
+    1800D3248  'Show NPCs (marked as NPC).'
+    1800D3268  '  NPC##esp_npc'
+    1800D3278  'Show pets (marked as Pets).'
+    1800D3298  '  Pets##esp_pets'
+    1800D32B0  'Show loot and items.'
+    1800D32C8  '  Loot##esp_loot'
+    1800D32E0  'Show all other world objects.'
+    1800D3300  '  All Objects##esp_allobjs'
+    1800D3320  'Display'
+    1800D3328  'Draw 2D bounding box.'
+    1800D3340  '  Box##esp_box'
+    1800D3350  'Draw snaplines from bottom of screen to targets.'
+    1800D3388  '  Lines##esp_lines'
+    1800D33A0  'Draw entity name.'
+    1800D33B8  '  Name##esp_name'
+    1800D33D0  'Draw distance in metres.'
+    1800D33F0  '  Distance##esp_dist'
+    1800D3408  'ESP Colors'
+    1800D3418  '##col_players'
+    1800D3428  '##col_npc'
+    1800D3438  'NPC / Monsters'
+    1800D3448  '##col_pets'
+    1800D3458  'Pets / Aniimo'
+    1800D3468  '##col_loot'
+    1800D3478  'Loot / Drops'
+    1800D3488  '##col_text'
+    1800D3498  'Text & Distance'
+    1800D34A8  'Custom Line Color##chk_col_lines'
+    1800D34D0  '##col_lines'
+    1800D34E0  'Custom Box Color##chk_col_box'
+    1800D3500  '##col_box'
+    1800D3510  'Reset Colors to Default##rst_esp_colors'
+    1800D3538  'Hide entities further than this distance.'
+    1800D3564  '%.0f m'
+    1800D3570  'Max Distance##esp_maxdist'
+FUNC 180025AD0 sub_180025AD0
+    1800D3598  'Insert'
+    1800D35A0  'Delete'
+    1800D35B4  'PageUp'
+    1800D35C0  'PageDown'
+    1800D35D0  'Space'
+    1800D35D8  'Enter'
+    1800D35E8  '0x%02X'
+    1800D35F0  'Press...##%s'
+    1800D3600  '%s##%s'
+    1800D3608  'Click to bind, Esc to unbind'
+FUNC 180025D80 sub_180025D80
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180026490 sub_180026490
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180026B90 sub_180026B90
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180027290 sub_180027290
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180027990 sub_180027990
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180028550 sub_180028550
+    1800D3628  'GM Tools'
+    1800D3638  'Debug Console##btn_gm_console'
+    1800D3658  'bind_console'
+    1800D3668  'Hierarchy##btn_gm_hierarchy'
+    1800D3688  'bind_hierarchy'
+    1800D3698  'Inspector##btn_gm_inspector'
+    1800D36B8  'bind_inspector'
+    1800D36C8  'AI Debug##btn_gm_aidebug'
+    1800D36E8  'bind_aidebug'
+    1800D36F8  'Ability Data Inspect##chk_gm_ability'
+    1800D3720  'bind_ability'
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 180029000 sub_180029000
+    1800D38F8  '[Shinoko][%02d:%02d:%02d.%03d] '
+    1800D3920  'C:\\Shinoko\\ShinokoTemplateAniimo\\debug.log'
+    1800D3950  'shinoko_debug.log'
+FUNC 180029960 sub_180029960
+    1800D3B80  '[LUA] RECURSION, bailing\n'
+    1800D3BA0  '[LUA] RECURSION, bailing'
+    1800D3BC0  '[LUA] captured state %p\n'
+    1800D3BE0  '[LUA] captured state %p'
+    1800D3BF8  '[LUA] Captured globalState = 0x%p'
+FUNC 180029AB0 sub_180029AB0
+    1800D3968  '[LUA] execute: no state\n'
+    1800D3988  '[LUA] execute: no state'
+    1800D39E0  '[LUA] execute: no orig\n'
+    1800D39F8  '[LUA] execute: no orig'
+    1800D3A10  '[LUA] execute size=%zu\n'
+    1800D3A28  '[LUA] execute size=%zu'
+    1800D3A40  '[LUA] loadbuffer ret=%d\n'
+    1800D3A60  '[LUA] loadbuffer ret=%d'
+    1800D3A78  '<null>'
+    1800D3A80  '[LUA] loadbuffer error: %s\n'
+    1800D3AA0  '[LUA] loadbuffer error: %s'
+    1800D3AC0  '[SYNTAX ERROR] loadbuffer: %s'
+    1800D3AE0  '[LUA] pcall ret=%d\n'
+    1800D3AF8  '[LUA] pcall ret=%d'
+    1800D3B10  '[LUA] exec error: %s\n'
+    1800D3B28  '[LUA] exec error: %s'
+    1800D3B40  '[LUA ERROR] exec: %s'
+FUNC 18002A1C0 sub_18002A1C0
+    1800D3C20  '[ERROR] GetProcAddress(xluaL_loadbuffer) returned null'
+    1800D3C90  '[HOOK] Found xlua.dll!xluaL_loadbuffer at 0x%p. Attaching Detour...'
+    1800D3CD8  '[ERROR] DetourAttach failed for xluaL_loadbuffer: %ld'
+    1800D3D50  '[ERROR] DetourTransactionCommit failed for xluaL_loadbuffer: %ld'
+    1800D3DD8  '[HOOK] xlua.dll!xluaL_loadbuffer hooked at 0x%p'
+FUNC 18002C070 sub_18002C070
+    1800D3E10  '[HOOK] Found GameManager::CommonUpdate at 0x%p. Attaching Detour...'
+    1800D3E58  '[ERROR] DetourAttach failed for GameManager::CommonUpdate: %ld'
+    1800D3EE0  '[ERROR] DetourTransactionCommit failed for GameManager::CommonUpdate: %ld'
+    1800D3F78  '[HOOK] GameManager::CommonUpdate hooked at 0x%p'
+FUNC 18002C7A0 sub_18002C7A0
+    1800D3FB0  '[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate'
+FUNC 18002CB40 sub_18002CB40
+    1800D4010  'Lua Script Editor'
+    1800D4028  '##luascript_input'
+    1800D4040  'Execute Script##lua_exec'
+    1800D4060  'Copy##lua_copy'
+    1800D4070  'Paste##lua_paste'
+    1800D4088  'Clear Code##lua_clear'
+    1800D40A0  'Copied to clipboard!'
+    1800D40B8  'Executor Logs'
+    1800D40C8  'Clear Logs##clear_logs'
+    1800D40E0  'Copy Logs##copy_logs'
+    1800D4100  'Auto-scroll##lua_autoscroll'
+    1800D4120  'Filter##lua_log_filter'
+    1800D4138  '##lua_log_window'
+    1800D414C  '[HOOK]'
+    1800D4158  '[ERROR]'
+    1800D4160  '[SYNTAX ERROR]'
+    1800D4170  '[LUA ERROR]'
+    1800D417C  '[EXEC]'
+    1800D4184  '[LUA]'
+    1800D4190  '[QUEUE]'
+FUNC 18002DF60 ?_Xlen@?$vector@PEAXV?$allocator@PEAX@std@@@std@@IEBAXXZ_1
+    1800D41A8  'deque<T> too long'
+FUNC 18002DF80 sub_18002DF80
+    1800D4270  'No modules registered.'
+    1800D4298  '##MainChild'
+FUNC 18002E1D0 sub_18002E1D0
+    1800D42A8  'Shinoko-Aniimo'
+FUNC 1800314D0 sub_1800314D0
+    1800D97A0  'Window'
+    1800DA0D8  "While loading '%s'\n"
+    1800DA0F0  'Could not load font file!'
+    1800DA59C  'Table'
+    1800DACC0  'cbuffer vertexBuffer : register(b0)             {              float4x4 ProjectionMatrix;             };            struct VS_INPUT            {              float2 pos : POSITION;              float4 col : COLOR0;              float2 uv  : TEXCOORD0;            };                        struct PS_INPUT            {              float4 pos : SV_POSITION;              float4 col : COLOR0;              float2 uv  : TEXCOORD0;            };                        PS_INPUT main(VS_INPUT input)            {              PS_INPUT output;              output.pos = mul( ProjectionMatrix, float4(input.pos.xy, 0.f, 1.f));              output.col = input.col;              output.uv  = input.uv;              return output;            }'
+    1800DAFA0  'struct PS_INPUT            {            float4 pos : SV_POSITION;            float4 col : COLOR0;            float2 uv  : TEXCOORD0;            };            sampler sampler0;            Texture2D texture0;                        float4 main(PS_INPUT input) : SV_Target            {            float4 out_col = input.col * texture0.Sample(sampler0, input.uv);             return out_col;             }'
+    1800DB134  'vs_4_0'
+    1800DB148  'POSITION'
+    1800DB158  'TEXCOORD'
+    1800DB164  'COLOR'
+    1800DB16C  'ps_4_0'
+    1800DB178  'imgui_impl_dx11'
+FUNC 180035570 sub_180035570
+    1800D95C0  'imgui.ini'
+    1800D95D0  'imgui_log.txt'
+FUNC 180035B70 sub_180035B70
+    1800D95E0  '[io] Super+Left Click aliased into Right Click\n'
+FUNC 180035F70 sub_180035F70
+    1800D9610  '(null)'
+FUNC 180036F60 sub_180036F60
+    1800D9618  'Calling PopStyleColor() too many times!'
+FUNC 180036FE0 sub_180036FE0
+    1800D9640  'Calling PushStyleVar() variant with wrong type!'
+FUNC 180037070 sub_180037070
+    1800D9640  'Calling PushStyleVar() variant with wrong type!'
+FUNC 180037110 sub_180037110
+    1800D9640  'Calling PushStyleVar() variant with wrong type!'
+FUNC 1800371B0 sub_1800371B0
+    1800D9670  'Calling PopStyleVar() too many times!'
+FUNC 180037440 sub_180037440
+    1800D5318  '%*s%.*s'
+FUNC 180037980 sub_180037980
+    1800D5318  '%*s%.*s'
+FUNC 180037DE0 sub_180037DE0
+    1800D5318  '%*s%.*s'
+FUNC 180039FD0 sub_180039FD0
+    1800D9800  'SetActiveID() cancel MovingWindow\n'
+    1800D9830  'SetActiveID() old:0x%08X (window "%s") -> new:0x%08X (window "%s")\n'
+FUNC 18003A270 sub_18003A270
+    1800D9878  'Invalid flags for IsItemHovered()!'
+FUNC 18003AA50 sub_18003AA50
+    1800D98B0  '##Foreground'
+FUNC 18003B710 sub_18003B710
+    1800D5418  'HoveredId: 0x%08X'
+    1800D5430  'Press ESC to abort picking.'
+    1800D5454  'Right'
+    1800D545C  'Middle'
+    1800D5470  'Remap w/ Ctrl+Shift: click anywhere to select new mouse button.'
+    1800D54B0  'Click %s Button to break in debugger! (remap w/ Ctrl+Shift)'
+    1800D98C0  "NewFrame(): ClearActiveID() because it isn't marked alive anymore!\n"
+    1800D9910  '(Debug Log: Auto-disabled some ImGuiDebugLogFlags after 2 frames)\n'
+    1800D9958  'Debug##Default'
+FUNC 18003D360 sub_18003D360
+    1800D4910  'Missing EndTable()'
+    1800D4928  'Missing EndChild()'
+    1800D4940  'Missing End()'
+    1800D4B10  'Programmer error: %d visible items with conflicting ID!'
+    1800D4B50  'Code should use PushID()/PopID() in loops, or append "##xx" to same-label identifiers!'
+    1800D4BB0  'Empty label e.g. Button("") == same ID as parent widget/node. Use Button("##xx") instead!'
+    1800D4C10  'Set io.ConfigDebugHighlightIdConflicts=false to disable this warning in non-programmers builds.'
+    1800D4C70  '(Hold CTRL to: use '
+    1800D4C88  'Item Picker'
+    1800D4C98  ' to break in item call-stack, or '
+    1800D4CC0  '(Hold CTRL to '
+    1800D4CD0  'Open FAQ->About ID Stack System'
+    1800D4CF0  'https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#qa-usage'
+    1800D4D38  '(Hold CTRL to:'
+    1800D4D48  'Enable Asserts'
+    1800D9968  'Forgot to call ImGui::NewFrame()?'
+    1800D9990  '[io] Calling Platform_SetImeDataFn(): WantVisible: %d, InputPos (%.2f,%.2f)\n'
+    1800D9B10  'Calling PopFont() too many times!'
+FUNC 18003D9E0 sub_18003D9E0
+    1800D98A0  '##Background'
+    1800DA220  '[font] Texture #%03d: create %dx%d\n'
+    1800DA250  '[font] Texture #%03d: destroy %dx%d, texid=0x%I64X, backend_data=%p\n'
+    1800DA2A0  '[font] Texture #%03d: update %d regions, texid=0x%I64X, backend_data=0x%I64X\n'
+FUNC 18003E470 sub_18003E470
+    1800D99E8  '%s/%s_%08X'
+    1800D99F8  '%s/%08X'
+FUNC 18003F5A0 sub_18003F5A0
+    1800D9A08  '#RESIZE'
+    1800D9B38  'Calling PopID() too many times!'
+FUNC 180040700 sub_180040700
+    1800D97F8  '#MOVE'
+    1800D9A10  '#COLLAPSE'
+FUNC 180044DF0 sub_180044DF0
+    1800D4860  'Code uses SetCursorPos()/SetCursorScreenPos() to extend window/parent boundaries.\nPlease submit an item e.g. Dummy() afterwards in order to grow window/parent boundaries.'
+    1800D9A20  'Calling End() too many times!'
+    1800D9A40  'Must call EndChild() and not End()!'
+    1800D9AE8  'Calling PopFocusScope() too many times!'
+FUNC 180045340 sub_180045340
+    1800D9A68  'Calling PopItemFlag() too many times!'
+FUNC 1800453E0 sub_1800453E0
+    1800D9A90  'Calling EndDisabled() too many times!'
+FUNC 1800455F0 sub_1800455F0
+    1800D9AE8  'Calling PopFocusScope() too many times!'
+FUNC 180045A90 sub_180045A90
+    1800D9F30  'Backend does not support ImGuiBackendFlags_RendererHasTextures, and font atlas is not built! Update backend OR make sure you called ImGui_ImplXXXX_NewFrame() function for renderer backend, which should call io.Fonts->GetTexDataAsRGBA32() / GetTexDataAsAlpha8().'
+    1800DA040  "Called ImFontAtlas::Build() before ImGuiBackendFlags_RendererHasTextures got set! With new backends: you don't need to call Build()."
+FUNC 180046580 sub_180046580
+    1800D9B10  'Calling PopFont() too many times!'
+FUNC 1800468E0 sub_1800468E0
+    1800D4288  '##MainListbox'
+FUNC 180046950 sub_180046950
+    1800D9698  'Unknown'
+FUNC 1800469D0 sub_1800469D0
+    1800D45A4  'Super+'
+    1800D45B4  'Shift+'
+    1800D45BC  'Ctrl+'
+    1800D45C8  '%s%s%s%s%s'
+FUNC 180047AB0 sub_180047AB0
+    1800D4700  '[io] LockWheelingWindow() "%s"\n'
+FUNC 1800481D0 sub_1800481D0
+    1800D4720  'Mouse'
+    1800D4728  'TouchScreen'
+    1800D4738  '[io] %s: MousePos (-FLT_MAX, -FLT_MAX)\n'
+    1800D4760  '[io] %s: MousePos (%.1f, %.1f) (%s)\n'
+    1800D4798  '[io] %s: MouseButton %d %s (%s)\n'
+    1800D47C0  '[io] %s: MouseWheel (%.3f, %.3f) (%s)\n'
+    1800D47E8  '[io] %s: Key "%s" %s\n'
+    1800D4800  '[io] %s: Text: %c (U+%08X)\n'
+    1800D4820  '[io] %s: AppFocused %d\n'
+    1800D9698  'Unknown'
+FUNC 180048440 sub_180048440
+    1800D4838  'Processed'
+    1800D4848  'Remaining'
+FUNC 180048D00 sub_180048D00
+    1800D45E0  'SetShortcutRouting(%s, flags=%04X, owner_id=0x%08X) -> always, no register\n'
+    1800D4630  'SetShortcutRouting(%s, flags=%04X, owner_id=0x%08X) -> filtered as potential char input\n'
+    1800D4690  'SetShortcutRouting(%s, flags=%04X, owner_id=0x%08X) -> score %d\n'
+    1800D46D8  '--> granting current route\n'
+FUNC 1800493D0 sub_1800493D0
+    1800D4910  'Missing EndTable()'
+    1800D4950  'Missing EndTabBar()'
+    1800D4968  'Missing EndMultiSelect()'
+    1800D4988  'Missing EndMenuBar()'
+    1800D49A0  'Missing TreePop()'
+    1800D49B8  'Missing EndGroup()'
+    1800D49D0  'Missing PopID()'
+    1800D49E0  'Missing EndDisabled()'
+    1800D49F8  'Missing PopStyleColor()'
+    1800D4A10  'Missing PopItemFlag()'
+    1800D4A28  'Missing PopStyleVar()'
+    1800D4A40  'Missing PopFont()'
+    1800D4A58  'Missing PopFocusScope()'
+    1800D9618  'Calling PopStyleColor() too many times!'
+    1800D9A68  'Calling PopItemFlag() too many times!'
+    1800D9A90  'Calling EndDisabled() too many times!'
+    1800D9AE8  'Calling PopFocusScope() too many times!'
+    1800D9B10  'Calling PopFont() too many times!'
+    1800D9B38  'Calling PopID() too many times!'
+    1800DAAF0  'Mismatched BeginTabBar()/EndTabBar()!'
+FUNC 180049A30 sub_180049A30
+    1800D4A70  '[imgui-error] (current settings: Assert=%d, Log=%d, Tooltip=%d)\n'
+    1800D4AB8  "[imgui-error] In window '%s': %s\n"
+    1800D4AE0  "In window '%s': %s"
+    1800D4AF8  '(and more errors)'
+    1800D4D60  '##Tooltip_Error'
+    1800D4D70  'MESSAGE FROM DEAR IMGUI'
+FUNC 180049DB0 sub_180049DB0
+    1800D4D60  '##Tooltip_Error'
+    1800D4D70  'MESSAGE FROM DEAR IMGUI'
+FUNC 18004ADF0 sub_18004ADF0
+    1800D4D88  'Calling PopItemWidth() too many times!'
+FUNC 18004B190 sub_18004B190
+    1800D4860  'Code uses SetCursorPos()/SetCursorScreenPos() to extend window/parent boundaries.\nPlease submit an item e.g. Dummy() afterwards in order to grow window/parent boundaries.'
+FUNC 18004BB50 sub_18004BB50
+    1800D4DB0  '##Tooltip_DragDrop_%02d'
+    1800D4DC8  '##Tooltip_%02d'
+FUNC 18004BE60 sub_18004BE60
+    1800D4DD8  '[popup] OpenPopup("%s" -> 0x%08X)\n'
+FUNC 18004BEE0 sub_18004BEE0
+    1800D4E00  '[popup] OpenPopupEx(0x%08X)\n'
+FUNC 18004C3E0 sub_18004C3E0
+    1800D4E20  '<NULL>'
+    1800D4E28  '[popup] ClosePopupsOverWindow("%s")\n'
+FUNC 18004C4C0 sub_18004C4C0
+    1800D4E50  '[popup] ClosePopupToLevel(%d), restore_under=%d\n'
+    1800D4E88  '[popup] - Closing PopupID 0x%08X Window "%s"\n'
+FUNC 18004C6E0 sub_18004C6E0
+    1800D4EE0  '##Popup_%08x'
+FUNC 18004C770 sub_18004C770
+    1800D4EF0  'Calling EndPopup() too many times or in wrong window!'
+FUNC 18004C810 sub_18004C810
+    1800DA738  'context'
+FUNC 18004D450 sub_18004D450
+    1800D4E20  '<NULL>'
+    1800D4E28  '[popup] ClosePopupsOverWindow("%s")\n'
+    1800D4F30  '[focus] FocusWindow("%s", UnlessBelowModal): prevented by "%s".\n'
+FUNC 18004D9C0 sub_18004D9C0
+    1800D4E20  '<NULL>'
+    1800D4F78  '[focus] SetNavWindow("%s")\n'
+FUNC 18004E250 sub_18004E250
+    1800D4F98  '[focus] NavRestoreLayer: from "%s" to SetNavWindow("%s")\n'
+FUNC 18004E340 sub_18004E340
+    1800D4FE0  '[nav] NavInitRequest: from NavInitWindow(), init_for_nav=%d, window="%s", layer=%d\n'
+FUNC 18004E8F0 sub_18004E8F0
+    1800D5040  '[nav] NavInitRequest: ApplyResult: NavID 0x%08X in Layer %d Window "%s"\n'
+FUNC 18004F320 sub_18004F320
+    1800D4E20  '<NULL>'
+    1800D5090  '[nav] NavMoveRequestForward %d\n'
+    1800D50B0  '[nav] NavInitRequest: from move, window "%s", layer=%d\n'
+    1800D50E8  '[nav] NavMoveRequest: clamp NavRectRel for gamepad move\n'
+FUNC 18004FA90 sub_18004FA90
+    1800D5128  '[nav] NavMoveSubmitted but not led to a result!\n'
+    1800D5160  '[focus] NavMoveRequest: SetNavWindow("%s")\n'
+    1800D5190  '[nav] NavMoveRequest: result NavID 0x%08X in Layer %d Window "%s"\n'
+FUNC 18004FED0 sub_18004FED0
+    1800D51D8  '[nav] NavUpdateCancelRequest()\n'
+FUNC 1800513E0 sub_1800513E0
+    1800D5218  '##MainMenuBar'
+    1800D5230  '##NavWindowingOverlay'
+    1800D95B0  '*Missing Text*'
+FUNC 1800516C0 sub_1800516C0
+    1800D5248  '[dragdrop] ClearDragDrop()\n'
+FUNC 180051A10 sub_180051A10
+    1800D5318  '%*s%.*s'
+FUNC 180052510 sub_180052510
+    1800D5328  'Pos=%i,%i'
+    1800D5338  'Size=%i,%i'
+    1800D5348  'Collapsed=%d'
+    1800D5358  'IsChild=%d'
+FUNC 180052700 sub_180052700
+    1800D5368  '[%s][%s]\n'
+    1800D5378  'IsChild=1\n'
+    1800D5388  'Size=%d,%d\n'
+    1800D5398  'Pos=%d,%d\n'
+    1800D53A8  'Collapsed=1\n'
+FUNC 180052F00 sub_180052F00
+    1800D53F8  '[%s] [%05d] '
+    1800D5408  '[%05d] '
+FUNC 180053310 sub_180053310
+    1800D54F8  '(void*)0x%p'
+    1800D5508  '0x%08X [override]'
+FUNC 18005E5F0 sub_18005E5F0
+    1800DA0C8  'ProggyClean.ttf'
+FUNC 18005EA50 sub_18005EA50
+    1800DA0C8  'ProggyClean.ttf'
+FUNC 18005F180 sub_18005F180
+    1800D86C0  '..-         -XXXXXXX-    X    -           X           -XXXXXXX          -          XXXXXXX-     XX          - XX       XX ..-         -X.....X-   X.X   -          X.X          -X.....X          -          X.....X-    X..X         -X..X     X..X---         -XXX.XXX-  X...X  -         X...X         -X....X           -           X....X-    X..X         -X...X   X...XX           -  X.X  - X.....X -        X.....X        -X...X            -            X...X-    X..X         - X...X X...X XX          -  X.X  -X.......X-       X.......X       -X..X.X           -           X.X..X-    X..X         -  X...X...X  X.X         -  X.X  -XXXX.XXXX-       XXXX.XXXX       -X.X X.X          -          X.X X.X-    X..XXX       -   X.....X   X..X        -  X.X  -   X.X   -          X.X          -XX   X.X         -         X.X   XX-    X..X..XXX    -    X...X    X...X       -  X.X  -   X.X   -    XX    X.X    XX    -      X.X        -        X.X      -    X..X..X..XX  -     X.X     X....X      -  X.X  -   X.X   -   X.X    X.X    X.X   -       X.X       -       X.X       -    X..X..X..X.X -    X...X    X.....X     -  X.X  -   X.X   -  X..X    X.X    X..X  -        X.X      -      X.X        -XXX X..X..X..X..X-   X.....X   X......X    -  X.X  -   X.X   - X...XXXXXX.XXXXXX...X -         X.X   XX-XX   X.X         -X..XX........X..X-  X...X...X  X.......X   -  X.X  -   X.X   -X.....................X-          X.X X.X-X.X X.X          -X...X...........X- X...X X...X X........X  -  X.X  -   X.X   - X...XXXXXX.XXXXXX...X -           X.X..X-X..X.X           - X..............X-X...X   X...XX.........X -XXX.XXX-   X.X   -  X..X    X.X    X..X  -            X...X-X...X            -  X.............X-X..X     X..XX..........X-X.....X-   X.X   -   X.X    X.X    X.X   -           X....X-X....X           -  X.............X- XX       XX X......XXXXX-XXXXXXX-   X.X   -    XX    X.X    XX    -          X.....X-X.....X          -   X............X--------------X...X..X    ---------   X.X   -          X.X          -          XXXXXXX-XXXXXXX          -   X...........X -             X..X X..X   -       -XXXX.XXXX-       XXXX.XXXX       -------------------------------------    X..........X -             X.X  X..X   -       -X.......X-       X.......X       -    XX           XX    -           -    X..........X -             XX    X..X  -       - X.....X -        X.....X        -   X.X           X.X   -           -     X........X  -                   X..X  -       -  X...X  -         X...X         -  X..X           X..X  -           -     X........X  -                    XX   -       -   X.X   -          X.X          - X...XXXXXXXXXXXXX...X -           -     XXXXXXXXXX  -             -------------       -    X    -           X           -X.....................X-           -------------------                                 ----------------------------------- X...XXXXXXXXXXXXX...X -                                                                                                 -  X..X           X..X  -                                                                                                 -   X.X           X.X   -                                                                                                 -    XX           XX    -                                           '
+FUNC 18005FCE0 sub_18005FCE0
+    1800D95A0  '<unknown>'
+    1800DA130  '[font] Discard baked %.2f for "%s"\n'
+FUNC 18005FF00 sub_18005FF00
+    1800D95A0  '<unknown>'
+    1800DA130  '[font] Discard baked %.2f for "%s"\n'
+FUNC 1800607D0 sub_1800607D0
+    1800DA160  '[font] Texture #%03d: resize+repack %dx%d => Texture #%03d: %dx%d\n'
+    1800DA1A8  '[font] Texture #%03d: resize failed. Will grow.\n'
+FUNC 180061380 sub_180061380
+    1800D53D0  'stb_truetype'
+FUNC 180061CF0 sub_180061CF0
+    1800DA1E0  '[font] Failed packing %dx%d rectangle. Returning fallback.\n'
+FUNC 180062E40 sub_180062E40
+    1800DA2F0  'stbtt_GetFontOffsetForIndex(): FontData is incorrect, or FontNo cannot be found.'
+    1800DA350  'stbtt_InitFont(): failed to parse FontData. It is correct and complete? Check FontDataSize.'
+FUNC 180066070 sub_180066070
+    1800DA110  '[font] Created baked %.2fpx\n'
+FUNC 180069320 sub_180069320
+    1800D95B0  '*Missing Text*'
+    1800D9A68  'Calling PopItemFlag() too many times!'
+    1800DA468  '<Unknown>'
+FUNC 18006B130 sub_18006B130
+    1800D9B38  'Calling PopID() too many times!'
+    1800DA3D0  'EndTable() call should only be done while in BeginTable() scope!'
+    1800DA418  'Mismatching PushID/PopID!'
+    1800DA438  'Too many PopItemWidth!'
+FUNC 18006C980 sub_18006C980
+    1800D5318  '%*s%.*s'
+FUNC 18006D200 sub_18006D200
+    1800D4860  'Code uses SetCursorPos()/SetCursorScreenPos() to extend window/parent boundaries.\nPlease submit an item e.g. Dummy() afterwards in order to grow window/parent boundaries.'
+FUNC 18006D6E0 sub_18006D6E0
+    1800DA478  '0x%08X,%d'
+FUNC 18006DA50 sub_18006DA50
+    1800DA488  'RefScale=%f'
+    1800DA498  'Column %d%n'
+    1800DA4A8  'UserID=0x%08X%n'
+    1800DA4B8  'Width=%d%n'
+    1800DA4C8  'Weight=%f%n'
+    1800DA4D8  'Visible=%d%n'
+    1800DA4E8  'Order=%d%n'
+    1800DA4F8  'Sort=%d%c%n'
+FUNC 18006DCE0 sub_18006DCE0
+    1800DA508  '[%s][0x%08X,%d]\n'
+    1800DA520  'RefScale=%g\n'
+    1800DA530  'Column %-2d'
+    1800DA540  ' UserID=%08X'
+    1800DA550  ' Weight=%.4f'
+    1800DA560  ' Width=%d'
+    1800DA570  ' Visible=%d'
+    1800DA580  ' Order=%d'
+    1800DA590  ' Sort=%d%c'
+FUNC 18006E600 sub_18006E600
+    1800D4D88  'Calling PopItemWidth() too many times!'
+FUNC 18006EB90 sub_18006EB90
+    1800D5318  '%*s%.*s'
+FUNC 1800707E0 sub_1800707E0
+    1800DA5B0  '#SCROLLX'
+    1800DA5C0  '#SCROLLY'
+FUNC 180071070 sub_180071070
+    1800D5318  '%*s%.*s'
+FUNC 1800717A0 sub_1800717A0
+    1800DA998  'Alpha Bar'
+FUNC 1800717F0 sub_1800717F0
+    1800D5318  '%*s%.*s'
+FUNC 180071F50 sub_180071F50
+    1800D5318  '%*s%.*s'
+    1800DA5E8  '--------------------------------\n'
+FUNC 180072E10 sub_180072E10
+    1800DA628  '##Combo_%02d'
+FUNC 180076EF0 sub_180076EF0
+    1800C90B8  '##tp_scene_id'
+    1800D9A68  'Calling PopItemFlag() too many times!'
+    1800D9B38  'Calling PopID() too many times!'
+FUNC 180079E10 sub_180079E10
+    1800D5318  '%*s%.*s'
+    1800DA5C0  '#SCROLLY'
+FUNC 18007E600 sub_18007E600
+    1800D52D0  '[dragdrop] AcceptDragDropPayload(): 0x%08X: payload delivery\n'
+    1800D9A68  'Calling PopItemFlag() too many times!'
+    1800D9B38  'Calling PopID() too many times!'
+    1800DA728  'M:0.000'
+    1800DA730  'M:000'
+    1800DA738  'context'
+    1800DA740  '#%02X%02X%02X%02X'
+    1800DA758  '#%02X%02X%02X'
+    1800DA768  '##Text'
+    1800DA770  '%02X%02X%02X%02X'
+    1800DA788  '%02X%02X%02X'
+    1800DA798  '##ColorButton'
+    1800DA7A8  'picker'
+    1800DA7B0  '##picker'
+    1800DA7BC  '_COL3F'
+    1800DA7C4  '_COL4F'
+    1800DA918  '0..255'
+    1800DA920  '0.00..1.00'
+    1800DA930  'Copy as..'
+    1800DA940  '(%.3ff, %.3ff, %.3ff, %.3ff)'
+    1800DA960  '(%d,%d,%d,%d)'
+FUNC 180080710 sub_180080710
+    1800D9B38  'Calling PopID() too many times!'
+    1800DA738  'context'
+    1800DA7D8  'alpha'
+    1800DA7E0  'Current'
+    1800DA7E8  '##current'
+    1800DA7F8  'Original'
+    1800DA808  '##original'
+    1800DA814  '##rgb'
+    1800DA81C  '##hsv'
+    1800DA824  '##hex'
+    1800DA970  '##selectable'
+    1800DA980  '##previewing_picker'
+FUNC 180083B30 sub_180083B30
+    1800D5268  '##Tooltip_Hidden'
+    1800D5280  '[dragdrop] BeginDragDropSource() DragDropActive = true, source_id = 0x%08X%s\n'
+    1800DA7BC  '_COL3F'
+    1800DA7C4  '_COL4F'
+    1800DA82C  'Color'
+    1800DA838  '##preview'
+    1800DA848  '#%02X%02X%02X\nR: %d, G: %d, B: %d\n(%.3f, %.3f, %.3f)'
+    1800DA880  '#%02X%02X%02X%02X\nR:%d, G:%d, B:%d, A:%d\n(%.3f, %.3f, %.3f, %.3f)'
+    1800DA8C8  'H: %.3f, S: %.3f, V: %.3f'
+    1800DA8E8  'H: %.3f, S: %.3f, V: %.3f, A: %.3f'
+FUNC 1800847B0 sub_1800847B0
+    1800D9B38  'Calling PopID() too many times!'
+FUNC 180084D20 sub_180084D20
+    1800D4EB8  '[popup] CloseCurrentPopup %d -> %d\n'
+FUNC 180085A40 sub_180085A40
+    1800D53E0  'Clear'
+    1800DA9A8  'SelectAll'
+    1800DA9B8  '[selection] %s: Request: SetAll %d (= %s)\n'
+    1800DA9F0  '[selection] %s: Request: SetRange %I64d..%I64d (0x%I64X..0x%I64X) = %d (dir %d)\n'
+    1800DAAD8  'EndMultiSelect'
+FUNC 180085C00 sub_180085C00
+    1800DAA48  'EndMultiSelect() FocusScope mismatch!'
+    1800DAA70  '[selection] EndMultiSelect: Reset RangeSrcItem.\n'
+    1800DAAA8  '[selection] EndMultiSelect: Reset NavIdItem.\n'
+FUNC 180086B50 sub_180086B50
+    1800D4288  '##MainListbox'
+FUNC 180086F70 sub_180086F70
+    1800D9B38  'Calling PopID() too many times!'
+FUNC 180087260 sub_180087260
+    1800D9A68  'Calling PopItemFlag() too many times!'
+    1800D9A90  'Calling EndDisabled() too many times!'
+    1800D9B38  'Calling PopID() too many times!'
+FUNC 180088BF0 sub_180088BF0
+    1800D9A68  'Calling PopItemFlag() too many times!'
+FUNC 18008DA80 sub_18008DA80
+    1800DB1B8  'imgui_impl_win32'
+    1800DB1D0  'xinput1_4.dll'
+    1800DB1E0  'xinput1_3.dll'
+    1800DB1F0  'xinput9_1_0.dll'
+    1800DB200  'xinput1_2.dll'
+    1800DB210  'xinput1_1.dll'
+    1800DB220  'XInputGetCapabilities'
+    1800DB238  'XInputGetState'
+FUNC 18008DE30 sub_18008DE30
+    1800BC5F0  'bad allocation'
+FUNC 18008EFB0 sub_18008EFB0
+    1800BED30  'generic'
+FUNC 18008EFC0 sub_18008EFC0
+    1800BFAD8  'unknown error'
+FUNC 180097AA0 sub_180097AA0
+    1800BFE68  'bad exception'
+FUNC 18009B7EC sub_18009B7EC
+    1800D9610  '(null)'
+FUNC 18009BC50 sub_18009BC50
+    1800D9610  '(null)'
+FUNC 1800A478C sub_1800A478C
+    1800C1C10  'CorExitProcess'
+FUNC 1800A67C8 sub_1800A67C8
+    1800C1FAC  'e+000'
+FUNC 1800A86BC sub_1800A86BC
+    1800C2D00  'AppPolicyGetProcessTerminationMethod'
+FUNC 1800A8718 sub_1800A8718
+    1800C2CA0  'AreFileApisANSI'
+FUNC 1800A8798 sub_1800A8798
+    1800C2CD0  'LCMapStringEx'
+FUNC 1800A888C sub_1800A888C
+    1800C2CE8  'LocaleNameToLCID'
+FUNC 1800A8920 sub_1800A8920
+    1800C2CB8  'FlsGetValue2'
+FUNC 1800A9D90 sub_1800A9D90
+    1800C2D54  'UTF-8'
+    1800C2D60  'UTF-16LEUNICODE'
+FUNC 1800ADFE8 sub_1800ADFE8
+    1800C3614  '1#INF'
+    1800C361C  '1#QNAN'
+    1800C3624  '1#SNAN'
+    1800C362C  '1#IND'
+FUNC 1800B31B0 sub_1800B31B0
+    1800C841C  'log10'
+FUNC 1800B3CC0 sub_1800B3CC0
+    1800E6BB0  'acosf'
+FUNC 1800B4860 sub_1800B4860
+    1800E74FC  'fmodf'
+FUNC 1800B7240 sub_1800B7240
+    1800E82B0  'sqrtf'
+FUNC 1800B72E0 sub_1800B72E0
+    1800E6BB0  'acosf'

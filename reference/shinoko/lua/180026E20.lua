@@ -1,0 +1,1 @@
+require("Utils.GmToolUtils").openInspector()

@@ -1,0 +1,1 @@
+require("Utils.GmToolUtils").onAbilityDataInspectChange(true)

@@ -1,0 +1,2473 @@
+1800BC5F0	bad allocation
+1800BCF57		
+
+1800BCF65		
+
+1800BCF75		
+
+1800BCF83		
+
+1800BCF95		
+
+1800BCFA3		
+
+1800BCFB3		
+
+1800BCFC1		
+
+1800BD147		
+
+1800BD247		
+
+1800BD2C7		
+
+1800BD307		
+
+1800BD327		
+
+1800BD337		
+
+1800BD347		
+
+1800BD357		
+
+1800BD365		
+
+1800BD375		
+
+1800BD383		
+
+1800BD395		
+
+1800BD3A3		
+
+1800BD3B3		
+
+1800BD3C1		
+
+1800BD447		
+
+1800BD4C7		
+
+1800BD507		
+
+1800BD527		
+
+1800BD537		
+
+1800BD547		
+
+1800BD5C7		
+
+1800BD607		
+
+1800BD627		
+
+1800BD637		
+
+1800BD647		
+
+1800BD687		
+
+1800BD6A7		
+
+1800BD6B7		
+
+1800BD6C7		
+
+1800BD6E7		
+
+1800BD6F7		
+
+1800BD707		
+
+1800BD717		
+
+1800BD727		
+
+1800BD737		
+
+1800BD747		
+
+1800BD757		
+
+1800BD765		
+
+1800BD775		
+
+1800BD783		
+
+1800BD795		
+
+1800BD7A3		
+
+1800BD7B3		
+
+1800BD7C1		
+
+1800BD7C7		
+
+1800BD807		
+
+1800BD827		
+
+1800BD837		
+
+1800BD847		
+
+1800BD887		
+
+1800BD8A7		
+
+1800BD8B7		
+
+1800BD8C7		
+
+1800BD8E7		
+
+1800BD8F7		
+
+1800BD907		
+
+1800BD917		
+
+1800BD927		
+
+1800BD937		
+
+1800BD947		
+
+1800BD987		
+
+1800BD9A7		
+
+1800BD9B7		
+
+1800BD9C7		
+
+1800BD9E7		
+
+1800BD9F7		
+
+1800BDA07		
+
+1800BDA17		
+
+1800BDA27		
+
+1800BDA37		
+
+1800BDA47		
+
+1800BDA67		
+
+1800BDA77		
+
+1800BDA87		
+
+1800BDA97		
+
+1800BDAA7		
+
+1800BDAB7		
+
+1800BDAC7		
+
+1800BDAD7		
+
+1800BDAE7		
+
+1800BDAF7		
+
+1800BDB07		
+
+1800BDB17		
+
+1800BDB27		
+
+1800BDB37		
+
+1800BDB47		
+
+1800BDB57		
+
+1800BDB65		
+
+
+1800BDB75		
+
+
+1800BDB83		
+	
+
+1800BDB95		
+
+
+1800BDBA3		
+	
+
+1800BDBB3		
+	
+
+1800BDBC1		
+
+1800BDBC7		
+
+1800BDBD6		
+
+
+1800BDBE4		
+	
+
+1800BDBF4		
+	
+
+1800BDC07		
+
+1800BDC14		
+	
+
+1800BDC27		
+
+1800BDC37		
+
+1800BDC47		
+
+1800BDC57	
+
+
+1800BDC65	
+	
+
+1800BDC75	
+	
+
+1800BDC87		
+
+1800BDC95	
+	
+
+1800BDCA7		
+
+1800BDCB7		
+
+1800BDCC7		
+
+1800BDCD6	
+	
+
+1800BDCE7		
+
+1800BDCF7		
+
+1800BDD07		
+
+1800BDD17		
+
+1800BDD27		
+
+1800BDD37		
+
+1800BDD47		
+
+1800BDD57		
+
+1800BDD65			
+
+1800BDD75			
+
+1800BDD87		
+
+1800BDD95			
+
+1800BDDA7		
+
+1800BDDB7		
+
+1800BDDC7		
+
+1800BDDD6			
+
+1800BDDE7		
+
+1800BDDF7		
+
+1800BDE07		
+
+1800BDE17		
+
+1800BDE27		
+
+1800BDE37		
+
+1800BDE47		
+
+1800BDE57		
+
+1800BDE67		
+
+1800BDE77		
+
+1800BDE87		
+
+1800BDE97		
+
+1800BDEA7		
+
+1800BDEB7		
+
+1800BDEC7		
+
+1800BDED7		
+
+1800BDEE7		
+
+1800BDEF7		
+
+1800BDF07		
+
+1800BDF17		
+
+1800BDF27		
+
+1800BDF37		
+
+1800BDF47		
+
+1800BDF69	
+
+
+
+1800BDF79	
+
+
+
+1800BDF81	
+
+
+
+1800BDF99	
+
+
+
+1800BDFA1	
+
+
+
+1800BDFB1	
+
+
+
+1800BDFD9	
+
+
+
+1800BDFE1	
+
+
+
+1800BDFF1	
+
+
+
+1800BE011	
+
+
+
+1800BE057		
+
+1800BE063		
+
+1800BE0C7		
+
+1800BE0D7		
+
+1800BE0E3		
+	
+
+1800BE0F4		
+	
+
+1800BE107		
+
+1800BE117		
+
+1800BE127		
+
+1800BE137		
+
+1800BE147		
+
+1800BEA67		
+
+1800BEA87		
+
+1800BEA97		
+
+1800BEBF8	device or resource busy
+1800BEC10	invalid argument
+1800BEC28	no such process
+1800BEC38	not enough memory
+1800BEC50	operation not permitted
+1800BEC68	resource deadlock would occur
+1800BEC88	resource unavailable try again
+1800BED30	generic
+1800BF4D0	success
+1800BF4D8	address family not supported
+1800BF4F8	address in use
+1800BF508	address not available
+1800BF520	already connected
+1800BF538	argument list too long
+1800BF550	argument out of domain
+1800BF568	bad address
+1800BF578	bad file descriptor
+1800BF590	bad message
+1800BF5A0	broken pipe
+1800BF5B0	connection aborted
+1800BF5C8	connection already in progress
+1800BF5E8	connection refused
+1800BF600	connection reset
+1800BF618	cross device link
+1800BF630	destination address required
+1800BF650	directory not empty
+1800BF668	executable format error
+1800BF680	file exists
+1800BF690	file too large
+1800BF6A0	filename too long
+1800BF6B8	function not supported
+1800BF6D0	host unreachable
+1800BF6E8	identifier removed
+1800BF700	illegal byte sequence
+1800BF718	inappropriate io control operation
+1800BF740	interrupted
+1800BF750	invalid seek
+1800BF760	io error
+1800BF770	is a directory
+1800BF780	message size
+1800BF790	network down
+1800BF7A0	network reset
+1800BF7B0	network unreachable
+1800BF7C8	no buffer space
+1800BF7D8	no child process
+1800BF7F0	no link
+1800BF7F8	no lock available
+1800BF810	no message available
+1800BF828	no message
+1800BF838	no protocol option
+1800BF850	no space on device
+1800BF868	no stream resources
+1800BF880	no such device or address
+1800BF8A0	no such device
+1800BF8B0	no such file or directory
+1800BF8D0	not a directory
+1800BF8E0	not a socket
+1800BF8F0	not a stream
+1800BF900	not connected
+1800BF910	not supported
+1800BF920	operation canceled
+1800BF938	operation in progress
+1800BF950	operation not supported
+1800BF968	operation would block
+1800BF980	owner dead
+1800BF990	permission denied
+1800BF9A8	protocol error
+1800BF9B8	protocol not supported
+1800BF9D0	read only file system
+1800BF9E8	result out of range
+1800BFA00	state not recoverable
+1800BFA18	stream timeout
+1800BFA28	text file busy
+1800BFA38	timed out
+1800BFA48	too many files open in system
+1800BFA68	too many files open
+1800BFA80	too many links
+1800BFA90	too many symbolic link levels
+1800BFAB0	value too large
+1800BFAC0	wrong protocol type
+1800BFAD8	unknown error
+1800BFC28	ImagehlpApiVersionEx
+1800BFC40	SymInitialize
+1800BFC50	SymSetOptions
+1800BFC60	SymGetOptions
+1800BFC70	SymLoadModule64
+1800BFC80	SymGetModuleInfo64
+1800BFC98	SymFromName
+1800BFCC0	_CorExeMain
+1800BFCD0	.detour
+1800BFE68	bad exception
+1800C0590	__based(
+1800C05A0	__cdecl
+1800C05A8	__stdcall
+1800C05B8	__thiscall
+1800C05C8	__fastcall
+1800C05D8	__vectorcall
+1800C05E8	__preserve_none
+1800C05F8	__clrcall
+1800C0604	__eabi
+1800C0610	__swift_1
+1800C0620	__swift_2
+1800C0630	__swift_3
+1800C0640	__ptr64
+1800C0648	__restrict
+1800C0658	__unaligned
+1800C0668	restrict(
+1800C0680	 delete
+1800C06A8	operator
+1800C0718	`vftable'
+1800C0728	`vbtable'
+1800C0738	`vcall'
+1800C0740	`typeof'
+1800C0750	`local static guard'
+1800C0768	`string'
+1800C0778	`vbase destructor'
+1800C0790	`vector deleting destructor'
+1800C07B0	`default constructor closure'
+1800C07D0	`scalar deleting destructor'
+1800C07F0	`vector constructor iterator'
+1800C0810	`vector destructor iterator'
+1800C0830	`vector vbase constructor iterator'
+1800C0858	`virtual displacement map'
+1800C0878	`eh vector constructor iterator'
+1800C08A0	`eh vector destructor iterator'
+1800C08C0	`eh vector vbase constructor iterator'
+1800C08E8	`copy constructor closure'
+1800C0908	`udt returning'
+1800C091C	`RTTI
+1800C0928	`local vftable'
+1800C0938	`local vftable constructor closure'
+1800C095C	 new[]
+1800C0968	 delete[]
+1800C0978	`omni callsig'
+1800C0988	`placement delete closure'
+1800C09A8	`placement delete[] closure'
+1800C09C8	`managed vector constructor iterator'
+1800C09F0	`managed vector destructor iterator'
+1800C0A18	`eh vector copy constructor iterator'
+1800C0A40	`eh vector vbase copy constructor iterator'
+1800C0A70	`dynamic initializer for '
+1800C0A90	`dynamic atexit destructor for '
+1800C0AB8	`vector copy constructor iterator'
+1800C0AE0	`vector vbase copy constructor iterator'
+1800C0B10	`managed vector copy constructor iterator'
+1800C0B40	`local static thread guard'
+1800C0B60	operator "" 
+1800C0B70	operator co_await
+1800C0B88	operator<=>
+1800C0B98	 Type Descriptor'
+1800C0BB0	 Base Class Descriptor at (
+1800C0BD0	 Base Class Array'
+1800C0BE8	 Class Hierarchy Descriptor'
+1800C0C08	 Complete Object Locator'
+1800C0C28	`anonymous namespace'
+1800C0CC6	
+1800C0DD1	
+1800C0FEC	[aOni*{
+1800C10C3	eLK(w
+1800C112F	FEMh
+1800C11CD	~ $s%r
+1800C11DB	@b;zO]
+1800C12F4	iu+-,
+1800C1365	obwQ4
+1800C15B7	v2!L.2
+1800C173A	^<V7w
+1800C1A60	INITY
+1800C1A68	inity
+1800C1A78	SNAN)
+1800C1A80	snan)
+1800C1A88	IND)ind)INF
+1800C1A98	INITY
+1800C1AA0	inity
+1800C1AB0	SNAN)
+1800C1AB8	snan)
+1800C1AC0	IND)ind)
+1800C1C10	CorExitProcess
+1800C1F70	NAN(SNAN)
+1800C1F80	nan(snan)
+1800C1F90	NAN(IND)
+1800C1FA0	nan(ind)
+1800C1FAC	e+000
+1800C229C	Sunday
+1800C22A4	Monday
+1800C22B0	Tuesday
+1800C22B8	Wednesday
+1800C22C8	Thursday
+1800C22D4	Friday
+1800C22E0	Saturday
+1800C2320	January
+1800C2328	February
+1800C2334	March
+1800C233C	April
+1800C2354	August
+1800C2360	September
+1800C2370	October
+1800C2378	November
+1800C2388	December
+1800C23A0	MM/dd/yy
+1800C23B0	dddd, MMMM dd, yyyy
+1800C23C8	HH:mm:ss
+1800C2CA0	AreFileApisANSI
+1800C2CB8	FlsGetValue2
+1800C2CD0	LCMapStringEx
+1800C2CE8	LocaleNameToLCID
+1800C2D00	AppPolicyGetProcessTerminationMethod
+1800C2D54	UTF-8
+1800C2D60	UTF-16LEUNICODE
+1800C3137		
+
+1800C3150	 !"#$%&'()*+,-./0123456789:;<=>?@abcdefghijklmnopqrstuvwxyz[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
+1800C32B7		
+
+1800C32D0	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}~
+1800C3614	1#INF
+1800C361C	1#QNAN
+1800C3624	1#SNAN
+1800C362C	1#IND
+1800C740F	=imb;D
+1800C7579	1<.	/>:
+1800C75BE	/>58d%
+1800C75F6	!>6'Y
+1800C7607	>jtm}S
+1800C765E	)>6{1n
+1800C766A	r	Vr.>T
+1800C767C	+f)>0'
+1800C76CB	Lj[;>
+1800C76EE	3>fvw
+1800C76FC	;H9>&X
+1800C7722	*StO9>T
+1800C774E	.>Tu
+
+1800C775D	p>%@
+1800C776C	n03>Pu
+1800C7842	K~Je#>!
+1800C787B	+M<7>
+1800C78C1	
+"Ic(>\,
+1800C791B	bp(=>?g
+1800C79BE	6>J`
+1800C79C5	?>!T
+1800C79CD	4<>0A
+1800C79DC	BC?>6t9^	c:>
+1800C7A35	BF>^G
+1800C7A45	K&>.yC
+1800C7A53	 'L>[
+1800C7A5C	.xJ>Hf
+1800C7A63	y\PD>!
+1800C7A72	|b=})>
+1800C7A83	c [1>H'
+1800C7AC2	uzKs@>
+1800C7ADE	3>N;kU
+1800C7B0C		kE>fvw
+1800C7B4E	A>pP&
+1800C7B54	V6E>`"(5
+1800C7BCC	0iN>/
+1800C7BDC	+h->|
+1800C7BEE	@>%>b
+1800C7F7F	?d!Y
+1800C7FEF	?:kP<
+1800C7FFF	?UUUUUU
+1800C8087	?f`Y4
+1800C80B7	?QY^&
+1800C82BF	?'u_
+1800C83E7	?7zQ6$
+1800C841C	log10
+1800C8428	GameAssembly.dll
+1800C8440	--- DLL Injected: MainThread started ---
+1800C8470	GameAssembly.dll detected at 0x%p
+1800C8498	Calling SetupGameHooks()...
+1800C84B8	[ERROR] SetupGameHooks() returned false!
+1800C84E8	SetupGameHooks() succeeded.
+1800C8508	Calling SetupRenderHooks()...
+1800C8528	SetupRenderHooks() completed.
+1800C8548	Unloading DLL: TeardownAllHooks()...
+1800C8570	DLL unloaded cleanly.
+1800C8588	=== DllMain: DLL_PROCESS_ATTACH ===
+1800C85B0	00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899Unknown exception
+1800C8690	bad array new length
+1800C86A8	string too long
+1800C86D8	false
+1800C86E0	God Mode
+1800C86F0	Full invincibility: blocks combat damage, fall damage, rob egg damage, and enemy targeting.
+1800C8750	God Mode##chk_god_mode
+1800C8768	One Hit Kill
+1800C8778	Instantly eliminates enemies upon weapon attack.
+1800C87B0	One Hit Kill##chk_one_hit
+1800C87D0	Kill Aura
+1800C87E0	Kill all enemy monsters in range.
+1800C8808	Kill Aura##chk_kill_aura
+1800C8828	Distance around player to target monsters.
+1800C8854	%.1f m
+1800C8860	Radius##val_kill_aura_rad
+1800C8880	Timer tick interval in seconds.
+1800C88A0	%.2f s
+1800C88A8	Interval##val_kill_aura_int
+1800C88C8	Catch Aura
+1800C88E0	Periodically detects and quick-captures catchable wild puppets in range.
+1800C8930	Catch Aura##chk_catch_aura
+1800C8950	Distance around player to detect wild puppets.
+1800C8980	Radius##val_catch_aura_rad
+1800C89A0	Interval##val_catch_aura_int
+1800C89C0	Auto Loot
+1800C89D0	Automatically interacts with dropped items, chests, and resource boxes in range.
+1800C8A28	Auto Loot##chk_auto_loot
+1800C8A48	Distance around player to interact with loot and chests.
+1800C8A88	Radius##val_auto_loot_rad
+1800C8AA8	Interaction check timer interval in seconds.
+1800C8AD8	Interval##val_auto_loot_int
+1800C8AF8	Unlimited Dash
+1800C8B08	Removes dash limit, resets dash count and cooldown on press.
+1800C8B48	Unlimited Dash##chk_unlim_dash
+1800C8B68	Multi-Hit
+1800C8B78	Multiplies weapon attacks and projectile hits.
+1800C8BA8	Multi-Hit##chk_multi_hit
+1800C8BC8	Number of times to replicate attack/projectile hits.
+1800C8C08	Hit Multiplier##val_multi_hit
+1800C8C28	No Fall Damage
+1800C8C38	Blocks all fall damage when hitting the ground.
+1800C8C68	No Fall Damage##chk_nofall
+1800C8C88	No Cooldown
+1800C8CA0	Removes all skill cooldowns for both the player character and pet abilities.
+1800C8CF0	No Cooldown##chk_nocd_full
+1800C8D10	Removes cooldowns for player weapon and character skills.
+1800C8D50	Player No Cooldown##chk_nocd_player
+1800C8D78	Removes cooldowns for pet support abilities.
+1800C8DA8	Pet No CD##chk_nocd_pet
+1800C8DC0	Infinite Stamina
+1800C8DE0	Blocks all stamina consumption for local player and pet while running, climbing, dodging.
+1800C8E40	Infinite Stamina##chk_inf_stamina
+1800C8E68	Infinite Energy
+1800C8E80	Locks Energy Points and Special / Ultimate Points to maximum capacity.
+1800C8EC8	Infinite Energy (EP + SP)##chk_inf_energy
+1800C8EF8	Dumb Enemy
+1800C8F08	Disables AI global tick so enemies stop attacking and moving.
+1800C8F48	Dumb Enemy##chk_dumb_enemy
+1800C8F68	Mob Vacuum
+1800C8F78	Pulls wild enemies in front of you.
+1800C8FA0	Mob Vacuum##chk_mob_vacuum
+1800C8FC0	Distance ahead of player to pull enemies.
+1800C8FF0	Distance in front##val_vacuum_dist
+1800C9018	Continuously pulls enemies in front as you move.
+1800C9050	Continuous Auto Vacuum##chk_auto_vacuum
+1800C9078	Pull Mobs Now##btn_vacuum_pull
+1800C9098	Scene Teleport
+1800C90A8	Scene ID:
+1800C90B8	##tp_scene_id
+1800C90C8	Teleport to Scene ID##tp_scene_btn
+1800C90F8	vector too long
+1800C9158	f*czs_
+1800C9236	1Ag-V
+1800C92AF	Gn0I$	
+1800C92DD	<h(u}
+1800C93A8	-ERvF
+1800C949B	PskN
+1800C94BB	f4=*
+1800C9571	a3PSG
+1800C96F9	l&`{
+1800C98CF	e%qLb
+1800C9910	k4IYKlA9
+1800C9948	GgbfSZtGb
+1800C9B64	:wK+(
+1800C9C58	LGZt
+
+1800C9D34	w
+,F[
+1800C9D64	6zb\WT@
+1800C9EED	<Ze	k
+1800C9F88	*D~.0
+1800CA26B	bH#Vp
+1800CA287	R
+:1w
+1800CA2F7	Z(	[+1
+1800CA397	G~?$9
+1800CA425	4}{RH
+1800CA44B	4ngD9
+1800CA55D	m
+b&"]	
+1800CA5E0	!O1>k
+1800CA83D	;'{AC
+1800CA9A4	*b.2
+1800CAA88	@l^d/
+1800CAB26	"p>W?
+1800CAB55	i	FmTW*
+1800CABC1	4jpx :/
+1800CACB5	LX&G2P^
+1800CAD21	[T]
+1800CAD54	&GaZd
+1800CAE1D	om-KZ
+1800CAEAF	"rq9"X`
+1800CAFB0	4\#"9
+1800CB007	[~uuH(wB
+1800CB035	G+"5M{
+1800CB08A	 *HxsW
+1800CB091	c1.)"\
+1800CB0D9	eOPv6#K
+1800CB14C	9&h7h
+1800CB187	o*Ek\=C
+1800CB24F	8g`3	
+1800CB27A	QZ":~
+1800CB326	^~H\`D:
+1800CB4B3	hSdPq
+1800CB519	R6wTa
+1800CB7B9	Ir5v9
+1800CB8A5	Q='15
+1800CB9C3	G80V+
+1800CB9CC	Z!wCt
+1800CBC4F	rGfCv
+1800CBC79	!n '!<7
+1800CBD88	b#rND
+1800CBD97	m~D]*(
+1800CBDFD	a$
+[5
+1800CBEB5	gOm6H
+1800CBF61	e
+A/
+1800CBF69	Rl<n_
+1800CBF95	c];XQ
+1800CC040	V11X
+1800CC1F7	p6_"
+1800CC291	n5Tb
+1800CC2A0	=5FHr{
+1800CC327	L`}+?
+1800CC3C9	LP7zS{
+1800CC48F	
+
+4B
+1800CC514	uNO	h
+1800CC57E	_ui=6
+1800CC5D1	 \,@h
+1800CC628	{qfZ]
+1800CC68A	aWbo{
+1800CC717	mVsR_s
+1800CC846	
+YFi#
+1800CC8E6	9qkw%
+1800CC987	5Q0T4
+1800CCA4C	:(Jx#
+1800CCAC6	J ?n7v=3f
+1800CCAE3	^"HRd
+1800CCB83	bZ6O
+1800CCBAE	\G&g?
+1800CCBC0	B[Z/o
+1800CCC12	|I#]2fF
+1800CCD10	$k,w3.
+1800CCD49	'{ck)&?h.
+1800CCD76	"Mce	.
+1800CCE06	0hlo35;R
+1800CCE11	M5I`7J
+1800CCF1E	-N([{2
+1800CCF30	0Ath|
+1800CCF60	Q{pY)
+1800CCF75	!`nKT2Z
+1800CCFC4	 b8NW
+1800CD032	!i*A
+1800CD04E	UU{/!
+1800CD19A	oe-Y1jg
+1800CD1B0		]Vv
+1800CD1EF	
+&HTU
+1800CD232	'=dnQ
+1800CD309	+^z
+1800CD3AA	br+(E
+1800CD4AB		o=<7
+1800CD504	bnJ6bN"P
+1800CD548	
+wnSNo+_
+1800CD558	.6K#P
+1800CD5B9	^ 1,,
+1800CD5D3	G@``d
+1800CD62F	OQ<R?B
+1800CD76C	"VfQl
+1800CD77F	L%Mw"]
+1800CD792	1tY-=[!
+1800CD7EA	f2fa16
+1800CD91E	;@T"r
+1800CD927	)Gg.t
+1800CDA09	`;d.&
+1800CDC28	`5tb_37q6
+1800CDD21	_j;+
+1800CDE3C	qa<WH`c
+1800CDEBB	"e8p>
+1800CDF29	 3PF
+1800CE110	{:\PN
+1800CE13C	ybE\U
+1800CE1EB	tgbwt@Njz
+1800CE226	X=uIih
+1800CE240	RIsr]V70
+1800CE33C	`47!#G,\~
+1800CE3DA	&j&#-
+1800CE5D9	.E80
+1800CE5FE	
+A
+1800CE616	N7B\)"
+1800CE621	WA{O.:
+1800CE72C	nH_NC\0
+1800CEA04	0Xk#]
+1800CEA10	U27p
+1800CEB44	Z'#M~sB
+1800CEB9A	tl"hW
+1800CEC9C	@l QQ
+1800CED04	raGf
+-
+1800CEDC9	KI<
+
+1800CEE9A	2AQB`
+1800CEF6F	!U{z}
+1800CEFA1	Y	|Dw
+1800CF004	FPa8u
+1800CF0BD	OlI	?x
+1800CF17C	SLOCSvk
+1800CF19C	4BpJu
+1800CF1C9	X@Q	-6.
+1800CF2A0	gclJ*
+1800CF406	9};w
+1800CF41D	.zuSY_>
+1800CF431	C]D{t
+1800CF444	1^"*B
+1800CF466	
+Yt(>
+1800CF4A6	C-5ED
+1800CF4C1	Sw^=~
+1800CF4DD	4f>-1
+1800CF575	zJh[>
+1800CF631	i `
+B
+1800CF689	m#J1`
+1800CF82F	mC=oye
+1800CF83C	]Pis`VC
+1800CF88C	(j6E%
+1800CF90A	 Eu(O7
+1800CF912	N"7Y/
+1800CFA17	p_$;ZCU
+1800CFA6B	Sn?/e
+1800CFB62	oSN1U
+1800CFBE4	b#J#)&
+1800CFCC5	I(z7#+?
+1800CFCDB	JV
++n[
+1800CFD0E	NN4bn
+1800CFD14	j9:m
+1800CFD92	pNI$Zy
+1800D002A	}.B^~
+1800D007A	
+"9/
+1800D00F7	fr]M(
+1800D0118	$`L[C
+1800D01FC	LZ]@S.
+1800D0259	4=)Z?
+1800D030D	K"q"v-p5
+1800D03F6	sKA
+.Fg
+1800D0423	>#BQa
+1800D0446	DxP0n
+1800D0454	G<3)B
+1800D0492	dA%7@d
+1800D04C2	^@e1I
+1800D068E	HjWA;C
+1800D0696	8CE+ .c2
+1800D07A2	Y SUCh
+1800D0A05	12m1<o&
+1800D0AAD	>DX%L
+1800D0BC9	_b[V
+1800D0CBD	X(}wb
+1800D0CFF	=X5L
+1800D0D80	R<?d^]9
+1800D0E55	5{PYy
+1800D0E6C	{51%r
+1800D0F1F	mr6CW
+1800D0F5D	'KswG
+1800D1025	DOkbmG
+1800D1036	g7k*
+1800D11FB	WDuj']0
+1800D124E	 0YU&)
+1800D135D	32`Au5-
+1800D1376	zV^1IE$Z
+1800D1394	V{qb
+1800D141C	e-+"k
+1800D14D4	&[%=\*
+1800D1591	}gW0:
+1800D1677	J"v9r
+1800D170E	N_($`
+1800D1766	v
+wC:
+1800D187A	:Dufp
+1800D18AC	@;x])
+1800D18C7	]6z{c/
+1800D1952	Lrrgt
+1800D1A20	$BK`U_wO
+1800D1A60	Packet Rate Limit Bypass
+1800D1A80	Disables RateLimit.
+1800D1A98	Packet Rate Limit Bypass##chk_rate_limit
+1800D1AC8	Global Speed Multiplier
+1800D1AE0	Multiply world and player simulation speed.
+1800D1B10	Global Speed Multiplier##gspd_enable
+1800D1B38	Game speed scale factor
+1800D1B50	%.2fx
+1800D1B58	Speed Multiplier##gspd_mult
+1800D1B78	  Time scale: %.3f
+1800D1B90	Camera FOV Override
+1800D1BA8	Change camera FOV.
+1800D1BC0	Camera FOV Override##fov_enable
+1800D1BE0	Target camera field of view in degrees.
+1800D1C10	FOV Angle##fov_value
+1800D1C28	 Camera FOV: %.2f deg
+1800D1C40	Free Camera
+1800D1C50	Toggle Free Orbit Camera.
+1800D1C70	Free Camera##chk_freecam
+1800D1C90	Player Model Scale
+1800D1CA8	Resizes player model.
+1800D1CC0	Player Model Scale##chk_char_scale
+1800D1CE8	Player model scale multiplier.
+1800D1D08	Scale Factor##val_char_scale
+1800D1D28	Aniimo Model Scale
+1800D1D40	Resizes current Aniimo model.
+1800D1D60	Aniimo Model Scale##chk_aniimo_scale
+1800D1D88	Aniimo model scale multiplier.
+1800D1DA8	Aniimo Scale Factor##val_aniimo_scale
+1800D1DD0	Custom Warning
+1800D1DE0	Enable Warning Spawner##chk_warning
+1800D1E04	Title:
+1800D1E0C	Title
+1800D1E18	##warn_title
+1800D1E28	Subtitle:
+1800D1E38	Subtitle
+1800D1E48	##warn_sub
+1800D1E58	Duration (sec)##warn_dur
+1800D1E78	Spawn##sp_warn
+1800D1E88	Hide##hd_warn
+1800D1E98	Custom Input Window
+1800D1EB0	Enable Input Window##chk_input
+1800D1ED0	Prompt text:
+1800D1EE0	Prompt text
+1800D1EF0	##inp_prompt
+1800D1F00	Spawn##sp_input
+1800D1F10	Custom OK/NO Window
+1800D1F28	Enable Confirm Window##chk_confirm
+1800D1F50	Window Title:
+1800D1F60	Window Title
+1800D1F70	##conf_title
+1800D1F80	Question / Message:
+1800D1F98	Question / Message
+1800D1FB0	##conf_msg
+1800D1FC0	Spawn##sp_confirm
+1800D1FD8	Custom Marquee Msg
+1800D1FF0	Enable Marquee##chk_marquee
+1800D2010	Marquee text:
+1800D2020	Marquee text
+1800D2030	##mrq_text
+1800D2040	Duration (sec)##mrq_dur
+1800D2058	Spawn##sp_marquee
+1800D2070	Custom Msg
+1800D2080	Enable Message Tip##chk_msg
+1800D20A0	Message text:
+1800D20B0	Message text
+1800D20C0	##msg_text
+1800D20D0	Duration (sec)##msg_dur
+1800D20E8	Spawn##sp_msg
+1800D20F8	Custom Bubble Msg
+1800D2110	Enable Bubble##chk_bubble
+1800D2130	Bubble text:
+1800D2140	Bubble text
+1800D2150	##bubble_text
+1800D2160	Spawn##sp_bubble
+1800D2178	Hide##hd_bubble
+1800D2188	Custom Bubble Aniimo Msg
+1800D21A8	Enable Aniimo Bubble##chk_bubble_aniimo
+1800D21D0	Aniimo text:
+1800D21E0	Aniimo text
+1800D21F0	##bubble_aniimo_text
+1800D2208	Spawn##sp_bubble_aniimo
+1800D2220	Hide##hd_bubble_aniimo
+1800D2238	Custom Effect
+1800D2248	Enable Effect Spawner##chk_effect
+1800D2270	Effect Name:
+1800D2280	Effect Name
+1800D2290	##eff_name
+1800D22A0	Duration (sec)##eff_dur
+1800D22B8	%.1fx
+1800D22C0	Scale##eff_scale
+1800D22D8	Spawn##sp_effect
+1800D237B	L9+)I
+1800D2573	`aEdUw
+1800D265E	^nXib
+1800D26E9	<[-@S2
+1800D27AA	=X&0	
+1800D28A0	ms2q	
+1800D28EE	7#(XL
+1800D2A34	>;2TAd!
+1800D2A82	/Q{xY
+1800D2AB0	&Y"`I
+1800D2C07	,65	0
+1800D2CA9	e~eriF
+1800D2CC3	7rI9q,
+1800D2CF0	"%=I
+1800D2DA1	%siK
+1800D2DAC	MHA]V8T
+1800D2EBE	_O8z&
+1800D30B0	T*K+$
+1800D3138	player
+1800D3140	Players
+1800D3148	Players - 
+1800D315C	NPC - 
+1800D3178	Pets - 
+1800D3190	Loot - 
+1800D3198	%.0fm
+1800D31A8	Draw ESP boxes, names, distances and snaplines over entities.
+1800D31E8	Enable ESP##esp_enable
+1800D3200	Filters
+1800D3208	Show other players (marked as Players).
+1800D3230	  Players##esp_players
+1800D3248	Show NPCs (marked as NPC).
+1800D3268	  NPC##esp_npc
+1800D3278	Show pets (marked as Pets).
+1800D3298	  Pets##esp_pets
+1800D32B0	Show loot and items.
+1800D32C8	  Loot##esp_loot
+1800D32E0	Show all other world objects.
+1800D3300	  All Objects##esp_allobjs
+1800D3320	Display
+1800D3328	Draw 2D bounding box.
+1800D3340	  Box##esp_box
+1800D3350	Draw snaplines from bottom of screen to targets.
+1800D3388	  Lines##esp_lines
+1800D33A0	Draw entity name.
+1800D33B8	  Name##esp_name
+1800D33D0	Draw distance in metres.
+1800D33F0	  Distance##esp_dist
+1800D3408	ESP Colors
+1800D3418	##col_players
+1800D3428	##col_npc
+1800D3438	NPC / Monsters
+1800D3448	##col_pets
+1800D3458	Pets / Aniimo
+1800D3468	##col_loot
+1800D3478	Loot / Drops
+1800D3488	##col_text
+1800D3498	Text & Distance
+1800D34A8	Custom Line Color##chk_col_lines
+1800D34D0	##col_lines
+1800D34E0	Custom Box Color##chk_col_box
+1800D3500	##col_box
+1800D3510	Reset Colors to Default##rst_esp_colors
+1800D3538	Hide entities further than this distance.
+1800D3564	%.0f m
+1800D3570	Max Distance##esp_maxdist
+1800D3598	Insert
+1800D35A0	Delete
+1800D35B4	PageUp
+1800D35C0	PageDown
+1800D35D0	Space
+1800D35D8	Enter
+1800D35E8	0x%02X
+1800D35F0	Press...##%s
+1800D3600	%s##%s
+1800D3608	Click to bind, Esc to unbind
+1800D3628	GM Tools
+1800D3638	Debug Console##btn_gm_console
+1800D3658	bind_console
+1800D3668	Hierarchy##btn_gm_hierarchy
+1800D3688	bind_hierarchy
+1800D3698	Inspector##btn_gm_inspector
+1800D36B8	bind_inspector
+1800D36C8	AI Debug##btn_gm_aidebug
+1800D36E8	bind_aidebug
+1800D36F8	Ability Data Inspect##chk_gm_ability
+1800D3720	bind_ability
+1800D374C	[K1!;
+1800D388D	 BY'x<
+1800D38E9	nHj6a
+1800D38F8	[Shinoko][%02d:%02d:%02d.%03d] 
+1800D3920	C:\Shinoko\ShinokoTemplateAniimo\debug.log
+1800D3950	shinoko_debug.log
+1800D3968	[LUA] execute: no state
+
+1800D3988	[LUA] execute: no state
+1800D39D0	d first chunk)
+1800D39E0	[LUA] execute: no orig
+
+1800D39F8	[LUA] execute: no orig
+1800D3A10	[LUA] execute size=%zu
+
+1800D3A28	[LUA] execute size=%zu
+1800D3A40	[LUA] loadbuffer ret=%d
+
+1800D3A60	[LUA] loadbuffer ret=%d
+1800D3A78	<null>
+1800D3A80	[LUA] loadbuffer error: %s
+
+1800D3AA0	[LUA] loadbuffer error: %s
+1800D3AC0	[SYNTAX ERROR] loadbuffer: %s
+1800D3AE0	[LUA] pcall ret=%d
+
+1800D3AF8	[LUA] pcall ret=%d
+1800D3B10	[LUA] exec error: %s
+
+1800D3B28	[LUA] exec error: %s
+1800D3B40	[LUA ERROR] exec: %s
+1800D3B80	[LUA] RECURSION, bailing
+
+1800D3BA0	[LUA] RECURSION, bailing
+1800D3BC0	[LUA] captured state %p
+
+1800D3BE0	[LUA] captured state %p
+1800D3BF8	[LUA] Captured globalState = 0x%p
+1800D3C20	[ERROR] GetProcAddress(xluaL_loadbuffer) returned null
+1800D3C78	dbuffer) failed
+1800D3C90	[HOOK] Found xlua.dll!xluaL_loadbuffer at 0x%p. Attaching Detour...
+1800D3CD8	[ERROR] DetourAttach failed for xluaL_loadbuffer: %ld
+1800D3D50	[ERROR] DetourTransactionCommit failed for xluaL_loadbuffer: %ld
+1800D3DC8	_loadbuffer
+1800D3DD8	[HOOK] xlua.dll!xluaL_loadbuffer hooked at 0x%p
+1800D3E10	[HOOK] Found GameManager::CommonUpdate at 0x%p. Attaching Detour...
+1800D3E58	[ERROR] DetourAttach failed for GameManager::CommonUpdate: %ld
+1800D3EC8	monUpdate
+1800D3EE0	[ERROR] DetourTransactionCommit failed for GameManager::CommonUpdate: %ld
+1800D3F78	[HOOK] GameManager::CommonUpdate hooked at 0x%p
+1800D3FB0	[QUEUE] Queued script (%zu bytes) for GameManager::CommonUpdate
+1800D3FF0	[LUA] LuaExecutor::Start called
+1800D4010	Lua Script Editor
+1800D4028	##luascript_input
+1800D4040	Execute Script##lua_exec
+1800D4060	Copy##lua_copy
+1800D4070	Paste##lua_paste
+1800D4088	Clear Code##lua_clear
+1800D40A0	Copied to clipboard!
+1800D40B8	Executor Logs
+1800D40C8	Clear Logs##clear_logs
+1800D40E0	Copy Logs##copy_logs
+1800D4100	Auto-scroll##lua_autoscroll
+1800D4120	Filter##lua_log_filter
+1800D4138	##lua_log_window
+1800D414C	[HOOK]
+1800D4158	[ERROR]
+1800D4160	[SYNTAX ERROR]
+1800D4170	[LUA ERROR]
+1800D417C	[EXEC]
+1800D4184	[LUA]
+1800D4190	[QUEUE]
+1800D41A8	deque<T> too long
+1800D4270	No modules registered.
+1800D4288	##MainListbox
+1800D4298	##MainChild
+1800D42A8	Shinoko-Aniimo
+1800D4378	GamepadFaceLeft
+1800D4388	GamepadFaceRight
+1800D43A0	GamepadFaceUp
+1800D43B0	GamepadFaceDown
+1800D43C0	GamepadDpadLeft
+1800D43D0	GamepadDpadRight
+1800D43E8	GamepadDpadUp
+1800D43F8	GamepadDpadDown
+1800D4408	GamepadL1
+1800D4418	GamepadR1
+1800D4428	GamepadL2
+1800D4438	GamepadR2
+1800D4448	GamepadL3
+1800D4458	GamepadR3
+1800D4468	GamepadLStickLeft
+1800D4480	GamepadLStickRight
+1800D4498	GamepadLStickUp
+1800D44A8	GamepadLStickDown
+1800D44C0	GamepadRStickLeft
+1800D44D8	GamepadRStickRight
+1800D44F0	GamepadRStickUp
+1800D4500	GamepadRStickDown
+1800D4518	MouseLeft
+1800D4528	MouseRight
+1800D4538	MouseMiddle
+1800D4548	MouseX1
+1800D4550	MouseX2
+1800D4558	MouseWheelX
+1800D4568	MouseWheelY
+1800D4578	ModCtrl
+1800D4580	ModShift
+1800D458C	ModAlt
+1800D4598	ModSuper
+1800D45A4	Super+
+1800D45B4	Shift+
+1800D45BC	Ctrl+
+1800D45C8	%s%s%s%s%s
+1800D45E0	SetShortcutRouting(%s, flags=%04X, owner_id=0x%08X) -> always, no register
+
+1800D4630	SetShortcutRouting(%s, flags=%04X, owner_id=0x%08X) -> filtered as potential char input
+
+1800D4690	SetShortcutRouting(%s, flags=%04X, owner_id=0x%08X) -> score %d
+
+1800D46D8	--> granting current route
+
+1800D4700	[io] LockWheelingWindow() "%s"
+
+1800D4720	Mouse
+1800D4728	TouchScreen
+1800D4738	[io] %s: MousePos (-FLT_MAX, -FLT_MAX)
+
+1800D4760	[io] %s: MousePos (%.1f, %.1f) (%s)
+
+1800D4798	[io] %s: MouseButton %d %s (%s)
+
+1800D47C0	[io] %s: MouseWheel (%.3f, %.3f) (%s)
+
+1800D47E8	[io] %s: Key "%s" %s
+
+1800D4800	[io] %s: Text: %c (U+%08X)
+
+1800D4820	[io] %s: AppFocused %d
+
+1800D4838	Processed
+1800D4848	Remaining
+1800D4860	Code uses SetCursorPos()/SetCursorScreenPos() to extend window/parent boundaries.
+Please submit an item e.g. Dummy() afterwards in order to grow window/parent boundaries.
+1800D4910	Missing EndTable()
+1800D4928	Missing EndChild()
+1800D4940	Missing End()
+1800D4950	Missing EndTabBar()
+1800D4968	Missing EndMultiSelect()
+1800D4988	Missing EndMenuBar()
+1800D49A0	Missing TreePop()
+1800D49B8	Missing EndGroup()
+1800D49D0	Missing PopID()
+1800D49E0	Missing EndDisabled()
+1800D49F8	Missing PopStyleColor()
+1800D4A10	Missing PopItemFlag()
+1800D4A28	Missing PopStyleVar()
+1800D4A40	Missing PopFont()
+1800D4A58	Missing PopFocusScope()
+1800D4A70	[imgui-error] (current settings: Assert=%d, Log=%d, Tooltip=%d)
+
+1800D4AB8	[imgui-error] In window '%s': %s
+
+1800D4AE0	In window '%s': %s
+1800D4AF8	(and more errors)
+1800D4B10	Programmer error: %d visible items with conflicting ID!
+1800D4B50	Code should use PushID()/PopID() in loops, or append "##xx" to same-label identifiers!
+1800D4BB0	Empty label e.g. Button("") == same ID as parent widget/node. Use Button("##xx") instead!
+1800D4C10	Set io.ConfigDebugHighlightIdConflicts=false to disable this warning in non-programmers builds.
+1800D4C70	(Hold CTRL to: use 
+1800D4C88	Item Picker
+1800D4C98	 to break in item call-stack, or 
+1800D4CC0	(Hold CTRL to 
+1800D4CD0	Open FAQ->About ID Stack System
+1800D4CF0	https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#qa-usage
+1800D4D38	(Hold CTRL to:
+1800D4D48	Enable Asserts
+1800D4D60	##Tooltip_Error
+1800D4D70	MESSAGE FROM DEAR IMGUI
+1800D4D88	Calling PopItemWidth() too many times!
+1800D4DB0	##Tooltip_DragDrop_%02d
+1800D4DC8	##Tooltip_%02d
+1800D4DD8	[popup] OpenPopup("%s" -> 0x%08X)
+
+1800D4E00	[popup] OpenPopupEx(0x%08X)
+
+1800D4E20	<NULL>
+1800D4E28	[popup] ClosePopupsOverWindow("%s")
+
+1800D4E50	[popup] ClosePopupToLevel(%d), restore_under=%d
+
+1800D4E88	[popup] - Closing PopupID 0x%08X Window "%s"
+
+1800D4EB8	[popup] CloseCurrentPopup %d -> %d
+
+1800D4EE0	##Popup_%08x
+1800D4EF0	Calling EndPopup() too many times or in wrong window!
+1800D4F30	[focus] FocusWindow("%s", UnlessBelowModal): prevented by "%s".
+
+1800D4F78	[focus] SetNavWindow("%s")
+
+1800D4F98	[focus] NavRestoreLayer: from "%s" to SetNavWindow("%s")
+
+1800D4FE0	[nav] NavInitRequest: from NavInitWindow(), init_for_nav=%d, window="%s", layer=%d
+
+1800D5040	[nav] NavInitRequest: ApplyResult: NavID 0x%08X in Layer %d Window "%s"
+
+1800D5090	[nav] NavMoveRequestForward %d
+
+1800D50B0	[nav] NavInitRequest: from move, window "%s", layer=%d
+
+1800D50E8	[nav] NavMoveRequest: clamp NavRectRel for gamepad move
+
+1800D5128	[nav] NavMoveSubmitted but not led to a result!
+
+1800D5160	[focus] NavMoveRequest: SetNavWindow("%s")
+
+1800D5190	[nav] NavMoveRequest: result NavID 0x%08X in Layer %d Window "%s"
+
+1800D51D8	[nav] NavUpdateCancelRequest()
+
+1800D5200	##NavUpdateWindowing
+1800D5218	##MainMenuBar
+1800D5230	##NavWindowingOverlay
+1800D5248	[dragdrop] ClearDragDrop()
+
+1800D5268	##Tooltip_Hidden
+1800D5280	[dragdrop] BeginDragDropSource() DragDropActive = true, source_id = 0x%08X%s
+
+1800D52D0	[dragdrop] AcceptDragDropPayload(): 0x%08X: payload delivery
+
+1800D5318	%*s%.*s
+1800D5328	Pos=%i,%i
+1800D5338	Size=%i,%i
+1800D5348	Collapsed=%d
+1800D5358	IsChild=%d
+1800D5368	[%s][%s]
+
+1800D5378	IsChild=1
+
+1800D5388	Size=%d,%d
+
+1800D5398	Pos=%d,%d
+
+1800D53A8	Collapsed=1
+
+1800D53D0	stb_truetype
+1800D53E0	Clear
+1800D53F8	[%s] [%05d] 
+1800D5408	[%05d] 
+1800D5418	HoveredId: 0x%08X
+1800D5430	Press ESC to abort picking.
+1800D5454	Right
+1800D545C	Middle
+1800D5470	Remap w/ Ctrl+Shift: click anywhere to select new mouse button.
+1800D54B0	Click %s Button to break in debugger! (remap w/ Ctrl+Shift)
+1800D54F8	(void*)0x%p
+1800D5508	0x%08X [override]
+1800D585A	$
+Y8O
+1800D5896	*	5|z
+1800D58C2	lEd/
+1800D5900	k2U
+1800D593A	pCRF
+1800D59D0	~TI
+1800D5A12	
+Yg:a
+1800D5A1D	JZJ{.
+1800D605C	@OS/2
+1800D606B	,Ncmap
+1800D607B	$Rcvt 
+1800D60BA	;$hmtx
+1800D60EA	, name%Y
+1800D610C	prepi
+1800D61A5	+Alts
+1800D62FC	8~
+1800D6302	Nl
+1800D63B9	$J$h$
+1800D63D8	(
+(h(
+1800D63E6	*6*`*`+
+1800D63EE	+*+^+
+1800D63F6	, ,4,
+1800D63FC	-(-\-x-
+1800D642C	6&6r6
+1800D6466	BB@BzB
+1800D6619	/B 3
+1800D666F	 DM
+1800D66C8	B#
+1800D66ED	D3 F;
+1800D670F	
+AM
+A
+1800D6750	B	 
+1800D676A	G*D3A
+1800D677A	'BQ 
+1800D67F5	
+DaB
+1800D685C	D]DUL
+1800D68CC	 C)	"
+1800D69B6	D 1N
+1800D69CA	?AWI
+1800D6B11	H7GW
+1800D6B63	N/(AO
+1800D6BB0	A	 A9
+1800D6BBB	IOCDw
+1800D6BC2	 3ZK
+1800D6C28	IeDU
+1800D6C5B	aJ!A
+1800D6C89	Nc	H
+1800D6C8F	Mn1Y?
+1800D6C96	P[#c? F
+1800D6CA4	
+An$ 
+1800D6CB2	3BWH9J-
+1800D6D0B	X%	B|$HA
+1800D6D27	G Z
+1800D6D42	BoC
+1800D6D62	]-Mc	
+1800D6DA4	A#4A
+1800D6E74	 /JKE
+1800D6EEE	~Aa% 
+1800D6F18	B,B8
+1800D6F20	D|&C
+1800D6F34	?"!53Gy 
+1800D6F52	k{qs	!
+1800D6F5F	IgB3
+1800D6FBF	'CU	A
+1800D701A	HO#Cq
+1800D7026	.AY4I
+1800D7062	BCP+
+1800D70E1	 uoK8	T
+1800D7113	AO*AGI7v
+1800D7147	GG)\U
+1800D7153	n
+T}ks
+1800D71B5	L{c
+1800D7210	iiLz
+1800D7233	C?$";
+1800D7239	?M;	w
+1800D7247	CKQJ
+1800D7327	
+aI1 
+1800D732D	R:]PaQ
+1800D7360	3Z5
+Na
+1800D7388	-B($B;
+1800D73BA	B/Hb
+1800D73FC	Fp 
+1800D741C	~wZ	Bu
+1800D742A	@/;!
+1800D746E	xF%
+D
+
+1800D74C9	Syu	WYBgF
+1800D74E9	&A3k
+1800D7521	CAJo 
+1800D763C	K	EU	_
+1800D76EF		B+m
+1800D77C6	Mc'_A$Cm
+1800D77FE	BG
+1800D7832	 #jwF
+1800D784F	[k 
+1800D78B7	Xo1 WB
+1800D78C1	{KG
+1800D7929	H_UGHsI@
+1800D79BC	Oa; !p?
+A
+1800D7B3E	
+C>$rs
+1800D7B5C	A3" 7OK	 3J
+A9&
+1800D7BD4	B=[i
+1800D7BF2	(EFB
+1800D7BFC	`kDw
+1800D7C21	$M3	a/
+1800D7C89	"C8!	
+1800D7CA7	%Z'B
+1800D7D61	CsW	k
+1800D7D84	pc
+AGI
+1800D7E42	Bs'Kk
+1800D7E76	!`{
+1800D7E91	t/2 Wjc	t1
+1800D7F8D	I37mM
+1800D7F95	DCL
+1800D7FBA	]Az
+1800D7FC0	Mfnx
+1800D8029	&|/1_
+1800D8067	' Kj3q
+1800D8077	suE/ 
+1800D807F	mL	fm	 
+1800D80B8	X/0B5
+1800D80EE	BK!qg	W
+1800D8119	c.X;+
+1800D813B	^/,L3
+1800D81F7	5by Tristan GrimmerRegularTTX ProggyCleanTT2004/
+1800D8496	unicode#0x0001
+1800D851D	delete
+1800D86C0	..-         -XXXXXXX-    X    -           X           -XXXXXXX          -          XXXXXXX-     XX          - XX       XX ..-         -X.....X-   X.X   -          X.X          -X.....X          -          X.....X-    X..X         -X..X     X..X---         -XXX.XXX-  X...X  -         X...X         -X....X           -           X....X-    X..X         -X...X   X...XX           -  X.X  - X.....X -        X.....X        -X...X            -            X...X-    X..X         - X...X X...X XX          -  X.X  -X.......X-       X.......X       -X..X.X           -           X.X..X-    X..X         -  X...X...X  X.X         -  X.X  -XXXX.XXXX-       XXXX.XXXX       -X.X X.X          -          X.X X.X-    X..XXX       -   X.....X   X..X        -  X.X  -   X.X   -          X.X          -XX   X.X         -         X.X   XX-    X..X..XXX    -    X...X    X...X       -  X.X  -   X.X   -    XX    X.X    XX    -      X.X        -        X.X      -    X..X..X..XX  -     X.X     X....X      -  X.X  -   X.X   -   X.X    X.X    X.X   -       X.X       -       X.X       -    X..X..X..X.X -    X...X    X.....X     -  X.X  -   X.X   -  X..X    X.X    X..X  -        X.X      -      X.X        -XXX X..X..X..X..X-   X.....X   X......X    -  X.X  -   X.X   - X...XXXXXX.XXXXXX...X -         X.X   XX-XX   X.X         -X..XX........X..X-  X...X...X  X.......X   -  X.X  -   X.X   -X.....................X-          X.X X.X-X.X X.X          -X...X...........X- X...X X...X X........X  -  X.X  -   X.X   - X...XXXXXX.XXXXXX...X -           X.X..X-X..X.X           - X..............X-X...X   X...XX.........X -XXX.XXX-   X.X   -  X..X    X.X    X..X  -            X...X-X...X            -  X.............X-X..X     X..XX..........X-X.....X-   X.X   -   X.X    X.X    X.X   -           X....X-X....X           -  X.............X- XX       XX X......XXXXX-XXXXXXX-   X.X   -    XX    X.X    XX    -          X.....X-X.....X          -   X............X--------------X...X..X    ---------   X.X   -          X.X          -          XXXXXXX-XXXXXXX          -   X...........X -             X..X X..X   -       -XXXX.XXXX-       XXXX.XXXX       -------------------------------------    X..........X -             X.X  X..X   -       -X.......X-       X.......X       -    XX           XX    -           -    X..........X -             XX    X..X  -       - X.....X -        X.....X        -   X.X           X.X   -           -     X........X  -                   X..X  -       -  X...X  -         X...X         -  X..X           X..X  -           -     X........X  -                    XX   -       -   X.X   -          X.X          - X...XXXXXXXXXXXXX...X -           -     XXXXXXXXXX  -             -------------       -    X    -           X           -X.....................X-           -------------------                                 ----------------------------------- X...XXXXXXXXXXXXX...X -                                                                                                 -  X..X           X..X  -                                                                                                 -   X.X           X.X   -                                                                                                 -    XX           XX    -                                           
+1800D95A0	<unknown>
+1800D95B0	*Missing Text*
+1800D95C0	imgui.ini
+1800D95D0	imgui_log.txt
+1800D95E0	[io] Super+Left Click aliased into Right Click
+
+1800D9610	(null)
+1800D9618	Calling PopStyleColor() too many times!
+1800D9640	Calling PushStyleVar() variant with wrong type!
+1800D9670	Calling PopStyleVar() too many times!
+1800D9698	Unknown
+1800D96A0	Dear ImGui 1.92.4 (19240)
+1800D96C0	Size column to fit###SizeOne
+1800D96E0	Size all columns to fit###SizeAll
+1800D9708	Size all columns to default###SizeAll
+1800D9730	Reset order###ResetOrder
+1800D9750	(Main menu bar)
+1800D9760	(Popup)
+1800D9768	(Untitled)
+1800D9778	Open '%s'
+1800D9788	Copy Link###CopyLink
+1800D97A0	Window
+1800D97A8	Forgot to shutdown Platform backend?
+1800D97D0	Forgot to shutdown Renderer backend?
+1800D97F8	#MOVE
+1800D9800	SetActiveID() cancel MovingWindow
+
+1800D9830	SetActiveID() old:0x%08X (window "%s") -> new:0x%08X (window "%s")
+
+1800D9878	Invalid flags for IsItemHovered()!
+1800D98A0	##Background
+1800D98B0	##Foreground
+1800D98C0	NewFrame(): ClearActiveID() because it isn't marked alive anymore!
+
+1800D9910	(Debug Log: Auto-disabled some ImGuiDebugLogFlags after 2 frames)
+
+1800D9958	Debug##Default
+1800D9968	Forgot to call ImGui::NewFrame()?
+1800D9990	[io] Calling Platform_SetImeDataFn(): WantVisible: %d, InputPos (%.2f,%.2f)
+
+1800D99E8	%s/%s_%08X
+1800D99F8	%s/%08X
+1800D9A00	##Child
+1800D9A08	#RESIZE
+1800D9A10	#COLLAPSE
+1800D9A20	Calling End() too many times!
+1800D9A40	Must call EndChild() and not End()!
+1800D9A68	Calling PopItemFlag() too many times!
+1800D9A90	Calling EndDisabled() too many times!
+1800D9AB8	Calling PopTextWrapPos() too many times!
+1800D9AE8	Calling PopFocusScope() too many times!
+1800D9B10	Calling PopFont() too many times!
+1800D9B38	Calling PopID() too many times!
+1800D9B58	LeftArrow
+1800D9B68	RightArrow
+1800D9B78	UpArrow
+1800D9B80	DownArrow
+1800D9B90	Backspace
+1800D9B9C	Escape
+1800D9BA8	LeftCtrl
+1800D9BB8	LeftShift
+1800D9BC8	LeftAlt
+1800D9BD0	LeftSuper
+1800D9BE0	RightCtrl
+1800D9BF0	RightShift
+1800D9C00	RightAlt
+1800D9C10	RightSuper
+1800D9D18	Apostrophe
+1800D9D24	Comma
+1800D9D2C	Minus
+1800D9D34	Period
+1800D9D3C	Slash
+1800D9D48	Semicolon
+1800D9D54	Equal
+1800D9D60	LeftBracket
+1800D9D70	Backslash
+1800D9D80	RightBracket
+1800D9D90	GraveAccent
+1800D9DA0	CapsLock
+1800D9DB0	ScrollLock
+1800D9DC0	NumLock
+1800D9DC8	PrintScreen
+1800D9DD4	Pause
+1800D9DE0	Keypad0
+1800D9DE8	Keypad1
+1800D9DF0	Keypad2
+1800D9DF8	Keypad3
+1800D9E00	Keypad4
+1800D9E08	Keypad5
+1800D9E10	Keypad6
+1800D9E18	Keypad7
+1800D9E20	Keypad8
+1800D9E28	Keypad9
+1800D9E30	KeypadDecimal
+1800D9E40	KeypadDivide
+1800D9E50	KeypadMultiply
+1800D9E60	KeypadSubtract
+1800D9E70	KeypadAdd
+1800D9E80	KeypadEnter
+1800D9E90	KeypadEqual
+1800D9EA0	AppBack
+1800D9EA8	AppForward
+1800D9EB4	Oem102
+1800D9EC0	GamepadStart
+1800D9ED0	GamepadBack
+1800D9F30	Backend does not support ImGuiBackendFlags_RendererHasTextures, and font atlas is not built! Update backend OR make sure you called ImGui_ImplXXXX_NewFrame() function for renderer backend, which should call io.Fonts->GetTexDataAsRGBA32() / GetTexDataAsAlpha8().
+1800DA040	Called ImFontAtlas::Build() before ImGuiBackendFlags_RendererHasTextures got set! With new backends: you don't need to call Build().
+1800DA0C8	ProggyClean.ttf
+1800DA0D8	While loading '%s'
+
+1800DA0F0	Could not load font file!
+1800DA110	[font] Created baked %.2fpx
+
+1800DA130	[font] Discard baked %.2f for "%s"
+
+1800DA160	[font] Texture #%03d: resize+repack %dx%d => Texture #%03d: %dx%d
+
+1800DA1A8	[font] Texture #%03d: resize failed. Will grow.
+
+1800DA1E0	[font] Failed packing %dx%d rectangle. Returning fallback.
+
+1800DA220	[font] Texture #%03d: create %dx%d
+
+1800DA250	[font] Texture #%03d: destroy %dx%d, texid=0x%I64X, backend_data=%p
+
+1800DA2A0	[font] Texture #%03d: update %d regions, texid=0x%I64X, backend_data=0x%I64X
+
+1800DA2F0	stbtt_GetFontOffsetForIndex(): FontData is incorrect, or FontNo cannot be found.
+1800DA350	stbtt_InitFont(): failed to parse FontData. It is correct and complete? Check FontDataSize.
+1800DA3D0	EndTable() call should only be done while in BeginTable() scope!
+1800DA418	Mismatching PushID/PopID!
+1800DA438	Too many PopItemWidth!
+1800DA458	##ContextMenu
+1800DA468	<Unknown>
+1800DA478	0x%08X,%d
+1800DA488	RefScale=%f
+1800DA498	Column %d%n
+1800DA4A8	UserID=0x%08X%n
+1800DA4B8	Width=%d%n
+1800DA4C8	Weight=%f%n
+1800DA4D8	Visible=%d%n
+1800DA4E8	Order=%d%n
+1800DA4F8	Sort=%d%c%n
+1800DA508	[%s][0x%08X,%d]
+
+1800DA520	RefScale=%g
+
+1800DA530	Column %-2d
+1800DA540	 UserID=%08X
+1800DA550	 Weight=%.4f
+1800DA560	 Width=%d
+1800DA570	 Visible=%d
+1800DA580	 Order=%d
+1800DA590	 Sort=%d%c
+1800DA59C	Table
+1800DA5B0	#SCROLLX
+1800DA5C0	#SCROLLY
+1800DA5E8	--------------------------------
+
+1800DA610	##ComboPopup
+1800DA628	##Combo_%02d
+1800DA658	%I64d
+1800DA664	%I64u
+1800DA66C	float
+1800DA674	double
+1800DA688	char*
+1800DA6AC	R:%3d
+1800DA6B4	G:%3d
+1800DA6BC	B:%3d
+1800DA6C4	A:%3d
+1800DA6CC	H:%3d
+1800DA6D4	S:%3d
+1800DA6DC	V:%3d
+1800DA6E4	%0.3f
+1800DA6F0	R:%0.3f
+1800DA6F8	G:%0.3f
+1800DA700	B:%0.3f
+1800DA708	A:%0.3f
+1800DA710	H:%0.3f
+1800DA718	S:%0.3f
+1800DA720	V:%0.3f
+1800DA728	M:0.000
+1800DA730	M:000
+1800DA738	context
+1800DA740	#%02X%02X%02X%02X
+1800DA758	#%02X%02X%02X
+1800DA768	##Text
+1800DA770	%02X%02X%02X%02X
+1800DA788	%02X%02X%02X
+1800DA798	##ColorButton
+1800DA7A8	picker
+1800DA7B0	##picker
+1800DA7BC	_COL3F
+1800DA7C4	_COL4F
+1800DA7D8	alpha
+1800DA7E0	Current
+1800DA7E8	##current
+1800DA7F8	Original
+1800DA808	##original
+1800DA814	##rgb
+1800DA81C	##hsv
+1800DA824	##hex
+1800DA82C	Color
+1800DA838	##preview
+1800DA848	#%02X%02X%02X
+R: %d, G: %d, B: %d
+(%.3f, %.3f, %.3f)
+1800DA880	#%02X%02X%02X%02X
+R:%d, G:%d, B:%d, A:%d
+(%.3f, %.3f, %.3f, %.3f)
+1800DA8C8	H: %.3f, S: %.3f, V: %.3f
+1800DA8E8	H: %.3f, S: %.3f, V: %.3f, A: %.3f
+1800DA918	0..255
+1800DA920	0.00..1.00
+1800DA930	Copy as..
+1800DA940	(%.3ff, %.3ff, %.3ff, %.3ff)
+1800DA960	(%d,%d,%d,%d)
+1800DA970	##selectable
+1800DA980	##previewing_picker
+1800DA998	Alpha Bar
+1800DA9A8	SelectAll
+1800DA9B8	[selection] %s: Request: SetAll %d (= %s)
+
+1800DA9F0	[selection] %s: Request: SetRange %I64d..%I64d (0x%I64X..0x%I64X) = %d (dir %d)
+
+1800DAA48	EndMultiSelect() FocusScope mismatch!
+1800DAA70	[selection] EndMultiSelect: Reset RangeSrcItem.
+
+1800DAAA8	[selection] EndMultiSelect: Reset NavIdItem.
+
+1800DAAD8	EndMultiSelect
+1800DAAF0	Mismatched BeginTabBar()/EndTabBar()!
+1800DACC0	cbuffer vertexBuffer : register(b0)             {              float4x4 ProjectionMatrix;             };            struct VS_INPUT            {              float2 pos : POSITION;              float4 col : COLOR0;              float2 uv  : TEXCOORD0;            };                        struct PS_INPUT            {              float4 pos : SV_POSITION;              float4 col : COLOR0;              float2 uv  : TEXCOORD0;            };                        PS_INPUT main(VS_INPUT input)            {              PS_INPUT output;              output.pos = mul( ProjectionMatrix, float4(input.pos.xy, 0.f, 1.f));              output.col = input.col;              output.uv  = input.uv;              return output;            }
+1800DAFA0	struct PS_INPUT            {            float4 pos : SV_POSITION;            float4 col : COLOR0;            float2 uv  : TEXCOORD0;            };            sampler sampler0;            Texture2D texture0;                        float4 main(PS_INPUT input) : SV_Target            {            float4 out_col = input.col * texture0.Sample(sampler0, input.uv);             return out_col;             }
+1800DB134	vs_4_0
+1800DB148	POSITION
+1800DB158	TEXCOORD
+1800DB164	COLOR
+1800DB16C	ps_4_0
+1800DB178	imgui_impl_dx11
+1800DB1B8	imgui_impl_win32
+1800DB1D0	xinput1_4.dll
+1800DB1E0	xinput1_3.dll
+1800DB1F0	xinput9_1_0.dll
+1800DB200	xinput1_2.dll
+1800DB210	xinput1_1.dll
+1800DB220	XInputGetCapabilities
+1800DB238	XInputGetState
+1800DB463	b7[*C>
+1800DB568	hw&Df
+1800DB592	zrcL5
+1800DB657	Z8u6+
+1800DB764	(AJi8
+1800DB7BC	63C?m
+1800DBB89	!zI]V
+1800DBCA9	mWs{RA
+1800DBD24	~
+cT<
+1800DBD9C	r ZX
+1800DBDCC	qMOoL{Th
+1800DBED1	"7~B
+1800DC064	`*xwU2(8
+1800DC102	$G3e&
+1800DC284	=TQ/y
+1800DC2A0	Z1rhp
+1800DC35A	LirB4
+1800DC46D	?,1Vu'X
+1800DC475	FJR6~H2x
+1800DC4F0	[o#qfA
+1800DC588	;x6P(
+1800DC5B4	c1s=
+1800DC61A	[RqAIu
+1800DC7A1	cSTXv
+1800DC86A	R`
+jy
+1800DC8B8	I+t#	
+1800DC96A	"yFm^
+1800DC9A7	K<\-B
+1800DCA42	L.N	Dg
+1800DCA4B	o:R($
+1800DCA52	d~<h`
+1800DCA90	x=Pwf
+1800DCAF1	?W[&Y%
+1800DCB86	"+ &-{
+1800DCBE7	5d?L}
+1800DCC8B	M+Sa
+1800DCD8D	Kvyx
+1800DCDA5	a4.*Y
+1800DCE53	l4,0.D@
+1800DCEB6	7-QoW
+1800DCF2F	5pu6}
+1800DCF90	Gx4;|
+1800DD060	^%#S95
+1800DD074	4i~ :.
+1800DD19E	 Wk-Z
+1800DD21E	JCt@Ml
+1800DD26B	:V"+EQ]
+1800DD2E0	_8h6\
+1800DD379	v+bu!
+1800DD38F	GN0H#
+1800DD511	e	uGI
+1800DD554	
+\@A0
+1800DD5B0	~YaOK
+1800DD651	S6z %t2
+1800DD689	;T[{?-
+1800DD730	.#1eY+
+1800DD883	O9jCU
+1800DDA5B	#nUS?A
+1800DDA67	+IG*pO
+1800DDA74	)ue1
+
+1800DDB27	D|(WT
+1800DDB69	4*'r%
+1800DDC55	ed L7
+1800DDCAC	.+H;
+1800DDEA6	+sFk)@=q
+1800DE04D	bA$	;n|
+1800DE071	[o=S
+1800DE28C	FMqb\
+1800DE2B0	S9Pv
+1800DE379	qzTm=
+1800DE399	EUjP.A
+1800DE42C	6nlb1
+1800DE44A	#&:h+
+1800DE4AA	pqXey}
+1800DE5CA	^qyA>"E
+1800DE740	!>Qj3f
+1800DE7A8	syK&):
+1800DE878	`VeL
+
+1800DE8CD	!cGa=X
+1800DE90C	zkSu'
+1800DE9D8	rqUaN
+1800DEA49	 *FLD!
+1800DEA72	#a$9%E
+1800DEBC8	~GeUo[
+1800DEC8F	W]u+a
+1800DED76	~+`41/
+1800DED8B	2%9qI
+1800DEE27	odv)&{
+1800DEE47	,`Jd 
+1800DEE91	;Dgrz
+1800DEEA3	{"l\v
+1800DEF8A		<.p|
+1800DF072	S!$h8@
+1800DF0FA	Nqo1
+1800DF17E	07S&
+1800DF1B4	=OQgz
+1800DF472	(	 xR
+1800DF48C	bPL=O
+1800DF4A7	Ej/9s"
+1800DF5AE	^'!	k
+1800DF64E	X]`"8H
+1800DF66B	Y&nief\
+1800DF6D8	2-,O 
+1800DF814	vUq{N
+1800DF866	e0GA
+1800DF8AC	C`RuM\
+1800DF998	;|eqA
+1800DFAA0	LiIjR
+1800DFB88	'b(k`
+1800DFBBE	V@14t3
+1800DFBEB	lP?O_#
+1800DFC20	C);z0iBW
+1800DFC5A	,~`a
+1800DFC71	!@8lH
+_]TN>|
+1800DFC7F	W$=.r F'f
+1800DFC8D	1noJj
+1800DFD8D	m;kvq
+1800DFD93	/9(+?r
+1800DFD9B	xf8t7
+1800DFE11	|>_aspo
+1800DFF4F	fS">m
+1800E0023	
+J*_N
+1800E003A	pHZa
+1800E0192	0Qd*8
+1800E038A	Nl0@t
+1800E040A		o|"!
+1800E0496	wH7cR_&mv|
+1800E056B	(l:)#
+1800E0585	zj7Wt
+1800E0591	"Z.B>
+1800E084E	l2$r>
+1800E085D	#hiHqT(
+1800E0983	`51,s ~
+1800E0AE9	$B,s
+1800E0B7D	3Adh 
+1800E0B9C	(=kWJn
+1800E0BA9	K"vQ
+1800E0C96	p_sc%
+1800E0D95	AO;\y
+1800E0E6E	2@UV8C
+1800E1053	3&1u'
+1800E107F	KhW+s
+1800E1197	AQ*W$[^V
+1800E11CF	7\t}6K
+1800E1320	+wmky/
+1800E1354	(jBz	MJ
+1800E1386	If.X
+1800E1452	-{d3_C
+1800E145B	#QM<^/z
+1800E14B0	aDOw
+1800E1546	2t/Tx
+1800E155C	%ADv
+1800E15BF	od4	3
+1800E1696	U}g*A
+1800E174A	C	T
+}
+1800E1808	cRtxu
+1800E1857	"`l&(
+1800E1871	XZU4B
+1800E188F	hpN)
+1800E1995	3nU1&2
+1800E19D8	V:mow
+1800E1A6C	:c3s
+1800E1AA1	w{kRq
+1800E1AC8	-vM F
+1800E1B4F	 9HZ>V`
+1800E1BC9	j4E6gs
+1800E1C4D	\):(Fnl
+1800E1C69	XPh t
+1800E1D8F	K*qTA
+1800E1DC4	Mmkd<6
+1800E1E5A	,5*Q^x
+1800E1F45	$
+39
+1800E1FA0	:|lr
+1800E1FEC	 6mI	
+1800E2061	qQC}?
+1800E212A	I.[2=:
+1800E2193	Ey62:.
+1800E21B4	u_'7B
+1800E225D	#Q1	qm
+1800E2266	AyLpu
+1800E23AC	P"s\)!
+1800E2441	2&
+1800E248B	qc_v|]m+k
+1800E25C9	vw}_0{
+1800E269F	'~iY|
+1800E2799	b)38/UW
+1800E2845	e{	f
+1800E28AA	Voi$n
+1800E2981	N'1$b
+1800E29AE	nkp~g
+1800E2BDA	(G8g!o
+1800E2C76	:s3h^
+1800E2C81	'nkx5
+1800E2CDD	a(IKy&
+1800E2DC4	PNL5>
+1800E2E46	3o~+K>9
+1800E301A	wTjE+
+1800E30E2	C{6KI
+1800E31D6	&'	}s
+1800E3282	4xDf&
+1800E32A2	F`{j
+1800E3382	rD|b
+1800E33D2	3{0Qa
+1800E3428	
+uOxnY
+1800E3446	cn~
+1800E3513	62P*>}h
+1800E35AB	4a/
+1800E365D	`)'QI
+1800E36B0	_,hw0(
+1800E37C4	",%9I
+1800E37ED	U+y2J
+1800E394E	PHd~f
+1800E3A81	S>ct
+1800E3B57	\% ;D
+1800E3BD2	mJ')
+1800E3C10	fVojK]
+1800E3C40	kU@C$
+1800E3C47	g/Q3
+1800E3C7B	mle
+Y
+1800E3D47	@">V
+1800E3DAC	<;w[H
+1800E3DE1	gAWEI1
+1800E3F51	0I6Q
+1800E3F8D	1qZw~
+1800E3FBB	W+^'
+1800E4092	5zV\L
+1800E4282	3PNL4o
+1800E4370	nW^BF{
+1800E444D	PNbJUd
+1800E44F6	K}S;1
+1800E4582	,	L!0>X
+1800E45CA	;A{#
+=\
+1800E45EA	<hPxE
+1800E470C	1>Mjm
+1800E4754	1cJ5
+1800E4827	D8pF
+1800E489A	}<Z6~{U4
+1800E4963	!CLzP
+1800E49DB	jW~h;
+1800E4A46	)s%
+1800E4BA9	"T*r'
+1800E4BB0	,AB8I
+1800E4C57	/L'!q
+1800E4E3A	>AheQoN
+1800E4E6E	O1eg3_v6
+1800E4E92	Ew+rd0
+1800E4F88	O=e
+1800E50D6	HA[
+1800E515C	 pNi^
+1800E51A4	>da?z
+1800E5261	'!^[
+1800E5389	@jG(6}5
+1800E53EF	ok>*s
+1800E5497	gT_q
+1800E5665	et/U)f
+1800E5730	_Hopw
+1800E5772	E-}:Xz
+1800E578D	V!	g8
+1800E5799	pOkt
+1800E57A5	%+93N
+1800E5856	F#PW&$
+1800E5875	:hb|
+1800E593B	L+j1&
+1800E59D8	y4E2|:
+1800E5A98	om' \s
+1800E5B5E	}~[aVF
+1800E5C23	eHI"
+1800E5C41	S- @
+1800E5C67	G%^=E
+1800E5C73	mPQ5W
+1800E5D87	']/{T
+1800E5DE1	bwI-
+1800E5E64	$2Jq&
+1800E5F2B	_sAo
+1800E5F31		vP!Z
+1800E5FA0	y?P]+*
+1800E624A	yY)T1
+1800E625F	?BMCwjI
+1800E6373	|=rM8B
+1800E63A1	0_Sf9
+1800E63B6	1$]
+bs
+1800E63C1	y5'vwh
+1800E6449	ilI'!U{
+1800E6486	,gv$;
+1800E64CE	>r/Ln
+1800E6558	(dmxa
+1800E6716	WlkN	
+1800E683A	f~+*
+1800E6BB0	acosf
+1800E6D2F	?y2@#
+1800E6D37	?xMW
+1800E6EBF	?%J9M
+1800E6EF7	?S^>#/
+1800E6FF9	BC1%M
+1800E7037	?z0w
+1800E70E7	?
+	;ud
+1800E715F	?U[y[
+1800E71D9	3+5<t
+1800E7247	?W(~N
+1800E72F7	?Ji@9
+1800E74FC	fmodf
+1800E7BA7	?7{KV
+U
+1800E7BAF	?+>^m
+1800E7D9F	?kxG2)
+1800E7E27	?TY,>5
+1800E7EDF	?!5WOo
+1800E7F27	?E=$% B
+1800E7F97	?49HoKC
+1800E81F8	UUUUUU
+1800E82B0	sqrtf
+1800E83EF	?y2@#
+1800E83F7	?xMW
+1800E857F	?%J9M
+1800E85B7	?S^>#/
+1800E86B9	BC1%M
+1800E86F7	?z0w
+1800E87A7	?
+	;ud
+1800E881F	?U[y[
+1800E8899	3+5<t
+1800E8907	?W(~N
+1800E89B7	?Ji@9
+1800E94CE	.>fJBGo
+1800E95AB	A03>A|
+1800E95C1	Q5rHg,>
+1800E95FE	<>#n2
+1800E962C	c0&>`
+1800E969D	j>>A?1
+1800E96E6	.>PJ;I:qE>
+1800E971D	7>I0
+1800E9726	:>t6k'
+1800E9756	<>c~
+1800E9793	])6M>&
+1800E97A4	CWD>~3
+1800E97B6	:>)*	v
+1800E97CC	_oD>Kg
+1800E97DD	AK>(v
+1800E9814	-BH>t
+1800E9884	CL:>8
+1800E988C	ZF>:
+1800E9894	6NK>
+1800E98DE	E>nEA
+1800E9956	N>O=I9
+1800E9976	F>qUxv
+1800E99C3	/2GG>!B
+1800E99D5	Z\>z8
+1800E99E5	OF>;^
+1800E9A5E	^>ux
+1800E9A86	]>)2X
+1800E9B0E	_>LH
+1800E9B1C	zY;>u:m	
+1800E9B36	P>q_Y~
+1800E9B56	0><[cZUg^>
+1800E9B73	v}`[>
+1800E9BB5	oI>O7
+1800E9BC3	^RfN>
+1800E9BF3	Y>kX>M
+1800E9C14	,HR>O
+1800E9C26	A>l$/
+1800E9C2D	H[><y5
+1800E9E97	7h>?8
+1800E9F61	{w8&-
+1800E9FDE	-9D	/9a
+1800EA38F	?/#+d)E
+1800EA512	Y$;en<
+1800EA537	</]7X&g
+1800EA57F	?`/:>
+1800EA607	<8bunz8
+1800EA631	v(/Q
+1800EA65F	?^q?{
+1800EA6B8	/w9~
+1800EA6E6	n<V/>
+1800EA906	v<'*6
+1800EAABF	?XXVx
+1800EAE3F	?c"b"
+1800EAEF7	<t'<:
+1800EB083	l,kg<i
+1800EB092	rX0p
+1800EB1D8	vmg$9
+1800EB287	<@En[v
+1800EB643	hOy'=
+1800EB663	hOy'=
+1800EB923	*,4*=
+1800EB943	*,4*=
+1800EB9C0	hV/M)|
+1800EB9E0	hV/M)|
+1800EBDE2	V]2%
+1800EBE59	@Y]^3
+1800EBFBF	?x.<,
+1800EC05F	?i!VPCr(
+1800EC159	XM`8q
+1800EC38F	?{Q}<
+1800EC3AF	?8bunz8
+1800EC53F	?@En[vP
+1800EC565	X!t5~
+1800EC615	X!t5~
+1800ED094	.text$di
+1800ED0A8	.text$mn
+1800ED0BC	.text$mn$00
+1800ED0D0	.text$mn$21
+1800ED0E4	.text$x
+1800ED0F4	.text$yd
+1800ED108	.idata$5
+1800ED11C	.00cfg
+1800ED12C	.CRT$XCA
+1800ED140	.CRT$XCU
+1800ED154	.CRT$XCZ
+1800ED168	.CRT$XIA
+1800ED17C	.CRT$XIC
+1800ED190	.CRT$XIZ
+1800ED1A4	.CRT$XLA
+1800ED1B8	.CRT$XLZ
+1800ED1CC	.CRT$XPA
+1800ED1E0	.CRT$XPX
+1800ED1F4	.CRT$XPXA
+1800ED208	.CRT$XPZ
+1800ED21C	.CRT$XTA
+1800ED230	.CRT$XTZ
+1800ED244	.rdata
+1800ED254	.rdata$00
+1800ED268	.rdata$T
+1800ED27C	.rdata$r
+1800ED290	.rdata$voltmd
+1800ED2A8	.rdata$zzzdbg
+1800ED2C0	.rtc$IAA
+1800ED2D4	.rtc$IZZ
+1800ED2E8	.rtc$TAA
+1800ED2FC	.rtc$TZZ
+1800ED320	.tls$
+1800ED330	.tls$ZZZ
+1800ED344	.xdata
+1800ED354	.xdata$x
+1800ED368	.idata$2
+1800ED37C	.idata$3
+1800ED390	.idata$4
+1800ED3A4	.idata$6
+1800ED3B8	.data
+1800ED3C8	.data$r
+1800ED3D8	.data$rs
+1800ED3FC	.pdata
+1800ED40C	.detourc
+1800ED420	.detourd
+1800ED434	.fptable
+1800ED448	.rsrc$01
+1800ED45C	.rsrc$02
+1800EDA2D	&2
+N
+1800EE03B	Zd
+(
+1800EE558	Z(
+$
+1800EEA67	,N
+N
+1800EEA8F	8V:b<&>N@$B$F
+1800EEAA4	PNR\T&VVX&Z"^i
+1800EEAC5	a	p$r&tVv$x z
+1800EEFA4	Z(
+$
+1800EF59B	A	:0'
+1800EF64D	,V
+(
+1800EF672	& (,*N,$. 0
+1800EF68A	6f8(:&<j>"@&B*D&FRH(J L&N&P&R VA
+1800EF6B8	xfz"|&~V
+1800F15B9	JI
+lBn
+1800F90AA	GetModuleHandleA
+1800F90BE	Sleep
+1800F90C6	CreateThread
+1800F90D6	GetTickCount
+1800F90E6	OutputDebugStringA
+1800F90FC	GetTempPathA
+1800F910C	GetCurrentThread
+1800F9120	GetLocalTime
+1800F9130	GetProcAddress
+1800F9142	GetFileAttributesA
+1800F9158	MultiByteToWideChar
+1800F916E	GlobalAlloc
+1800F917C	GlobalFree
+1800F918A	GlobalLock
+1800F9198	WideCharToMultiByte
+1800F91AE	GlobalUnlock
+1800F91BE	GetLocaleInfoA
+1800F91D0	LoadLibraryA
+1800F91E0	QueryPerformanceFrequency
+1800F91FC	FreeLibrary
+1800F920A	QueryPerformanceCounter
+1800F9222	KERNEL32.dll
+1800F9232	GetAsyncKeyState
+1800F9246	SetWindowLongPtrA
+1800F925A	CreateWindowExA
+1800F926C	DefWindowProcA
+1800F927E	CallWindowProcA
+1800F9290	DestroyWindow
+1800F92A0	SetClipboardData
+1800F92B4	GetClipboardData
+1800F92C8	EmptyClipboard
+1800F92DA	CloseClipboard
+1800F92EC	OpenClipboard
+1800F92FC	GetCursorPos
+1800F930C	SetCursorPos
+1800F931C	ReleaseCapture
+1800F932E	IsWindowUnicode
+1800F9340	GetClientRect
+1800F9350	SetCursor
+1800F935C	SetCapture
+1800F936A	LoadCursorW
+1800F9378	GetForegroundWindow
+1800F938E	GetKeyboardLayout
+1800F93A2	TrackMouseEvent
+1800F93B4	ClientToScreen
+1800F93C6	GetCapture
+1800F93D4	ScreenToClient
+1800F93E6	GetMessageExtraInfo
+1800F93FC	GetKeyState
+1800F9408	USER32.dll
+1800F9416	ShellExecuteW
+1800F9424	SHELL32.dll
+1800F9432	D3D11CreateDeviceAndSwapChain
+1800F9450	d3d11.dll
+1800F945C	ImmSetCandidateWindow
+1800F9474	ImmSetCompositionWindow
+1800F948E	ImmReleaseContext
+1800F94A2	ImmGetContext
+1800F94B0	IMM32.dll
+1800F94BC	D3DCompile
+1800F94C8	D3DCOMPILER_47.dll
+1800F94DE	ReleaseSRWLockExclusive
+1800F94F8	AcquireSRWLockExclusive
+1800F9512	TryAcquireSRWLockExclusive
+1800F9530	GetCurrentThreadId
+1800F9546	GetLastError
+1800F9556	GetCurrentProcess
+1800F956A	SuspendThread
+1800F957A	ResumeThread
+1800F958A	GetThreadContext
+1800F959E	SetThreadContext
+1800F95B2	FlushInstructionCache
+1800F95CA	VirtualAlloc
+1800F95DA	VirtualProtect
+1800F95EC	VirtualFree
+1800F95FA	VirtualQuery
+1800F960A	SetLastError
+1800F961A	GetModuleHandleW
+1800F962E	LoadLibraryExW
+1800F9640	WakeAllConditionVariable
+1800F965C	SleepConditionVariableSRW
+1800F9678	SetUnhandledExceptionFilter
+1800F9696	GetStartupInfoW
+1800F96A8	GetCurrentProcessId
+1800F96BE	GetSystemTimeAsFileTime
+1800F96D8	InitializeSListHead
+1800F96EE	RtlLookupFunctionEntry
+1800F9708	RtlUnwindEx
+1800F9716	RtlPcToFileHeader
+1800F972A	RaiseException
+1800F973C	InterlockedFlushSList
+1800F9754	FlsAlloc
+1800F9760	FlsGetValue
+1800F976E	FlsSetValue
+1800F977C	FlsFree
+1800F9786	EncodePointer
+1800F9796	EnterCriticalSection
+1800F97AE	LeaveCriticalSection
+1800F97C6	InitializeCriticalSectionEx
+1800F97E4	DeleteCriticalSection
+1800F97FC	ReadFile
+1800F9808	IsProcessorFeaturePresent
+1800F9824	ExitProcess
+1800F9832	TerminateProcess
+1800F9846	GetModuleHandleExW
+1800F985C	GetModuleFileNameW
+1800F9872	RtlCaptureContext
+1800F9886	RtlVirtualUnwind
+1800F989A	IsDebuggerPresent
+1800F98AE	UnhandledExceptionFilter
+1800F98CA	HeapFree
+1800F98D6	HeapAlloc
+1800F98E2	GetStdHandle
+1800F98F2	GetFileType
+1800F9900	LCMapStringW
+1800F9910	FlushFileBuffers
+1800F9924	WriteFile
+1800F9930	GetConsoleOutputCP
+1800F9946	GetConsoleMode
+1800F9958	CloseHandle
+1800F9966	SetFilePointerEx
+1800F997A	ReadConsoleW
+1800F998A	GetFileSizeEx
+1800F999A	FindClose
+1800F99A6	FindFirstFileExW
+1800F99BA	FindNextFileW
+1800F99CA	IsValidCodePage
+1800F99DC	GetACP
+1800F99E6	GetOEMCP
+1800F99F2	GetCPInfo
+1800F99FE	GetCommandLineA
+1800F9A10	GetCommandLineW
+1800F9A22	GetEnvironmentStringsW
+1800F9A3C	FreeEnvironmentStringsW
+1800F9A56	GetProcessHeap
+1800F9A68	GetStringTypeW
+1800F9A7A	SetStdHandle
+1800F9A8A	CreateFileW
+1800F9A98	HeapSize
+1800F9AA4	HeapReAlloc
+1800F9AB2	WriteConsoleW
+1800F9AC2	SetEndOfFile
+1800FA53A	                          
+1800FA61A	abcdefghijklmnopqrstuvwxyz
+1800FA63A	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+1800FA752	                          
+1800FA841	abcdefghijklmnopqrstuvwxyz
+1800FA861	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+1800FAE50	Enter custom text
+1800FAF50	Enter custom text
+1800FB050	Enter custom text
+1800FB150	Enter custom text
+1800FB250	Enter custom text
+1800FB350	Eff_Common_Target_Red
+1800FB450	Enter custom text
+1800FB560	Enter custom text
+18010B710	.?AVruntime_error@std@@
+18010B738	.?AVlogic_error@std@@
+18010B760	.?AVlength_error@std@@
+18010B788	.?AVsystem_error@std@@
+18010B7B0	.?AV_System_error@std@@
+18010B7D8	.?AVbad_exception@std@@
+18010B800	.?AVbad_alloc@std@@
+18010B828	.P6AXXZ
+18010B840	.?AVexception@std@@
+18010B868	.?AVbad_array_new_length@std@@
+18010B898	.?AVerror_category@std@@
+18010B8C8	.?AV_Generic_error_category@std@@
+18010B900	.?AVtype_info@@
+18011A063	<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3"><asmv3:application><asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings"><heapType>SegmentHeap</heapType></asmv3:windowsSettings></asmv3:application></assembly>

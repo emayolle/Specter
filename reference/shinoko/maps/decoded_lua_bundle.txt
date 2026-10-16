@@ -1,0 +1,1490 @@
+# Shinoko-Aniimo.dll — decoded Lua string templates
+
+
+================================================================================
+== 180004EC0  ()  122 bytes
+================================================================================
+local pg=require("Pg")
+local U=require("Common.Utils.Utils")
+local me=pg.me
+local target=me:getPosition()+me:getForward()*
+
+================================================================================
+== 180005340  ()  543 bytes
+================================================================================
+
+local count=0
+for _,e in pairs(pg.global.entityMgr.getAllEntities()) do
+    if e and e~=me and not e.isDestroyed then
+        local ok,isMob=pcall(function()
+            return U.isWildPuppet(e)
+                and U.isEnemy(me,e)
+                and not U.isNpc(e)
+                and not (e.isDead and e:isDead())
+        end)
+        if ok and isMob then
+            pcall(function()
+                e:forceSetPos(target,true)
+                count=count+1
+            end)
+        end
+    end
+end
+print("[MOB VACUUM] MOBS PULLED:", count)
+
+================================================================================
+== 180005A20  ()  84 bytes
+================================================================================
+local C=require("Const.ClientConst")
+pg.me:setModelScale(C.MODEL_SCALE_KEY.DEFAULT, 
+
+================================================================================
+== 180005E90  ()  1 bytes
+================================================================================
+)
+
+================================================================================
+== 1800062F0  ()  86 bytes
+================================================================================
+local C=require("Const.ClientConst")
+pg.me:setModelScale(C.MODEL_SCALE_KEY.DEFAULT, 1)
+
+================================================================================
+== 1800069D0  ()  126 bytes
+================================================================================
+local C=require("Const.ClientConst")
+local p=pg.me:getCurPetEntity()
+if p then
+    p:setModelScale(C.MODEL_SCALE_KEY.DEFAULT, 
+
+================================================================================
+== 180006E50  ()  5 bytes
+================================================================================
+)
+end
+
+================================================================================
+== 180007540  ()  132 bytes
+================================================================================
+local C=require("Const.ClientConst")
+local p=pg.me:getCurPetEntity()
+if p then
+    p:setModelScale(C.MODEL_SCALE_KEY.DEFAULT, 1)
+end
+
+================================================================================
+== 1800079D0  ()  388 bytes
+================================================================================
+local ClientDyingComponent = require("Entities.SpaceEntities.CommonComponent.ClientDyingComponent")
+if not _G.OriginalFallDamage then
+    _G.OriginalFallDamage = ClientDyingComponent.receiveFallToGroundDamage
+end
+ClientDyingComponent.receiveFallToGroundDamage = function(self, height)
+    print("Fall damage blocked! height:", tostring(height))
+    return
+end
+print("[NO FALL DAMAGE] ON")
+
+================================================================================
+== 180007E40  ()  337 bytes
+================================================================================
+local ClientDyingComponent = require("Entities.SpaceEntities.CommonComponent.ClientDyingComponent")
+if _G.OriginalFallDamage then
+    ClientDyingComponent.receiveFallToGroundDamage = _G.OriginalFallDamage
+    _G.OriginalFallDamage = nil
+    print("[NO FALL DAMAGE] OFF")
+else
+    print("[NO FALL DAMAGE] original function not saved")
+end
+
+================================================================================
+== 1800082B0  ()  293 bytes
+================================================================================
+do
+    local AiConst = package.loaded["Common.Const.AiConst"]
+    if type(AiConst) ~= "table" then
+        AiConst = require("Common.Const.AiConst")
+    end
+    if type(AiConst) == "table" then
+        AiConst.GLOBAL_OPEN_TICK = false
+        print("[AI TICK] OFF / Dumb Enemy ON")
+    end
+end
+
+================================================================================
+== 180008720  ()  292 bytes
+================================================================================
+do
+    local AiConst = package.loaded["Common.Const.AiConst"]
+    if type(AiConst) ~= "table" then
+        AiConst = require("Common.Const.AiConst")
+    end
+    if type(AiConst) == "table" then
+        AiConst.GLOBAL_OPEN_TICK = true
+        print("[AI TICK] ON / Dumb Enemy OFF")
+    end
+end
+
+================================================================================
+== 180008B90  ()  959 bytes
+================================================================================
+
+do
+    local AbilityConst = require("Common.Const.AbilityConst")
+    local Const = require("Common.Const.Const")
+    local CombatActionTool = require("Common.Ability.CombatActionTool")
+    local Utils = require("Common.Utils.Utils")
+    local ClientCombatAction = require("GameApp.Ability.ClientCombatAction")
+    local ClientDyingComponent = require("Entities.SpaceEntities.CommonComponent.ClientDyingComponent")
+    local ClientPlayer = require("Entities.SpaceEntities.ClientPlayer")
+    local ClientMainPlayer = require("Entities.SpaceEntities.ClientMainPlayer")
+    local ClientPet = require("Entities.SpaceEntities.ClientPet")
+    local ClientPuppet = require("Entities.SpaceEntities.ClientPuppet")
+    local ClientTempPlayer = require("Entities.ClientTempPlayer")
+    local ClientRobSpaceEgg = require("Entities.SpaceEntities.ClientRobSpaceEgg")
+
+    local state = rawget(_G, "__GOD_MODE")
+    if not state then
+        state = {
+            enabled = 
+
+================================================================================
+== 180009000  ()  4971 bytes
+================================================================================
+,
+            origCheckValidTarget = Utils.checkValidTarget,
+            origCalcResult = ClientCombatAction.calcResult,
+            origFallDamage = ClientDyingComponent.receiveFallToGroundDamage,
+            origEggFallDamage = ClientRobSpaceEgg.receiveFallToGroundDamage,
+            origEggImpactDamage = ClientRobSpaceEgg.receiveImpactDamage,
+            origServerMsg = ClientPlayer.getVtbl().serverMsg
+        }
+        rawset(_G, "__GOD_MODE", state)
+
+        local function isProtectedEntity(ent)
+            local me = pg and pg.me
+            if ent == nil or me == nil then return false end
+            return ent == me or ent == pg.pawn or ent.isMainPlayer == true or ent.isMainPet == true
+        end
+
+        local function isProtectedEgg(egg)
+            if egg == nil or egg.controller == nil then return false end
+            local controller = pg.getEntity(egg.controller)
+            return controller ~= nil and isProtectedEntity(controller)
+        end
+
+        Utils.checkValidTarget = function(target, owner)
+            if state.enabled and isProtectedEntity(target) then
+                if owner ~= nil and owner ~= target then
+                    local ok, hostile = pcall(Utils.checkRelation, owner, target, Const.WORLD_PAIRS_CAMP_ENEMY)
+                    if ok and hostile then return false end
+                end
+            end
+            return state.origCheckValidTarget(target, owner)
+        end
+
+        ClientCombatAction.calcResult = function(self, actionData, combatContext)
+            if state.enabled and actionData ~= nil and combatContext ~= nil then
+                local okTarget, targetActorId = pcall(CombatActionTool.parseActorId, combatContext, actionData.target)
+                if okTarget and targetActorId ~= nil then
+                    local target = pg.getEntityByActorId(targetActorId)
+                    if target ~= nil and isProtectedEntity(target) then
+                        combatContext.isImmuteDamage = true
+                        if combatContext.damageData ~= nil then
+                            combatContext.damageData.finalDamage = 0
+                            if AbilityConst.ATTACK_RESULT_IMMUNE ~= nil then
+                                combatContext.damageData.attackResult = AbilityConst.ATTACK_RESULT_IMMUNE
+                            end
+                        end
+                        print("[GOD] blocked combat damage:", tostring(targetActorId))
+                        return false
+                    end
+                end
+            end
+            return state.origCalcResult(self, actionData, combatContext)
+        end
+
+        local function noFallDamage(self, height)
+            if state.enabled and isProtectedEntity(self) then
+                print("[GOD] fall damage blocked:", tostring(height))
+                return
+            end
+            return state.origFallDamage(self, height)
+        end
+
+        local function noEggFallDamage(self, height)
+            if state.enabled and isProtectedEgg(self) then return end
+            return state.origEggFallDamage(self, height)
+        end
+
+        local function noEggImpactDamage(self, velocity)
+            if state.enabled and isProtectedEgg(self) then return end
+            return state.origEggImpactDamage(self, velocity)
+        end
+
+        local function godServerMsg(self, name, ...)
+            if state.enabled and isProtectedEntity(self) then
+                if name == "RPC_CS_SpecialDamage" then
+                    local _, reason = ...
+                    if reason == Const.LIFE_DEAD_BY_FALL_TO_GROUND then
+                        print("[GOD] blocked SpecialDamage fall RPC")
+                        return
+                    end
+                end
+                if name == "RPC_CS_RobEggHurt" then
+                    local _, __, reason = ...
+                    if reason == Const.LIFE_DEAD_BY_FALL_TO_GROUND then
+                        print("[GOD] blocked RobEgg fall RPC")
+                        return
+                    end
+                end
+            end
+            return state.origServerMsg(self, name, ...)
+        end
+
+        ClientPlayer.getVtbl().receiveFallToGroundDamage = noFallDamage
+        ClientMainPlayer.getVtbl().receiveFallToGroundDamage = noFallDamage
+        ClientPet.getVtbl().receiveFallToGroundDamage = noFallDamage
+        ClientPuppet.getVtbl().receiveFallToGroundDamage = noFallDamage
+        ClientTempPlayer.getVtbl().receiveFallToGroundDamage = noFallDamage
+
+        ClientRobSpaceEgg.getVtbl().receiveFallToGroundDamage = noEggFallDamage
+        ClientRobSpaceEgg.getVtbl().receiveImpactDamage = noEggImpactDamage
+
+        ClientPlayer.getVtbl().serverMsg = godServerMsg
+        ClientMainPlayer.getVtbl().serverMsg = godServerMsg
+        ClientPet.getVtbl().serverMsg = godServerMsg
+        ClientPuppet.getVtbl().serverMsg = godServerMsg
+        ClientTempPlayer.getVtbl().serverMsg = godServerMsg
+    else
+        state.enabled = 
+
+================================================================================
+== 180009470  ()  216 bytes
+================================================================================
+
+    end
+
+    if pg and pg.me then
+        pcall(function()
+            pg.me:doGmCmd("modifyStateSelf", 1, state.enabled and 1 or 0)
+        end)
+    end
+    print("[GOD MODE]", state.enabled and "ON" or "OFF")
+end
+
+
+================================================================================
+== 180009D80  ()  249 bytes
+================================================================================
+
+do
+    local CombatActionTool = require("Common.Ability.CombatActionTool")
+    local ClientCombatAction = require("GameApp.Ability.ClientCombatAction")
+    local ClientProjectile = require("GameApp.Ability.ClientProjectile")
+
+    local HIT_TIMES = 
+
+================================================================================
+== 18000A1F0  ()  21 bytes
+================================================================================
+
+    local ENABLED = 
+
+================================================================================
+== 18000A660  ()  3435 bytes
+================================================================================
+
+
+    local state = rawget(_G, "__DX12_MULTI_HIT")
+    if state == nil then
+        state = {
+            enabled = ENABLED,
+            hitTimes = HIT_TIMES,
+            patched = setmetatable({}, { __mode = "k" }),
+            hitRpcs = {
+                RPC_CS_DoActOnSweepTargetsActions = true,
+                RPC_CS_DoActOnActorActions = true,
+                RPC_CS_OnCSProjectileHit = true,
+                RPC_CS_ProjectileHitTarget = true,
+                RPC_CS_ChainPropagation = true,
+                RPC_CS_ReboundDashHitActor = true,
+                RPC_CS_OnAbilityCollisionHitTarget = true,
+                RPC_CS_OnTriggerAbilityCollisionHit = true,
+            }
+        }
+        rawset(_G, "__DX12_MULTI_HIT", state)
+    else
+        state.hitTimes = HIT_TIMES
+        state.enabled = ENABLED
+    end
+
+    local function isLocalAttacker(ent)
+        local me = pg and pg.me
+        if ent == nil or me == nil then return false end
+        return ent == me or ent == pg.pawn or ent.isMainPlayer == true or ent.isMainPet == true
+    end
+
+    local function ensurePatched(ent)
+        if ent == nil or state.patched[ent] or not isLocalAttacker(ent) then return end
+        local send = ent.serverMsgNoGC
+        if type(send) ~= "function" then return end
+
+        state.patched[ent] = true
+        ent.serverMsgNoGC = function(self, name, ...)
+            if not state.enabled or not state.hitRpcs[name] then
+                return send(self, name, ...)
+            end
+            local result
+            for _ = 1, state.hitTimes do
+                result = send(self, name, ...)
+            end
+            return result
+        end
+
+        local checkHitTargetSet = ent.checkHitTargetSet
+        if type(checkHitTargetSet) == "function" then
+            ent.checkHitTargetSet = function(self, actorId, abilityId, actionData)
+                if state.enabled then return true end
+                return checkHitTargetSet(self, actorId, abilityId, actionData)
+            end
+        end
+
+        local checkHitTargetCd = ent.checkHitTargetCd
+        if type(checkHitTargetCd) == "function" then
+            ent.checkHitTargetCd = function(self, actorId, abilityId, actionData, overrideTime)
+                if state.enabled then return true end
+                return checkHitTargetCd(self, actorId, abilityId, actionData, overrideTime)
+            end
+        end
+    end
+
+    state.ensurePatched = ensurePatched
+
+    if not rawget(_G, "__DX12_HOOKS_INSTALLED") then
+        local doAction = ClientCombatAction.doAction
+        ClientCombatAction.doAction = function(self, actionData, combatContext)
+            if combatContext ~= nil then
+                state.ensurePatched(CombatActionTool.getOwnerEntity(combatContext))
+            end
+            return doAction(self, actionData, combatContext)
+        end
+
+        local projectileHitRPC = ClientProjectile.onProjectileHitRPC
+        ClientProjectile.onProjectileHitRPC = function(self, srcEntity, combatHitResult, nextReboundActorId)
+            state.ensurePatched(srcEntity)
+            return projectileHitRPC(self, srcEntity, combatHitResult, nextReboundActorId)
+        end
+
+        rawset(_G, "__DX12_HOOKS_INSTALLED", true)
+    end
+
+    if pg and pg.me then state.ensurePatched(pg.me) end
+    if pg and pg.pawn then state.ensurePatched(pg.pawn) end
+
+    print("[MULTI HIT]", state.enabled and ("ON x" .. tostring(state.hitTimes)) or "OFF")
+end
+
+
+================================================================================
+== 18000AAD0  ()  114 bytes
+================================================================================
+
+do
+    local ActorCombatAttribute = require("Common.Ability.Attribute.ActorCombatAttribute")
+    local ENABLED = 
+
+================================================================================
+== 18000AF50  ()  965 bytes
+================================================================================
+
+    local state = rawget(_G, "__INF_STAMINA")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            originalChangeStamina = ActorCombatAttribute.changeStamina
+        }
+        rawset(_G, "__INF_STAMINA", state)
+
+        local function isProtectedEntity(ent)
+            local me = pg and pg.me
+            if ent == nil or me == nil then return false end
+            return ent == me or ent == pg.pawn or ent.isMainPlayer == true or ent.isMainPet == true
+        end
+
+        ActorCombatAttribute.changeStamina = function(self, value)
+            if state.enabled and value ~= nil and value < 0 and isProtectedEntity(self.entity) then
+                print("[Infinite Stamina] blocked:", tostring(value))
+                return
+            end
+            return state.originalChangeStamina(self, value)
+        end
+    else
+        state.enabled = ENABLED
+    end
+    print("[Infinite Stamina]", state.enabled and "ON" or "OFF")
+end
+
+
+================================================================================
+== 18000B3C0  ()  114 bytes
+================================================================================
+
+do
+    local ActorCombatAttribute = require("Common.Ability.Attribute.ActorCombatAttribute")
+    local ENABLED = 
+
+================================================================================
+== 18000B840  ()  1108 bytes
+================================================================================
+
+    local state = rawget(_G, "__INF_ENERGY")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            originalGetEp = ActorCombatAttribute.getEp,
+            originalGetSp = ActorCombatAttribute.getSp
+        }
+        rawset(_G, "__INF_ENERGY", state)
+
+        local function isMyEntity(ent)
+            local me = pg and pg.me
+            if ent == nil or me == nil then return false end
+            return ent == me or ent == pg.pawn or ent.isMainPlayer == true or ent.isMainPet == true
+        end
+
+        ActorCombatAttribute.getEp = function(self)
+            if state.enabled and isMyEntity(self.entity) then
+                return self:getMaxEp()
+            end
+            return state.originalGetEp(self)
+        end
+
+        ActorCombatAttribute.getSp = function(self)
+            if state.enabled and isMyEntity(self.entity) then
+                return self:getMaxSp()
+            end
+            return state.originalGetSp(self)
+        end
+    else
+        state.enabled = ENABLED
+    end
+    print("[Infinite Energy] EP + SP", state.enabled and "ON" or "OFF")
+end
+
+
+================================================================================
+== 18000C160  ()  3161 bytes
+================================================================================
+
+do
+    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg")
+    _G.pg = pg
+    local Ability = require("CustomTypes.Ability")
+    local AbilityUIUtils = require("Utils.AbilityUIUtils")
+    local PetListUIComponent = require("Guis.Panels.HudV2.BaseComponent.PetListUIComponent")
+
+    local state = rawget(_G, "__NO_CD_STATE")
+    if not state then
+        state = {
+            playerEnabled = false,
+            petEnabled = false,
+            origIsInCd = Ability.isInCd,
+            origStartCoolDown = Ability.startCoolDown,
+            origRefreshCDState = AbilityUIUtils.refreshCDState,
+            origRefreshSupportSkillCD = PetListUIComponent.refreshSupportSkillCD
+        }
+        rawset(_G, "__NO_CD_STATE", state)
+
+        local function isMyEntity(ent)
+            local me = pg and pg.me
+            if ent == nil or me == nil then return false end
+            return ent == me or ent == pg.pawn or ent.isMainPlayer == true or ent.isMainPet == true
+        end
+
+        local function isMyPlayerEntity(ent)
+            local me = pg and pg.me
+            if ent == nil or me == nil then return false end
+            return ent == me or ent == pg.pawn or ent.isMainPlayer == true
+        end
+
+        local function isMyAbility(ability)
+            if ability == nil or ability.actorId == nil then return false end
+            local entity = pg.getEntityByActorId(ability.actorId)
+            return isMyEntity(entity)
+        end
+
+        local function clearCd(ability)
+            if ability == nil then return end
+            if ability.cdEndTime ~= nil and ability.cdEndTime > 0 then
+                ability.cdEndTime = 0
+            end
+        end
+
+        Ability.isInCd = function(self)
+            if (state.playerEnabled or state.petEnabled) and isMyAbility(self) then
+                return false
+            end
+            return state.origIsInCd(self)
+        end
+
+        Ability.startCoolDown = function(self, cdEndTime)
+            if (state.playerEnabled or state.petEnabled) and isMyAbility(self) then
+                cdEndTime = 0
+            end
+            return state.origStartCoolDown(self, cdEndTime)
+        end
+
+        AbilityUIUtils.refreshCDState = function(btnRefInfo, skillInfo)
+            if state.playerEnabled and skillInfo ~= nil then
+                local pawn = skillInfo.pawn or (pg and pg.pawn)
+                if pawn ~= nil and isMyPlayerEntity(pawn) and pawn.abilityMap ~= nil and skillInfo.abilityId ~= nil then
+                    clearCd(pawn.abilityMap[skillInfo.abilityId])
+                end
+            end
+            return state.origRefreshCDState(btnRefInfo, skillInfo)
+        end
+
+        PetListUIComponent.refreshSupportSkillCD = function(self, button, refreshTarget, petEntity, index, refreshBtnFunc)
+            if state.petEnabled and petEntity ~= nil and petEntity.coreAbilityId ~= nil and isMyEntity(petEntity) then
+                clearCd(petEntity:getAbility(petEntity.coreAbilityId))
+            end
+            return state.origRefreshSupportSkillCD(self, button, refreshTarget, petEntity, index, refreshBtnFunc)
+        end
+    end
+
+    state.playerEnabled = 
+
+================================================================================
+== 18000C5D0  ()  24 bytes
+================================================================================
+
+    state.petEnabled = 
+
+================================================================================
+== 18000CA30  ()  107 bytes
+================================================================================
+
+    print("[No Cooldown] Player:", tostring(state.playerEnabled), "Pet:", tostring(state.petEnabled))
+end
+
+
+================================================================================
+== 18000D580  ()  269 bytes
+================================================================================
+
+do
+    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg")
+    _G.pg = pg
+    local Const = require("Common.Const.Const")
+    local Utils = require("Common.Utils.Utils")
+    local TimerManager = require("Core.Timer.TimerManager")
+
+    local ENABLED = 
+
+================================================================================
+== 18000D9F0  ()  20 bytes
+================================================================================
+
+    local RADIUS = 
+
+================================================================================
+== 18000DE60  ()  22 bytes
+================================================================================
+
+    local INTERVAL = 
+
+================================================================================
+== 18000E2D0  ()  3277 bytes
+================================================================================
+
+
+    local state = rawget(_G, "__KILL_AURA")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            radius = RADIUS,
+            interval = INTERVAL,
+            timerId = nil,
+            lastInterval = INTERVAL
+        }
+        rawset(_G, "__KILL_AURA", state)
+    else
+        state.enabled = ENABLED
+        state.radius = RADIUS
+        state.interval = INTERVAL
+    end
+
+    local function isEnemy(ent)
+        if ent == nil or pg == nil or pg.me == nil or ent == pg.me then
+            return false
+        end
+        local ok, result = pcall(Utils.checkRelation, pg.me, ent, Const.WORLD_PAIRS_CAMP_ENEMY)
+        return ok and result == true
+    end
+
+    local function getHp(ent)
+        if ent == nil then return nil end
+        if ent.actorCombatAttribute ~= nil and ent.actorCombatAttribute.getHp ~= nil then
+            local ok, hp = pcall(ent.actorCombatAttribute.getHp, ent.actorCombatAttribute)
+            if ok and hp ~= nil then return hp end
+        end
+        if ent.getHp ~= nil then
+            local ok, hp = pcall(ent.getHp, ent)
+            if ok and hp ~= nil then return hp end
+        end
+        return nil
+    end
+
+    local function killAuraTick()
+        if not state.enabled then return end
+        if pg == nil or pg.me == nil then return end
+
+        local actorIds = pg.me:entitiesInRange(state.radius, Const.SEARCH_USR_TYPE_MONSTER)
+        if actorIds == nil then return end
+
+        for _, actorId in ipairs(actorIds) do
+            local target = pg.getEntityByActorId(actorId)
+            if target ~= nil and isEnemy(target) and target.authority == Const.AUTHORITY_MASTER then
+                local hp = getHp(target)
+                if hp ~= nil and hp > 0 then
+                    local damage = math.ceil(hp)
+                    local ok, err = pcall(target.serverMsg, target, "RPC_CS_SpecialDamage", damage, Const.LIFE_DEAD_BY_COMBAT)
+                    if ok then
+                        print("[KILL AURA]", tostring(target.id), "HP=", tostring(hp), "DMG=", tostring(damage))
+                    else
+                        print("[KILL AURA ERROR]", tostring(err))
+                    end
+                end
+            end
+        end
+    end
+
+    state.tickFunc = killAuraTick
+
+    local function removeTimer(id)
+        if id == nil then return end
+        if TimerManager.removeTimer then
+            pcall(TimerManager.removeTimer, id)
+        elseif TimerManager.delTimer then
+            pcall(TimerManager.delTimer, id)
+        end
+    end
+
+    if state.enabled then
+        if state.timerId ~= nil and state.lastInterval ~= state.interval then
+            removeTimer(state.timerId)
+            state.timerId = nil
+        end
+        if state.timerId == nil then
+            state.timerId = TimerManager.addRepeatTimer(state.interval, state.tickFunc)
+            state.lastInterval = state.interval
+            print("[NETWORK KILL AURA] ON | radius=", state.radius, "| timerId=", tostring(state.timerId))
+        else
+            print("[NETWORK KILL AURA] ON | radius=", state.radius)
+        end
+    else
+        if state.timerId ~= nil then
+            removeTimer(state.timerId)
+            state.timerId = nil
+        end
+        print("[NETWORK KILL AURA] OFF")
+    end
+end
+
+
+================================================================================
+== 18000EE10  ()  384 bytes
+================================================================================
+
+do
+    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg")
+    _G.pg = pg
+    local Const = require("Common.Const.Const")
+    local Utils = require("Common.Utils.Utils")
+    local CatchProbContext = require("Common.Utils.CatchProbContext")
+    local TimerManager = require("Core.Timer.TimerManager")
+    local Time = require("Core.Common.Time")
+
+    local ENABLED = 
+
+================================================================================
+== 18000F280  (sub_18000F280)  20 bytes
+================================================================================
+
+    local RADIUS = 
+
+================================================================================
+== 18000F6F0  ()  22 bytes
+================================================================================
+
+    local INTERVAL = 
+
+================================================================================
+== 18000FB60  ()  2833 bytes
+================================================================================
+
+
+    local state = rawget(_G, "__CATCH_AURA")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            radius = RADIUS,
+            interval = INTERVAL,
+            timerId = nil,
+            lastInterval = INTERVAL
+        }
+        rawset(_G, "__CATCH_AURA", state)
+    else
+        state.enabled = ENABLED
+        state.radius = RADIUS
+        state.interval = INTERVAL
+    end
+
+    local function canCatchTarget(ent)
+        if ent == nil or ent.destroyed then
+            return false
+        end
+        if not Utils.isWildPuppet(ent) then
+            return false
+        end
+        if ent.lastQuickCaptureTime ~= nil and Time.realSecondCache - ent.lastQuickCaptureTime < 5 then
+            return false
+        end
+        local ok, ctx = pcall(CatchProbContext.clientGet, ent)
+        return ok and ctx ~= nil and ctx.canCatch == true
+    end
+
+    local function findCatchTarget()
+        if pg == nil or pg.me == nil then return nil end
+        return Utils.getNearestPuppet(pg.me, state.radius, canCatchTarget)
+    end
+
+    local function catchAuraTick()
+        if not state.enabled then return end
+        if pg == nil or pg.me == nil or pg.game == nil or pg.game.controller == nil then
+            return
+        end
+        if pg.me.isCaptureThrowing ~= nil and pg.me:isCaptureThrowing() then
+            return
+        end
+        if pg.me.isInCatchMode ~= nil and pg.me:isInCatchMode() then
+            return
+        end
+        local target = findCatchTarget()
+        if target == nil then return end
+        local ok, result = pcall(pg.game.controller.onHandleQuickCapture, pg.game.controller, target.id)
+        if ok and result then
+            print("[CATCH AURA]", "target=", tostring(target.id), "actor=", tostring(target.actorId))
+        end
+    end
+
+    state.tickFunc = catchAuraTick
+
+    local function removeTimer(id)
+        if id == nil then return end
+        if TimerManager.removeTimer then
+            pcall(TimerManager.removeTimer, id)
+        elseif TimerManager.delTimer then
+            pcall(TimerManager.delTimer, id)
+        end
+    end
+
+    if state.enabled then
+        if state.timerId ~= nil and state.lastInterval ~= state.interval then
+            removeTimer(state.timerId)
+            state.timerId = nil
+        end
+        if state.timerId == nil then
+            state.timerId = TimerManager.addRepeatTimer(state.interval, state.tickFunc)
+            state.lastInterval = state.interval
+            print("[CATCH AURA] ON | radius=", state.radius, "| timerId=", tostring(state.timerId))
+        else
+            print("[CATCH AURA] ON | radius=", state.radius)
+        end
+    else
+        if state.timerId ~= nil then
+            removeTimer(state.timerId)
+            state.timerId = nil
+        end
+        print("[CATCH AURA] OFF")
+    end
+end
+
+
+================================================================================
+== 1800102A0  ()  420 bytes
+================================================================================
+
+do
+    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg")
+    _G.pg = pg
+    local AbilityConst = require("Common.Const.AbilityConst")
+    local Const = require("Common.Const.Const")
+    local CombatActionTool = require("Common.Ability.CombatActionTool")
+    local Utils = require("Common.Utils.Utils")
+    local ClientCombatAction = require("GameApp.Ability.ClientCombatAction")
+
+    local ENABLED = 
+
+================================================================================
+== 180010710  ()  2630 bytes
+================================================================================
+
+
+    local state = rawget(_G, "__ONE_HIT")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            origCalcResult = ClientCombatAction.calcResult
+        }
+        rawset(_G, "__ONE_HIT", state)
+
+        local function isMyEntity(ent)
+            if ent == nil or pg == nil or pg.me == nil then return false end
+            return ent == pg.me or ent == pg.pawn or ent.isMainPlayer == true or ent.isMainPet == true
+        end
+
+        local function isEnemy(caster, target)
+            if caster == nil or target == nil or caster == target then return false end
+            local ok, result = pcall(Utils.checkRelation, caster, target, Const.WORLD_PAIRS_CAMP_ENEMY)
+            return ok and result == true
+        end
+
+        ClientCombatAction.calcResult = function(self, actionData, combatContext)
+            if state.enabled and actionData ~= nil and combatContext ~= nil and actionData.attackData ~= nil then
+                local target = nil
+                local caster = nil
+
+                if actionData.target ~= nil then
+                    local ok, actorId = pcall(CombatActionTool.parseActorId, combatContext, actionData.target)
+                    if ok and actorId ~= nil then
+                        target = pg.getEntityByActorId(actorId)
+                    end
+                end
+
+                local casterType = actionData.overrideCaster or AbilityConst.COMBAT_TARGET_TYPE_CASTER
+                local okCaster, casterActorId = pcall(CombatActionTool.parseActorId, combatContext, casterType)
+                if okCaster and casterActorId ~= nil then
+                    caster = pg.getEntityByActorId(casterActorId)
+                end
+
+                if target ~= nil and caster ~= nil and isMyEntity(caster) and isEnemy(caster, target) then
+                    if target.authority == Const.AUTHORITY_MASTER then
+                        local ok, err = pcall(target.serverMsg, target, "RPC_CS_SpecialDamage", 1, Const.LIFE_DEAD_BY_COMBAT)
+                        if ok then
+                            print("[ONE HIT]", tostring(target.id), tostring(target.actorId))
+                        else
+                            print("[ONE HIT ERROR]", tostring(err))
+                        end
+                    else
+                        print("[ONE HIT] target is not MASTER authority:", tostring(target.id))
+                    end
+                end
+            end
+
+            return state.origCalcResult(self, actionData, combatContext)
+        end
+    else
+        state.enabled = ENABLED
+    end
+
+    print("[ONE HIT]", state.enabled and "ON" or "OFF")
+end
+
+
+================================================================================
+== 180010E50  ()  430 bytes
+================================================================================
+
+do
+    local ok1, PawnController = pcall(require, "GameApp.Controller.PawnController")
+    local ok2, PlayerController = pcall(require, "GameApp.Controller.PlayerController")
+
+    if not ok1 or not PawnController then
+        print("[Mod] Error: PawnController not found")
+        return
+    end
+
+    local InputCommand = require("GameApp.Input.InputCommand")
+    local Const = require("Common.Const.Const")
+
+    local ENABLED = 
+
+================================================================================
+== 1800112C0  ()  2220 bytes
+================================================================================
+
+
+    local state = rawget(_G, "__UNLIMITED_DASH")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            origPawnDash = PawnController.onHandleDash,
+            origPlayerDash = (ok2 and PlayerController) and PlayerController.onHandleDash or nil
+        }
+        rawset(_G, "__UNLIMITED_DASH", state)
+    else
+        state.enabled = ENABLED
+    end
+
+    local function customDash(self, isPress, ignoreCancelStates)
+        if not state.enabled then
+            if self == PawnController and state.origPawnDash then
+                return state.origPawnDash(self, isPress, ignoreCancelStates)
+            elseif state.origPlayerDash then
+                return state.origPlayerDash(self, isPress, ignoreCancelStates)
+            end
+            return
+        end
+
+        if not self:checkPawn() then return end
+
+        if isPress then
+            self.dashCount = 0
+            self.lastDashTime = 0
+
+            if self.pawn.cancelAbility then
+                self.pawn:cancelAbility()
+            end
+
+            self.pawn.eModel:SetInputCommand(Const.COMPONENT_INDEX_CHARACETER_CONTROLLER, InputCommand.DashMark, true)
+            self.pawn.eModel:SetInputCommand(Const.COMPONENT_INDEX_CHARACETER_CONTROLLER, InputCommand.Dash, true, 1)
+        else
+            self.pawn.eModel:SetInputCommand(Const.COMPONENT_INDEX_CHARACETER_CONTROLLER, InputCommand.Dash, false)
+        end
+    end
+
+    if state.enabled then
+        PawnController.onHandleDash = customDash
+        if ok2 and PlayerController then
+            PlayerController.onHandleDash = customDash
+        end
+
+        if pg and pg.game and pg.game.controller and pg.game.controller.curController then
+            pg.game.controller.curController.dashCount = 0
+            pg.game.controller.curController.lastDashTime = 0
+        end
+
+        print("[Mod] Unlimited Dash: ENABLED (No ReadOnly Error)")
+    else
+        if state.origPawnDash then
+            PawnController.onHandleDash = state.origPawnDash
+        end
+        if ok2 and PlayerController and state.origPlayerDash then
+            PlayerController.onHandleDash = state.origPlayerDash
+        end
+        print("[Mod] Unlimited Dash: DISABLED")
+    end
+end
+
+
+================================================================================
+== 180011E10  ()  314 bytes
+================================================================================
+
+do
+    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg")
+    _G.pg = pg
+    local Const = require("Common.Const.Const")
+    local Utils = require("Common.Utils.Utils")
+    local TimerManager = require("Core.Timer.TimerManager")
+    local Time = require("Core.Common.Time")
+
+    local ENABLED = 
+
+================================================================================
+== 180012280  (sub_180012280)  20 bytes
+================================================================================
+
+    local RADIUS = 
+
+================================================================================
+== 1800126F0  ()  22 bytes
+================================================================================
+
+    local INTERVAL = 
+
+================================================================================
+== 180012B60  ()  3757 bytes
+================================================================================
+
+    local RETRY_DELAY = 1.0
+
+    local state = rawget(_G, "__AUTO_LOOT")
+    if not state then
+        state = {
+            enabled = ENABLED,
+            radius = RADIUS,
+            interval = INTERVAL,
+            timerId = nil,
+            lastInterval = INTERVAL,
+            lastRequest = {}
+        }
+        rawset(_G, "__AUTO_LOOT", state)
+    else
+        state.enabled = ENABLED
+        state.radius = RADIUS
+        state.interval = INTERVAL
+    end
+
+    local function canSend(id)
+        local now = Time.realtimeSinceStartup
+        local last = state.lastRequest[id]
+        if last ~= nil and now - last < RETRY_DELAY then
+            return false
+        end
+        state.lastRequest[id] = now
+        return true
+    end
+
+    local function networkInteract(entity, interactType)
+        if entity == nil or entity.id == nil or entity.actionPrototypeId == nil then
+            return
+        end
+        if not canSend(entity.id) then
+            return
+        end
+        local entityId = entity.id
+        local interactId = entity.actionPrototypeId
+
+        -- START
+        pg.me:serverMsg("RPC_CS_StartInteract", interactType, entityId, interactId, {})
+
+        -- ACTUAL INTERACT
+        pg.me:serverMsg("RPC_CS_Interact", interactType, entityId, interactId, {}, function(ret, args)
+            print("[AUTO LOOT]", tostring(entityId), "ret=", tostring(ret))
+        end)
+    end
+
+    local function autoLootTick()
+        if not state.enabled then return end
+        if pg == nil or pg.me == nil then return end
+
+        local actorIds = pg.me:entitiesInRange(state.radius, Const.SEARCH_USR_TYPE_INTERACTOR, 0)
+        if actorIds == nil then return end
+
+        for _, actorId in ipairs(actorIds) do
+            local ent = pg.getEntityByActorId(actorId)
+            if ent ~= nil then
+                -- DROPPED ITEMS / COLLECT ITEMS
+                if Utils.isCollectItem(ent)
+                    and (ent.isCollectItemOpened == nil or not ent:isCollectItemOpened())
+                    and Utils.isCollectItemVisible(pg.me, ent)
+                then
+                    networkInteract(ent, Const.IACT_IP_COLLECT_ITEM)
+
+                -- CHESTS
+                elseif Utils.isChest(ent) and Utils.isChestVisible(pg.me, ent) then
+                    networkInteract(ent, Const.IACT_TP_CHEST)
+
+                -- RESOURCE BOX
+                elseif Utils.isResourceBox(ent) and ent.id ~= nil then
+                    if canSend(ent.id) then
+                        pg.me:serverMsg("RPC_CS_OpenResourceBoxWithQTE", ent.id, 100)
+                        print("[AUTO RESOURCE BOX]", tostring(ent.id))
+                    end
+                end
+            end
+        end
+    end
+
+    state.tickFunc = autoLootTick
+
+    local function removeTimer(id)
+        if id == nil then return end
+        if TimerManager.removeTimer then
+            pcall(TimerManager.removeTimer, id)
+        elseif TimerManager.delTimer then
+            pcall(TimerManager.delTimer, id)
+        end
+    end
+
+    if state.enabled then
+        if state.timerId ~= nil and state.lastInterval ~= state.interval then
+            removeTimer(state.timerId)
+            state.timerId = nil
+        end
+        if state.timerId == nil then
+            state.timerId = TimerManager.addRepeatTimer(state.interval, state.tickFunc)
+            state.lastInterval = state.interval
+            print("[NETWORK AUTO LOOT] ON | radius=", state.radius, "| timerId=", tostring(state.timerId))
+        else
+            print("[NETWORK AUTO LOOT] ON | radius=", state.radius)
+        end
+    else
+        if state.timerId ~= nil then
+            removeTimer(state.timerId)
+            state.timerId = nil
+        end
+        print("[NETWORK AUTO LOOT] OFF")
+    end
+end
+
+
+================================================================================
+== 180014A30  ()  48 bytes
+================================================================================
+local pg=require("Pg");pg.me:tryTeleportToScene(
+
+================================================================================
+== 180014EA0  ()  10 bytes
+================================================================================
+, 0, true)
+
+================================================================================
+== 180016E20  ()  127 bytes
+================================================================================
+
+do
+    local ok, ClientSwitch = pcall(require, "Common.ClientSwitch")
+    if ok and ClientSwitch then
+        local ENABLED = 
+
+================================================================================
+== 1800172A0  ()  1051 bytes
+================================================================================
+
+
+        local state = rawget(_G, "__RATE_LIMIT_BYPASS")
+        if not state then
+            state = {
+                origEnable = ClientSwitch.ClientMsCallRateLimitEnable,
+                origBurst = ClientSwitch.ClientMsCallRateLimitBurstCapacity,
+                origMax = ClientSwitch.ClientMsCallRateLimitMaxCount
+            }
+            rawset(_G, "__RATE_LIMIT_BYPASS", state)
+        end
+
+        if ENABLED then
+            ClientSwitch.ClientMsCallRateLimitEnable = false
+            ClientSwitch.ClientMsCallRateLimitBurstCapacity = 999999
+            ClientSwitch.ClientMsCallRateLimitMaxCount = 999999
+            print("[Mod] Packet Rate Limit: DISABLED")
+        else
+            ClientSwitch.ClientMsCallRateLimitEnable = state.origEnable
+            ClientSwitch.ClientMsCallRateLimitBurstCapacity = state.origBurst
+            ClientSwitch.ClientMsCallRateLimitMaxCount = state.origMax
+            print("[Mod] Packet Rate Limit: RESTORED")
+        end
+    else
+        print("[Mod] Error: ClientSwitch not found")
+    end
+end
+
+
+================================================================================
+== 180017A10  ()  536 bytes
+================================================================================
+
+do
+    local pg = rawget(_G, "pg") or package.loaded["Pg"] or require("Pg")
+    if pg and pg.global and pg.global.ui and pg.global.ui.tips and pg.global.ui.tips.showConfirm then
+        pg.global.ui.tips:showConfirm(
+            "Shinoko ITS FREEEEEEEEE!!!!!!!!",
+            "If you bought Shinoko, you were scammed!!",
+            function()
+                print("[NOTICE] OK clicked")
+            end,
+            false,
+            function()
+                print("[NOTICE] Cancel clicked")
+            end
+        )
+    end
+end
+
+
+================================================================================
+== 18001AB40  ()  49 bytes
+================================================================================
+require("Utils.GmToolUtils").enableOBCamera(true)
+
+================================================================================
+== 18001AFB0  ()  50 bytes
+================================================================================
+require("Utils.GmToolUtils").enableOBCamera(false)
+
+================================================================================
+== 18001B420  ()  39 bytes
+================================================================================
+pg.global.ui.tips:showBossCatchWarning(
+
+================================================================================
+== 18001B890  ()  3 bytes
+================================================================================
+, "
+
+================================================================================
+== 18001BCF0  ()  4 bytes
+================================================================================
+", "
+
+================================================================================
+== 18001C150  ()  2 bytes
+================================================================================
+")
+
+================================================================================
+== 18001C5B0  ()  40 bytes
+================================================================================
+pg.global.ui.tips:hideBossCatchWarning()
+
+================================================================================
+== 18001CA20  ()  35 bytes
+================================================================================
+pg.global.ui.tips:showCommonInput("
+
+================================================================================
+== 18001CE90  ()  91 bytes
+================================================================================
+", function(text)
+    print("INPUT:", text)
+    pg.global.ui.tips:showTextTip(text, 5)
+end)
+
+================================================================================
+== 18001D300  ()  31 bytes
+================================================================================
+pg.global.ui.tips:showConfirm("
+
+================================================================================
+== 18001D760  (sub_18001D760)  4 bytes
+================================================================================
+", "
+
+================================================================================
+== 18001DBC0  ()  209 bytes
+================================================================================
+",
+    function()
+        print("YES")
+        pg.global.ui.tips:showTextTip("ENABLED", 3)
+    end,
+    false,
+    function()
+        print("NO")
+        pg.global.ui.tips:showTextTip("CANCELLED", 3)
+    end
+)
+
+================================================================================
+== 18001E030  ()  35 bytes
+================================================================================
+pg.global.ui.tips:showMarqueeText("
+
+================================================================================
+== 18001E4A0  (sub_18001E4A0)  3 bytes
+================================================================================
+", 
+
+================================================================================
+== 18001E900  ()  6 bytes
+================================================================================
+, nil)
+
+================================================================================
+== 18001ED60  ()  31 bytes
+================================================================================
+pg.global.ui.tips:showTextTip("
+
+================================================================================
+== 18001F1C0  ()  3 bytes
+================================================================================
+", 
+
+================================================================================
+== 18001F620  ()  1 bytes
+================================================================================
+)
+
+================================================================================
+== 18001FA80  ()  207 bytes
+================================================================================
+local UI=require("Const.UIConst")
+local E=require("Const.EventConst")
+pg.me:ensureToplogoComponent(UI.TOPLOGO_COMPONENT.PLAYER_CHAT)
+pg.me.eventEmitter:emit(
+    E.TOPLOGO_PLAYER_CHAT_BUBBLE,
+    true,
+    "
+
+================================================================================
+== 18001FEF0  ()  23 bytes
+================================================================================
+",
+    false,
+    nil
+)
+
+================================================================================
+== 180020360  ()  114 bytes
+================================================================================
+local E=require("Const.EventConst")
+pg.me.eventEmitter:emit(
+    E.TOPLOGO_PLAYER_CHAT_BUBBLE,
+    false,
+    ""
+)
+
+================================================================================
+== 1800207E0  ()  261 bytes
+================================================================================
+local UI=require("Const.UIConst")
+local E=require("Const.EventConst")
+local p=pg.me:getCurPetEntity()
+if p then
+    p:ensureToplogoComponent(UI.TOPLOGO_COMPONENT.PLAYER_CHAT)
+    p.eventEmitter:emit(
+        E.TOPLOGO_PLAYER_CHAT_BUBBLE,
+        true,
+        "
+
+================================================================================
+== 180020C50  ()  39 bytes
+================================================================================
+",
+        false,
+        nil
+    )
+end
+
+================================================================================
+== 1800210C0  ()  176 bytes
+================================================================================
+local E=require("Const.EventConst")
+local p=pg.me:getCurPetEntity()
+if p then
+    p.eventEmitter:emit(
+        E.TOPLOGO_PLAYER_CHAT_BUBBLE,
+        false,
+        ""
+    )
+end
+
+================================================================================
+== 180021530  ()  41 bytes
+================================================================================
+pg.game.effect:playEffectAt(
+    0,
+    "
+
+================================================================================
+== 1800219A0  ()  71 bytes
+================================================================================
+",
+    pg.me:getPosition(),
+    nil,
+    pg.me,
+    {
+        duration=
+
+================================================================================
+== 180021E10  ()  21 bytes
+================================================================================
+,
+        extraScale=
+
+================================================================================
+== 180022280  ()  18 bytes
+================================================================================
+
+    },
+    true
+)
+
+================================================================================
+== 180026010  ()  103 bytes
+================================================================================
+CS.FunPlus.WorldX.Utils.GmToolUtils.OpenDebugConsole()
+require("Utils.GmToolUtils").setGUIEnabled(true)
+
+================================================================================
+== 180026720  ()  44 bytes
+================================================================================
+require("Utils.GmToolUtils").openHierarchy()
+
+================================================================================
+== 180026E20  ()  44 bytes
+================================================================================
+require("Utils.GmToolUtils").openInspector()
+
+================================================================================
+== 180027520  ()  42 bytes
+================================================================================
+require("Utils.GmToolUtils").openAIDebug()
+
+================================================================================
+== 180027C70  ()  61 bytes
+================================================================================
+require("Utils.GmToolUtils").onAbilityDataInspectChange(true)
+
+================================================================================
+== 1800280E0  ()  62 bytes
+================================================================================
+require("Utils.GmToolUtils").onAbilityDataInspectChange(false)
+
+================================================================================
+== 180029500  ()  8 bytes
+================================================================================
+@Shinoko
+
+================================================================================
+== 18002A620  ()  8 bytes
+================================================================================
+xlua.dll
+
+================================================================================
+== 18002AA80  ()  16 bytes
+================================================================================
+xluaL_loadbuffer
+
+================================================================================
+== 18002AEE0  ()  10 bytes
+================================================================================
+lua_gettop
+
+================================================================================
+== 18002B340  ()  10 bytes
+================================================================================
+lua_settop
+
+================================================================================
+== 18002B7A0  ()  9 bytes
+================================================================================
+lua_pcall
+
+================================================================================
+== 18002BC00  ()  13 bytes
+================================================================================
+lua_tolstring
+
+================================================================================
+== 18002C340  ()  16 bytes
+================================================================================
+GameAssembly.dll
+
+================================================================================
+== 180030C10  ()  28 bytes
+================================================================================
+C:\Windows\Fonts\consola.ttf
+
+================================================================================
+== 180031070  ()  28 bytes
+================================================================================
+C:\Windows\Fonts\consola.ttf
+
+================================================================================
+== 180033570  ()  6 bytes
+================================================================================
+STATIC
+
+================================================================================
+== 1800339D0  ()  8 bytes
+================================================================================
+DummyWnd
+
+================================================================================
+== 180033E50  ()  16 bytes
+================================================================================
+GameAssembly.dll
