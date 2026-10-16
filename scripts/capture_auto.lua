@@ -57,16 +57,27 @@ sp.capture = S
 -- ---------------------------------------------------------------- recompenses
 -- On compte les succes en observant l'entree. Pose une seule fois.
 
-if not S.Observe then
+do
   local vGH = getmetatable(require('Core.Client.GateClientRpcHandler')).__index
+
+  -- On remet l'original avant de poser la notre. Sans ca, chaque rechargement
+  -- empile une couche de plus sur une fonction tres chaude : mesuree a 9.
+  sp.store.hooks = sp.store.hooks or {}
+  for i = #sp.store.hooks, 1, -1 do
+    local h = sp.store.hooks[i]
+    pcall(function() h.vtbl[h.cle] = h.orig end)
+  end
+  sp.store.hooks = {}
+
   local orig = rawget(vGH, 'entityMessageV2')
+  sp.store.hooks[#sp.store.hooks + 1] = {vtbl = vGH, cle = 'entityMessageV2', orig = orig}
+
   if type(orig) == 'function' then
     vGH.entityMessageV2 = function(self, entityId, raw, index, context, ...)
       local nom = RpcIndex.INDEX2RPC[index] or RpcIndex.RPC_INDEX2NAME[index]
       if nom == 'RPC_SC_OnCaptureSuccess' then S.succes = S.succes + 1 end
       return orig(self, entityId, raw, index, context, ...)
     end
-    S.Observe = true
   end
 end
 
