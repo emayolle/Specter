@@ -247,15 +247,16 @@ void draw_ui_waypoints()
                         "scene data. Cached in /tmp/specter-floraisons.json "
                         "and /tmp/specter-waypoints.json.");
                 }
-                // LA LISTE EST BORNEE.
+                // LA LISTE PREND TOUT CE QUI RESTE.
                 //
-                // Elle est en AutoResizeY, donc elle prend toute la hauteur de
-                // son contenu : avec quinze zones, elle poussait l'auto-farm et
-                // l'IA hors de l'ecran. On borne donc la zone de defilement, et
-                // les deux cases restent visibles sans qu'on ait a faire
-                // defiler.
-                const float h = std::max(ImGui::GetContentRegionAvail().y - 92.0f,
-                                         180.0f);
+                // Elle passe apres les deux cases dans le registre : elle est
+                // donc en dernier, et ce qui reste de la page est exactement sa
+                // hauteur. Avant, elle etait en AutoResizeY et prenait la page
+                // entiere — les deux cases se retrouvaient sous le bord, et il
+                // fallait defiler pour les atteindre. La borne de 92 px qu'elle
+                // avait ne suffisait pas : le panneau ajoute son propre cadre.
+                const float h = std::max(ImGui::GetContentRegionAvail().y - 14.0f,
+                                         140.0f);
                 { render::Panneau panneau("REPERES DU JEU");
                 ImGui::BeginChild("##wp_list", ImVec2(0.0f, h));
                 if (nz == 0) {

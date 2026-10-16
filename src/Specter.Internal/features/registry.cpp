@@ -90,11 +90,11 @@ const Feature kAniAi{
 // l'ordre du registre EST l'ordre dans lequel on les voit — et les deux cases
 // d'abord, parce que ce sont elles qu'on cherche.
 //
-//   Joueur   chute, stamina, teleport, waypoints
-//   Monde    IA, auto-farm
+//   Joueur   chute, stamina, teleport
+//   Monde    IA, auto-farm, reperes
 const Feature* const kFeatures[] = {
-    &kInit,     &kConsole,   &kNoFall, &kStamina,
-    &kTeleport, &kWaypoints, &kAniAi,  &kAutofarm, &kLuaDump};
+    &kInit,   &kConsole, &kNoFall, &kStamina, &kTeleport,
+    &kAniAi,  &kAutofarm, &kWaypoints, &kLuaDump};
 }  // namespace
 
 const Feature* const* registry()

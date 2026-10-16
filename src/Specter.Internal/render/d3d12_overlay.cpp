@@ -555,9 +555,13 @@ void poser_style()
     st.ChildRounding = 10.0f;
     st.FrameRounding = 7.0f;
     st.GrabRounding = 7.0f;
-    st.ScrollbarRounding = 7.0f;
+    st.ScrollbarRounding = 2.0f;
     st.ItemSpacing = ImVec2(10.0f, 9.0f);
     st.FramePadding = ImVec2(11.0f, 7.0f);
+    // 12 px de zone cliquable, poignee de 4 : ScrollbarPadding est retire des
+    // deux cotes du cadre, donc la poignee fait ScrollbarSize - 2 x celui-ci.
+    st.ScrollbarSize = 12.0f;
+    st.ScrollbarPadding = 4.0f;
     st.WindowPadding = ImVec2(0.0f, 0.0f);   // la coque dessine son propre padding
 
     ImVec4* c = st.Colors;
@@ -565,9 +569,33 @@ void poser_style()
     c[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     c[ImGuiCol_PopupBg] = panneau();
     c[ImGuiCol_Border] = bordure();
-    c[ImGuiCol_FrameBg] = panneau();
-    c[ImGuiCol_FrameBgHovered] = survol();
+    // LE FOND DE CADRE, A 0.17 ET NON 0.11.
+    //
+    // ImGui dessine avec ca trois choses du meme coup : la piste d'un curseur,
+    // le cadre d'un champ de saisie, et le fond d'un bouton. A 0.11 — la
+    // couleur du panneau qui les contient — les trois etaient invisibles. Sur
+    // la capture du Teleport, le curseur n'etait qu'une pastille violette sans
+    // rail, et « Enregistrer ici » montrait un cadre vide a gauche.
+    // Un fond de cadre doit se detacher de ce qui le porte, sinon ce n'est pas
+    // un cadre.
+    c[ImGuiCol_FrameBg] = survol();
+    c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.21f, 0.28f, 1.00f);
     c[ImGuiCol_FrameBgActive] = accent_doux();
+
+    // LA BARRE DE DEFILEMENT.
+    //
+    // Aucune de ses quatre couleurs n'etait posee : elles restaient au gris
+    // clair d'ImGui, la seule chose claire du menu sur un fond noir. Et sur
+    // la capture de Monde on en voyait DEUX cotes cotes — celle du panneau
+    // « reperes » et celle de la page — parce que les deux defilent.
+    //
+    // Cadre de 12 px pour la zone cliquable, poignee de 4 px au milieu, piste
+    // invisible. C'est la regle des interfaces sombres : une piste dessinee se
+    // voit plus qu'une pointe de defilement qu'on cherche pas.
+    c[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    c[ImGuiCol_ScrollbarGrab] = ImVec4(0.34f, 0.32f, 0.42f, 0.55f);
+    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.55f, 0.52f, 0.66f, 0.85f);
+    c[ImGuiCol_ScrollbarGrabActive] = accent();
     c[ImGuiCol_TitleBg] = fond();
     c[ImGuiCol_TitleBgActive] = fond();
     c[ImGuiCol_Button] = panneau();
