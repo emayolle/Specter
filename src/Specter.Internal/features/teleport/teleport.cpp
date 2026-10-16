@@ -355,17 +355,30 @@ void sanitize_name(char* out, std::size_t cap, const char* src)
         src = "";
     }
     for (; src[n] && n + 1 < cap; ++n) {
-        char c = src[n];
-        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                        (c >= '0' && c <= '9') || c == '_' || c == '-';
-        out[n] = ok ? c : '_';
+        const unsigned char c = static_cast<unsigned char>(src[n]);
+        // This used to keep [a-zA-Z0-9_-] and turn everything else into '_',
+        // which was fine as long as names were identifiers and stopped being
+        // fine the moment they were words from the game:
+        //
+        //     "Cote de mare fleur"  ->  "C__te_de_mar__eflore"
+        //     "Foret des foudres"   ->  "For__t_des_foudres"
+        //
+        // Two underscores for one letter, because 'o' with a circumflex is TWO
+        // bytes in UTF-8 and each one failed the test. The space went too.
+        //
+        // A name is text, not an identifier. What still has to go is what would
+        // break the line format it is written into -- control characters, and
+        // above all the newline that separates records. The name is the LAST
+        // field of the line and the reader copies it to the end of the line, so
+        // spaces round-trip perfectly.
+        const bool ok = (c >= 0x20u && c != 0x7Fu);
+        out[n] = ok ? static_cast<char>(c) : ' ';
     }
     out[n] = '\0';
 }
 
-// Parse "x y z [space]" (optionally prefixed by a "P " tag from kPosProbe).
-// Returns false when fewer than three numbers are present.
-// Parse "x y z [space]" out of a PERSISTED SLOT LINE.
+// Parse "x y z [space]" out of a PERSISTED SLOT LINE. Returns false when fewer
+// than three numbers are present.
 //
 // This is the /tmp/specter-tp.json reader, and that is all it is for now. It
 // used to have a second caller -- the Lua protocol, where the probe printed
