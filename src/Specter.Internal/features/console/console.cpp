@@ -54,7 +54,26 @@ unsigned long long g_out_seq = 0;  // bumped per result, Lua thread only
 
 // UI state, owned here rather than by the overlay: the tab is this feature's,
 // so its buffers are too.
-char g_src[16384] = "print('hello from the game Lua')";
+//
+// g_src MUST be kMaxCode, pas un nombre choisi a part.
+//
+// Il l'etait a 16384, et voila ce que ca donne. Un collage de
+// scripts/chest-open.lua (18 198 octets) se fait tronquer a 16 Ko SANS UN MOT :
+// ImGui InputTextMultiline ecrase ce qui deborde, la coupure tombe au milieu
+// d'une ligne -- ici au milieu de `tpStop()  -- annule un éventuel dép` --, et
+// le seul symptome est une erreur de compilation qui ne parle pas du script :
+//
+//     specter\client\LuaScripts\Core\Timer\SpecterManager.lua:492:
+//         unexpected symbol near ')'
+//
+// Ce nom de fichier, c'est kChunkName. Il ne dit RIEN du script de l'utilisateur
+// : il fait croire a un probleme de pont Lua, alors que le pont va tres bien et
+// que le texte a ete coupe en route. Deux heures a comparer des lignes de
+// source alors que la cause etait un tampon de 16 Ko.
+//
+// La regle : la boite ou on colle et le tampon qui recoit le chunk sont le
+// MÊME objet. Au-dela, il n'y a plus de troncature -- il y a un refus.
+char g_src[kMaxCode] = "print('hello from the game Lua')";
 std::string g_log;
 
 // Mirror the captured output to the host log pipe, line by line, so the console
@@ -441,8 +460,18 @@ void draw_ui()
     ImGui::Text("bridge: %s", status());
     ImGui::InputTextMultiline("##lua_src", g_src, sizeof(g_src),
                               ImVec2(-1.0f, 180.0f));
+
+    // Le tampon est plein => le prochain caractere est perdu. Ça se voit ici,
+    // en clair, AVANT que Lua ne rende une erreur qui accuse le pont.
+    const int srcLen = static_cast<int>(std::strlen(g_src));
+    if (srcLen >= static_cast<int>(sizeof(g_src)) - 1) {
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+                           "TAMPON PLEIN (%d / %d octets) : le texte est coupe, "
+                           "l'execution echouera.", srcLen,
+                           static_cast<int>(sizeof(g_src)) - 1);
+    }
     if (ImGui::Button("Execute")) {
-        const int n = static_cast<int>(std::strlen(g_src));
+        const int n = srcLen;
         if (!submit(kChannelConsole, g_src, n)) {
             g_log += "! bridge not ready\n";
         }

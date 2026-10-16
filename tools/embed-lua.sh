@@ -29,6 +29,46 @@ OUT="${ROOT}/generated/lua_init.h"
 
 [[ -f "${SRC}" ]] || { echo "ERREUR: absent ${SRC}" >&2; exit 1; }
 
+# ---- 0. TOUS les scripts : ils compilent, et ils tiennent dans le tampon -----
+#
+# La limite kMaxCode est ecrite dans le C++ (features/console/console.cpp, et
+# lua/pump.cpp qui la partage). Aucun outil ne la connaissait, donc aucun outil
+# ne pouvait dire "ce script est trop gros".
+#
+# Ce que ca a coute : g_src faisait 16 Ko dans la console alors que kMaxCode en
+# fait 32. Coller chest-open.lua (18 198 o) le tronquait en silence au milieu
+# d'une ligne, et le seul symptome etait
+#
+#     SpecterManager.lua:492: unexpected symbol near ')'
+#
+# -- un nom de fichier interne, qui ne parle pas du script et accuse le pont
+# Lua alors que le pont va tres bien.
+#
+# On lit donc la constante depuis le C++ plutot que de la recopier ici : une
+# recopie serait juste un second endroit a maintenir, et c'est exactement
+# l'erreur qu'on vient de corriger.
+KMAX="$(sed -n 's/^constexpr int kMaxCode = \([0-9]*\) \* \([0-9]*\);/\1 \2/p' \
+        "${ROOT}/src/Specter.Internal/features/console/console.cpp" \
+        | head -1 | awk '{print $1 * $2}')"
+[[ -n "${KMAX}" ]] || { echo "ERREUR: kMaxCode introuvable dans console.cpp" >&2; exit 1; }
+
+echo "-- scripts : compilation + taille (max ${KMAX} o) --"
+for f in "${ROOT}"/scripts/*.lua; do
+  [[ -f "$f" ]] || continue
+  n=$(wc -c < "$f")
+  if [[ "$n" -gt "$KMAX" ]]; then
+    echo "ERREUR: ${f##*/} fait ${n} octets, la console n'en accepte que ${KMAX}." >&2
+    echo "         Il sera tronque en silence au collage, et l'erreur qui en" >&2
+    echo "         sortira ne parlera pas de la taille." >&2
+    exit 1
+  fi
+  if command -v luajit >/dev/null 2>&1; then
+    luajit -e 'local fn,e = loadfile("'"$f"'") if not fn then io.stderr:write("ERREUR Lua: "..tostring(e).."\n") os.exit(1) end' \
+      || { echo "ERREUR: ${f##*/} ne compile pas." >&2; exit 1; }
+  fi
+  printf '   %-24s %6d o\n' "${f##*/}" "$n"
+done
+
 # ---- 1. le litteral C ne doit pas pouvoir se refermer tout seul ------------
 if grep -q ')LUA_INIT' "${SRC}"; then
     echo "ERREUR: ${SRC} contient ')LUA_INIT', ce qui fermerait le litteral." >&2
