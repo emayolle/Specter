@@ -50,8 +50,13 @@ constexpr std::uintptr_t kXluaLoadBufferRva = 0x879010;
 
 // XSRGlobalManager::GetPerfDistance(int perfLevel) -> int
 //
-// Le RAYON DE STREAMING de la carte, en CHUNKS. Trouve par decompile dans
-// generated/input/GameAssembly.dll.i64, base annotee a cette adresse :
+// Le NIVEAU DE PORTEE / DETAIL du streaming. PAS un rayon, et pas convertible
+// en metres : le consommateur, XSRBlockTile::CalcThisTileLodLevel, fait
+//
+//     d = max(|tile.X - agent.X|, |tile.Z - agent.Z|)   // en TUILES
+//     if (d > 12) return 12;                             // plafond du moteur
+//
+// et la valeur sert a choisir jusqu'a quel niveau on charge. Decompile ici :
 //
 //     if ( perfLevel <= 10 ) return 3;
 //     if ( perfLevel <= 30 ) return 4;
@@ -60,20 +65,16 @@ constexpr std::uintptr_t kXluaLoadBufferRva = 0x879010;
 //     if ( perfLevel >  70 ) return 12;
 //     return result;
 //
-// L'argument est le niveau de performance du jeu : un int statique ecrit par
-// XSRGlobalManager::SetPerformanceLevel et clamp dans [0, 100].
+// perfLevel vient de SetPerformanceLevel : un int statique clampe dans [0, 100].
 //
-// Le chunk fait 256 u : TeleportCheckNeedLoadByCollider calcule
-// Mathf::FloorToInt(pos.x * 0.00390625), et 0.00390625 == 1/256.
+// 12 EST LE MAXIMUM, ET C'EST LE MOTEUR QUI L'IMPOSE. Le jeu ne produit que
+// 3, 4, 5, 6 ou 12 ; au-dela, CalcThisTileLodLevel ecrase. Un curseur qui
+// irait plus loin serait du theatre.
 //
-//   perfLevel 0    -> 3 chunks -> ~768 u
-//   perfLevel 100  -> 12 chunks -> ~3072 u
-//
-// CE QUE C'EST, ET CE QUE CE N'EST PAS : ceci regit le streaming de BLOCS, pas
-// l'apparition des ENTITES. Les entites viennent du serveur. Charger plus de
-// terrain ne garantit donc aucun coffre de plus -- ca coute des FPS, c'est
-// tout. A MESURER, pas a supposer : c'est pourquoi la valeur est une variable
-// et pas une constante.
+// CE QUE CA CHARGE : des blocs de terrain et leur niveau de detail. Les
+// ENTITES viennent du serveur -- donc plus de valeur ne garantit aucun coffre
+// de plus, ca coute des FPS. C'est une variable et pas une constante, pour
+// que la question se tranche en comptant.
 constexpr std::uintptr_t kGetPerfDistanceRva = 0x184D5F0;
 
 }  // namespace specter::target

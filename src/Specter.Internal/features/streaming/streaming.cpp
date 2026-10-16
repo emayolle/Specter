@@ -3,11 +3,12 @@
 #include "pch-il2cpp.h"
 
 #include <cstdint>
+#include <cstdio>
 
 #include "features/streaming/streaming.h"
-#include "imgui.h"
 #include "il2cpp/runtime.h"
 #include "il2cpp/target.h"
+#include "imgui.h"
 #include "platform/hook/detour.h"
 #include "platform/log.h"
 
@@ -15,18 +16,19 @@ namespace specter::features {
 namespace streaming {
 namespace {
 
-// LA valeur. Lue et ecrite par la case et par `specter.var.stream_distance`,
-// donc un seul endroit, comme partout ailleurs dans ce projet.
+// LA valeur. Lue et ecrite par le curseur et par `specter.var.stream_distance`,
+// donc un seul endroit.
 //
-// 0 = on ne touche a rien. C'est le defaut : un patch qui s'active tout seul
-// et coute des FPS sans que personne l'ait demande, c'est un patch qu'on
-// retire dans une semaine.
+// 0 = on ne touche a rien. C'est le defaut : un patch qui s'active tout seul et
+// coute des FPS sans que personne l'ait demande, c'est un patch qu'on retire
+// dans une semaine.
 int g_chunks = 0;
 
-// Ce que le jeu aurait repondu, pour l'afficher. 0 tant qu'on n'a rien vu.
+// Ce que le jeu aurait repondu, pour l'afficher a cote. 0 tant qu'on n'a rien
+// observe.
 int g_game_value = 0;
 
-// Signature : instance method, `this` en rcx, puis l'argument, puis le
+// Signature : methode d'instance, `this` en rcx, puis l'argument, puis le
 // MethodInfo* que l'IL2CPP passe toujours en dernier.
 using PerfDistanceFn = int32_t(__fastcall*)(void*, int32_t, void*);
 PerfDistanceFn g_orig = nullptr;
@@ -41,6 +43,19 @@ int32_t __fastcall hooked(void* self, int32_t perfLevel, void* method)
         return static_cast<int32_t>(want);
     }
     return g_game_value;
+}
+
+const char* label_for(int v)
+{
+    static char buf[48];
+    if (v == 0) {
+        return "neutre";
+    }
+    if (v >= kMax) {
+        return "maximum du moteur";
+    }
+    std::snprintf(buf, sizeof(buf), "%d tuile%s", v, v > 1 ? "s" : "");
+    return buf;
 }
 
 }  // namespace
@@ -101,15 +116,7 @@ bool installed()
 
 const char* current_label()
 {
-    switch (g_chunks) {
-    case 0: return "jeu decide";
-    case 3: return "3 chunks (~768 u)";
-    case 4: return "4 chunks (~1024 u)";
-    case 5: return "5 chunks (~1280 u)";
-    case 6: return "6 chunks (~1536 u)";
-    case 12: return "12 chunks (~3072 u)";
-    default: return "force";
-    }
+    return label_for(g_chunks);
 }
 
 void draw_ui()
@@ -119,33 +126,43 @@ void draw_ui()
         return;
     }
 
-    // Le neutre d'abord : c'est l'etat par defaut, et il doit etre obvious.
-    int v = g_chunks;
-    const char* items[] = {"Jeu decide", "3", "4", "5", "6", "12"};
-    const int valeurs[] = {0, 3, 4, 5, 6, 12};
-    int idx = 0;
-    for (int i = 0; i < 6; ++i) {
-        if (valeurs[i] == v) {
-            idx = i;
-        }
+    // Le neutre est un BOUTON, pas une position du curseur.
+    //
+    // Repasser par zero en arriere ne dit pas "je desactive", ca dit "je n'ai
+    // pas decide". C'est deux intentions differentes, donc deux gestes
+    // differents -- et ca evite surtout qu'un retour arriere par megamarche
+    // laisse le jeu en surcharge sans que personne l'ait voulu.
+    if (ImGui::Button("Jeu decide (neutre)")) {
+        set_value(0);
     }
-    if (ImGui::Combo("Rayon de streaming", &idx, items, 6)) {
-        set_value(valeurs[idx]);
+    ImGui::SameLine();
+    if (ImGui::Button("Maximum")) {
+        set_value(kMax);
     }
 
+    int v = g_chunks;
+    if (ImGui::SliderInt("Portee du streaming", &v, kMin, kMax, "%d")) {
+        set_value(v);
+    }
     ImGui::SameLine();
+    ImGui::TextDisabled("%s", label_for(g_chunks));
+
     if (g_game_value > 0) {
-        ImGui::TextDisabled("le jeu veut %d", g_game_value);
+        ImGui::TextDisabled("le jeu demande %d", g_game_value);
     }
 
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "GetPerfDistance traduit le niveau de performance du jeu en rayon "
-            "de chargement, en chunks de 256 u.\n\n"
-            "ATTENTION : ce sont des BLOCS DE TERRAIN, pas des entites. Les "
-            "coffres viennent du serveur, donc charger plus loin ne garantit "
-            "pas un objet de plus -- ca coute des FPS. C'est une mesure a faire, "
-            "pas un gain acquis.");
+            "XSRGlobalManager::GetPerfDistance, remplace par ce detour.\n\n"
+            "L'UNITE N'EST PAS UNE DISTANCE. C'est un niveau de portee, en\n"
+            "TUILES : XSRBlockTile::CalcThisTileLodLevel fait\n"
+            "  max(|tileX-agentX|, |tileZ-agentZ|)\n"
+            "plafonne a 12 PAR LE MOTEUR. La taille d'une tuile en metres\n"
+            "n'est exposee nulle part de facon fiable, donc afficher des metres\n"
+            "serait inventer un chiffre.\n\n"
+            "Ce que ca charge : du TERRAIN et son niveau de detail. Les\n"
+            "coffres viennent du serveur -- donc plus de valeur ne garantit\n"
+            "aucun objet de plus, ca coute des FPS. A mesurer, pas a supposer.");
     }
 }
 
