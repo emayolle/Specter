@@ -500,12 +500,27 @@ void build_ui()
             // Waypoints each keep their own. Nothing here knows or cares which
             // feature lives in which tab.
             //
-            // The opened labels are collected in a small fixed array rather
-            // than a std::vector: this runs every frame, and the image is
-            // manually mapped, so the fewer dynamic things a render frame
-            // touches, the better.
-            const char* ouverts[16];
-            int nouverts = 0;
+            // The first version tracked the labels it had OPENED, which is the
+            // wrong set. BeginTabItem returns false for every tab that is not
+            // the selected one, so an unselected label never got recorded and
+            // the NEXT feature with that label called BeginTabItem again --
+            // two tabs, one ID, and ImGui saying so:
+            //
+            //     Programmer error: 2 visible items with conflicting ID!
+            //
+            // So what is tracked is every label PASSED to BeginTabItem, along
+            // with whether that call ended up open. One call per distinct
+            // label, always; drawing only for the ones that are open.
+            //
+            // A small fixed array rather than a std::vector: this runs every
+            // frame, and the image is manually mapped, so the fewer dynamic
+            // things a render frame touches, the better.
+            struct TabVu {
+                const char* label;
+                bool open;
+            };
+            TabVu vus[16];
+            int nvus = 0;
 
             for (int i = 0; i < features::registry_count(); ++i) {
                 const features::Feature* f = features::registry()[i];
@@ -513,29 +528,34 @@ void build_ui()
                     continue;
                 }
 
-                bool dejaOuvert = false;
-                for (int j = 0; j < nouverts; ++j) {
-                    if (std::strcmp(ouverts[j], f->tab) == 0) {
-                        dejaOuvert = true;
+                int dejaVu = -1;
+                for (int j = 0; j < nvus; ++j) {
+                    if (std::strcmp(vus[j].label, f->tab) == 0) {
+                        dejaVu = j;
                         break;
                     }
                 }
 
-                if (dejaOuvert) {
-                    // Already inside that tab: draw, do not open it again.
-                    f->draw_ui();
+                if (dejaVu >= 0) {
+                    if (vus[dejaVu].open) {
+                        // Already inside that tab: draw, do not open it again.
+                        f->draw_ui();
+                    }
                     continue;
                 }
 
-                if (ImGui::BeginTabItem(f->tab)) {
-                    if (nouverts < 16) {
-                        ouverts[nouverts++] = f->tab;
-                    }
+                if (nvus >= 16) {
+                    continue;  // more distinct labels than the array holds
+                }
+                const bool open = ImGui::BeginTabItem(f->tab);
+                vus[nvus].label = f->tab;
+                vus[nvus].open = open;
+                ++nvus;
+                if (open) {
                     f->draw_ui();
                     ImGui::EndTabItem();
                 }
             }
-
 
             if (ImGui::BeginTabItem("Miscellaneous")) {
 
