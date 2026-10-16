@@ -487,14 +487,50 @@ void build_ui()
         }
 
         if (ImGui::BeginTabBar("##main_tabs")) {
-            // One tab per feature that wants one. The overlay no longer knows
-            // what a console is, or that a teleport tab used to exist.
+            // ONE TAB PER DISTINCT LABEL, not one per feature.
+            //
+            // The overlay no longer knows what a console is, or that a teleport
+            // tab used to exist. But the tab LABEL is the ImGui ID, so two
+            // features carrying the same label produce two tabs with the same
+            // ID: selecting one selects both, and the second is unreachable --
+            // with no error, and no symptom anyone would look for.
+            //
+            // So the label is the grouping key, not the feature. "Movement"
+            // holds the stamina checkbox and the fall-damage one. Teleport and
+            // Waypoints each keep their own. Nothing here knows or cares which
+            // feature lives in which tab.
+            //
+            // The opened labels are collected in a small fixed array rather
+            // than a std::vector: this runs every frame, and the image is
+            // manually mapped, so the fewer dynamic things a render frame
+            // touches, the better.
+            const char* ouverts[16];
+            int nouverts = 0;
+
             for (int i = 0; i < features::registry_count(); ++i) {
                 const features::Feature* f = features::registry()[i];
                 if (!f->tab || !f->draw_ui) {
                     continue;
                 }
+
+                bool dejaOuvert = false;
+                for (int j = 0; j < nouverts; ++j) {
+                    if (std::strcmp(ouverts[j], f->tab) == 0) {
+                        dejaOuvert = true;
+                        break;
+                    }
+                }
+
+                if (dejaOuvert) {
+                    // Already inside that tab: draw, do not open it again.
+                    f->draw_ui();
+                    continue;
+                }
+
                 if (ImGui::BeginTabItem(f->tab)) {
+                    if (nouverts < 16) {
+                        ouverts[nouverts++] = f->tab;
+                    }
                     f->draw_ui();
                     ImGui::EndTabItem();
                 }

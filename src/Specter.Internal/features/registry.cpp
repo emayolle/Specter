@@ -38,16 +38,11 @@ const Feature kWaypoints{
     &teleport::draw_ui_waypoints, nullptr,
 };
 
-// Its own tab, NOT "Movement" again.
-//
-// The tab label is the ImGui ID. Two features carrying the same label produce
-// two tabs with the same ID, and selecting one selects both — the second one is
-// unreachable, with no error and no symptom you would look for.
-//
-// Teleport already takes two entries this way (Teleport and Waypoints), so a
-// tab per feature is the convention here rather than a tab per grouping.
+// Shares the "Movement" tab with the stamina, which is what a tab LABEL means:
+// it is the ImGui ID, and two features with the same label are two entries of
+// ONE tab, not two tabs that fight over one ID. See render/d3d12_overlay.cpp.
 const Feature kNoFall{
-    "nofall", "Fall damage", nullptr, &nofall::draw_ui, nullptr,
+    "nofall", "Movement", nullptr, &nofall::draw_ui, nullptr,
 };
 
 const Feature kStamina{
