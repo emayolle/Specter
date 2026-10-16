@@ -28,10 +28,11 @@ namespace specter::features::console {
 enum Channel {
     kChannelConsole = 0,  // the Execute button
     kChannelTeleport = 1, // position probe + move
-    kChannelStamina = 2, // install / restore the cost hook
-    kChannelCli = 3,      // shell requests, only inside an armed window
-    kChannelInit = 4,     // scripts/init.lua, once per new lua_State
-    kChannelCount = 5,
+    // 2 used to be the stamina install. It died with the C++ chunk: the patch
+    // is in scripts/init.lua now, replayed per state with no C++ involved.
+    kChannelCli = 2,      // shell requests, only inside an armed window
+    kChannelInit = 3,     // scripts/init.lua, once per new lua_State
+    kChannelCount = 4,
 };
 
 // Register the drain hooks with the Lua pump. Called once from specter::start().

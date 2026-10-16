@@ -38,7 +38,9 @@ const Feature kWaypoints{
 };
 
 const Feature kStamina{
-    "inf_stamina", "Movement", &stamina::install, &stamina::draw_ui, nullptr,
+    // nullptr install: the patch lives in scripts/init.lua, so there is nothing
+    // to hook at startup. What is left is the gate and its checkbox.
+    "inf_stamina", "Movement", nullptr, &stamina::draw_ui, nullptr,
 };
 
 // Runs scripts/init.lua once per new lua_State. No tab: it is a bootstrap, not

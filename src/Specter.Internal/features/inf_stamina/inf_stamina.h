@@ -20,9 +20,34 @@
 //     while the player sprinted);
 //   * putting it back restores the normal drain.
 //
-// So one patch per lua_State covers every present and future instance, needs no
-// polling, and has no relog case: a new state is a new class, and the layer
-// re-applies on demand when the toggle is next used.
+// So one patch per lua_State covers every present and future instance, and needs
+// no polling: a new state is a new class, and the patch is laid again when the
+// state is.
+//
+// WHERE THE PATCH LIVES NOW: scripts/init.lua, NOT HERE
+//
+// It used to be a 35-line Lua chunk in a C++ constant, submitted on a channel
+// every time a lua_State appeared. That was correct and it was also the last
+// thing standing between us and a normal build.
+//
+// The log showed both running, every session:
+//
+//     lua| stamina hooked                              <- le chunk C++
+//     lua| [init] stamina : patch posé sur la classe   <- Init.lua
+//
+// Which means `changeStamina` was wrapped TWICE — a wrapper around a wrapper,
+// so every stamina change cost two Lua calls instead of one. Not fatal, not
+// visible, and exactly the kind of thing that survives for months because
+// nothing is wrong. Two installers of the same patch is one too many, so the C++
+// one is gone and the file says why.
+//
+// The header used to promise "the layer re-applies on demand". It re-applies on
+// EVERY new state, from the bootstrap, with no C++ involved. That is the whole
+// point of having a bootstrap: a thing that must survive a relog belongs in a
+// file that is replayed, not in a chunk a DLL remembers to send.
+//
+// So this module is now exactly three things: the gate, the checkbox, and the
+// getter the binding layer needs. No Lua, no state hook, no channel.
 //
 // THE GATE
 //
@@ -35,7 +60,9 @@
 //
 // Disabling leaves the wrapper in place on purpose: it becomes a pass-through,
 // so there is no window where the game is left half-patched. The patch is
-// installed ONCE per lua_State, whatever the flag says, and the flag decides.
+// installed ONCE per lua_State whatever the flag says, and the flag decides —
+// which is why the gate has to be a C++ variable the bootstrap can READ, and not
+// something Lua owns.
 //
 // Why it moved off `AC.__specterStaminaOn`: the toggle used to post a chunk that
 // wrote a flag on the game class, and the checkbox kept a second bool in C++.
@@ -47,10 +74,6 @@
 
 namespace specter::features {
 namespace stamina {
-
-// Register nothing and run nothing: this feature has no Lua to install, it only
-// flips a flag. Returns true so the registry can treat it uniformly.
-bool install();
 
 // The gate itself, as an ADDRESS, for the binding layer to hand to Lua.
 //
