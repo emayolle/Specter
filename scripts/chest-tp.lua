@@ -8,8 +8,9 @@
 -- la scène 3000, 40 déverrouillées, et les N coffres vivants (ClientChest) y
 -- sont tous.
 --
--- Le TP reprend exactement lerp de tp.cpp : TM.addRepeatTimer qui déplace le
--- joueur par petits pas (forceSetPos), auto-annulé en fin de course, et
+-- Le TP est celui de `specter.tp.here` -- celui de l'onglet Teleport, avec
+-- ses réglages. Ce script avait son propre lerp, écrit ici, avec un état sur
+-- le joueur qui ne cohabitait pas avec lui.
 -- remplace un éventuel TP en cours.
 --
 -- Cache local "déjà ouvert" : on garde sur pg.me.__specterChestOpened la liste
@@ -21,8 +22,6 @@
 -- purge pas en temps réel après une ouverture.
 --
 -- Réglages :
-local LERP_STEP  = 5.5     -- unités par tick (mêmes valeurs que le menu TP)
-local LERP_SPEED = 120     -- ticks par seconde (~660 u/s)
 local CHEST_CONFIG = 10506 -- markConfigId "Coffre"
 local MAX_LIST   = 40      -- lignes imprimées au plus
 local TP_ENABLED = true    -- false = liste seulement
@@ -62,17 +61,24 @@ end
 local pnow = e:getPosition()
 
 -- ------------------------------------------------ cache local "déjà ouverts"
--- Champ d'instance sur le joueur : les écritures de champs persistent entre
--- les chunks, et on ne recrée JAMAIS la table si elle existe déjà (sinon on
--- perdrait la liste d'une exécution à l'autre).
-local CACHE_KEY = '__specterChestOpened'
+-- DANS NOTRE STORE, pas sur le joueur.
+--
+-- Il était sur `pg.me.__specterChestOpened` : un nom à nous dans une table du
+-- jeu, visible par quiconque parcourt l'entité.
+--
+-- Il est aussi PARTAGE avec chest-open.lua, volontairement : les deux scripts
+-- parlent des mêmes coffres, et deux caches divergeraient — l'un croirait un
+-- coffre ouvert que l'autre juge disponible, et la chaîne le rouvrirait.
+local ETAT = specter.store.chests
+if type(ETAT) ~= 'table' then
+  ETAT = {}
+  specter.store.chests = ETAT
+end
+local opened = type(ETAT.opened) == 'table' and ETAT.opened or {}
+ETAT.opened = opened
+
 local SEED_RADIUS = 4   -- u : coffre du registre très proche sans entité
                         -- vivante => considéré comme déjà ouvert
-local opened = pg.me[CACHE_KEY]
-if type(opened) ~= 'table' then
-  opened = {}
-  pg.me[CACHE_KEY] = opened
-end
 
 local function liveChestIds()
   local s = {}
@@ -141,8 +147,40 @@ if ok and type(pts) == 'table' then
   end
 end
 
--- Repli : si le registre n'est pas chargé, on se rabat sur les ClientChest
--- vivants (par construction non ouverts).
+-- Les ClientChest VIVANTS d'abord. Ils sont, par construction, des coffres non
+-- ouverts, et ils sont RÉELS : on peut se téléporter dessus sans atterrir dans
+-- le vide.
+--
+-- L'ordre inverse était le défaut, et il mesurait :
+--
+--     scene 3000
+--     marques Coffre deverrouillees ..... 194
+--     dont avec une entite vivante ....... 0
+--     distance mediane jusqu a une marque : 397 u
+--
+-- Aucune marque du registre n'a d'entité tant qu'on n'est pas allé la charger.
+-- Se téléporter dessus, c'est se téléporter dans le vide.
+local live = {}
+for _, en in pairs(pg.getEntities() or {}) do
+  if en.isChest and isCoffre(en.markBindStaticId) then
+    local okp, p = pcall(function() return en:getPosition() end)
+    if okp and p then
+      local dx, dy, dz = p[1] - pnow[1], p[2] - pnow[2], p[3] - pnow[3]
+      live[#live + 1] = {
+        id = en.markBindStaticId,
+        x = p[1], y = p[2], z = p[3],
+        d = (dx * dx + dy * dy + dz * dz) ^ 0.5,
+        name = en.chestValid and 'Coffre' or '',
+      }
+    end
+  end
+end
+if #live > 0 then
+  print(string.format('# marques au registre IGNOREES (aucune entite = TP dans le vide) : %d',
+                       #rows))
+  rows = live
+end
+
 if #rows == 0 then
   for _, en in pairs(pg.getEntities() or {}) do
     if en.isChest and isCoffre(en.markBindStaticId) then
@@ -195,55 +233,21 @@ if target.d < 2.0 then
   return
 end
 
-local V = Vector3
-local TM = require('Core.Timer.TimerManager')
-
--- Annule un éventuel lerp précédent (rendu/TP en cours).
-local prev = e.__specter_tp
-if prev and prev.tid then
-  pcall(function() TM.removeTimer(prev.tid) end)
+-- Le deplacement appartient a specter.tp.here, comme pour l'onglet Teleport.
+--
+-- Ce script avait SON PROPRE lerp -- 5.5/120 en dur, donc les reglages du menu
+-- ne lui parlaient pas -- et son etat sur `e.__specter_tp`, qui ne cohabite
+-- pas avec `specter.store.tpMove`. Deux timers independants pouvaient
+-- deplacer le joueur en meme temps.
+if type(specter.tp) ~= 'table' or type(specter.tp.here) ~= 'function' then
+  print('ERROR: specter.tp.here absent. scripts/init.lua ne tourne pas ?')
+  return
 end
-if prev then
-  prev.active = false
+
+if type(specter.tp.stop) == 'function' then
+  pcall(specter.tp.stop)   -- annule un eventuel deplacement en cours
 end
-
-local s = {
-  active = true, i = 0, step = LERP_STEP,
-  x0 = pnow[1], y0 = pnow[2], z0 = pnow[3],
-  x1 = target.x, y1 = target.y, z1 = target.z,
-}
-e.__specter_tp = s
-
-local dx, dy, dz = target.x - pnow[1], target.y - pnow[2], target.z - pnow[3]
-local dist = (dx * dx + dy * dy + dz * dz) ^ 0.5
-local n = math.ceil(dist / s.step)
-if n < 1 then n = 1 end
-if n > 20000 then n = 20000 end
-s.n = n
-
-local st = s
-local tid
-tid = TM.addRepeatTimer(1 / LERP_SPEED, function()
-  if not st.active then
-    return
-  end
-  st.i = st.i + 1
-  local a = st.i / st.n
-  if a > 1 then a = 1 end
-  local v = V.ForceNew(st.x0 + (st.x1 - st.x0) * a,
-                       st.y0 + (st.y1 - st.y0) * a,
-                       st.z0 + (st.z1 - st.z0) * a)
-  if e.forceSetPos then
-    e:forceSetPos(v, true)
-  else
-    e:setPosition(v)
-  end
-  if st.i >= st.n then
-    st.active = false
-    pcall(function() TM.removeTimer(tid) end)
-  end
-end)
-st.tid = tid
+specter.tp.here(target.x, target.y, target.z)
 
 print(string.format('TP_TO id=%s d=%6.1f (~%.0f u/s)', tostring(target.id),
                      dist, LERP_STEP * LERP_SPEED))
