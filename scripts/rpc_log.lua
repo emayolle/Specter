@@ -3,77 +3,78 @@
 --   tools/lua.sh -f scripts/rpc_log.lua      installe, puis affiche
 --   tools/lua.sh -f scripts/rpc_log.lua      affiche encore
 --
--- Relance le script aussi souvent que tu veux : poser n'est fait qu'une fois,
--- l'affichage est reconstruit a chaque passage.
+-- Relance le script aussi souvent que tu veux : la pose est refaite a chaque
+-- passage (elle commence toujours par retirer ce qu'il y avait).
 --
 -- Pendant que ca tourne, dans le jeu :
 --   specter.rpclog.suivre('RPC_CS_')   ne garder que ce prefixe
 --   specter.rpclog.suivre()            tout garder
 --   specter.rpclog.clear()             tout effacer
 --   specter.rpclog.off() / .on()       arreter / reprendre
+--   specter.rpclog.retirer()           tout demonter
 --
 --
--- CE QUE C'EST
+-- LE PIEGE DES METHODES DUPLIQUEES -- mesure, pas intuition
 --
--- Les methodes d'instance d'une classe vivent dans `vtbl`, pas dans l'objet
--- classe. class.Class() renvoie un `classType` dont le METATABLE porte
--- __index = vtbl (Class.lua:399), et dont le __newindex leve une erreur sur un
--- attribut repete. Donc :
+-- J'ai d'abord pose une enveloppe sur
+--     getmetatable(require('Core.Client.ClientEntity')).__index.serverMsg
+-- et sur celle de ClientAoiComponent. Resultat : SORTIE a 0 pendant que le
+-- joueur lançait des balles. Zero.
 --
---     WRONG   GateClientRpcHandler.entityMessageV2 = maFonction
---     JUSTE   getmetatable(GateClientRpcHandler).__index.entityMessageV2 = ...
+-- Mesure : EntityFactory._entities contient 149 classes d'entites, et 38
+-- d'entre elles ont serverMsg dans LEUR PROPRE vtbl. La methode est COPIEE
+-- dans chaque classe au moment du parse de la config, pas heritee. Donc :
 --
--- Mesure en jeu (probe-rpc-hook.lua) : les trois vtbl sont bien des tables, et
--- les quatre methodes vises y sont presentes.
+--     WRONG   patcher la vtbl de ClientEntity
+--     JUSTE   patcher les 38 vtbl qui ont serverMsg
 --
--- LES QUATRE POINTES DE CAPTURE
+-- Et pg.me (ClientMainPlayer) resout bien le sien : debug.getinfo donne
+-- ClientAoiComponent.lua comme source, mais la table qui le contient est la
+-- sienne.
 --
---   ClientEntity.serverMsg          la sortie normale de tout le monde
---   ClientAoiComponent.serverMsg    sort par __callAoiFunc, donc elle NE PASSE
---                                   PAS par ClientEntity -- il faut les deux
---   entityMessageV2 / entityMessage l'arrivee, avec resolution index -> nom
---
--- ClientAoiComponent.serverMsg se termine parfois par un appel direct a
--- ClientEntity.serverMsg. Le drapeau enAoi evite de compter deux fois.
+-- Donc on enveloppe tout, et on remet les originaux a chaque passage -- sinon
+-- on emballe nos propres enveloppes.
 --
 --
--- LE PIEGE : UN PRINT NE SURVIT PAS A UN EXECUTE
+-- CE QUE C'EST PAR AILLEURS
 --
--- Mesure : une closure creee par un Execute precedent s'execute encore (ok=true)
--- mais son `print` n'atteint plus la sortie -- le tampon de reponse de cet
--- Execute-la n'existe plus. Les RECEVEURS, eux, continuent de tourner, parce
--- qu'ils n'impriment rien : ils ecrivent seulement dans R.
+-- Les methodes d'instance vivent dans `vtbl`, pas dans l'objet classe.
+-- class.Class() renvoie un classType dont le METATABLE porte __index = vtbl
+-- (Class.lua:399), et dont le __newindex leve une erreur sur un attribut
+-- repete. D'ou :
 --
--- D'ou la separation ci-dessous : les enveloppes ne doivent JAMAIS imprimer,
--- et la console (dump, on, off, suivre) est REFAITE a chaque passage du
--- script, pour que son print soit vivant.
+--     getmetatable(CLS).__index.methode = ...
+--
+-- et jamais CLS.methode = ...
+--
+--
+-- LE PIEGE DU PRINT QUI SURVIT PAS -- mesure, lui aussi
+--
+-- Une closure creee par un Execute precedent s'execute encore (pcall ->
+-- ok=true) mais son print n'atteint plus rien : le tampon de reponse de cet
+-- Execute-la n'existe plus. Les ENVELOPPES, elles, continuent, parce qu'elles
+-- n'impriment jamais -- elles ecrivent seulement dans R. D'ou la separation.
 --
 --
 -- GARDE-FOUS
 --
---   - on appelle TOUJOURS l'original, hors de tout pcall : une erreur du
---     logger est avalee, une erreur de l'original reste celle du jeu
---   - on n'indexe AUCUN champ des tables recues. Un argument table est note
+--   - on appelle TOUJOURS l'original, hors de tout pcall
+--   - on n'indexe AUCUN champ des tables recues : un argument table est note
 --     '<table>', point
---   - les enveloppes restent en place pour toute la session
 --   - rien dans _G : tout passe par specter.store et specter.rpclog
 
 local sp = specter
-local unpack_ = table.unpack or unpack
 
 -- ---------------------------------------------------------------- etat
 
 local store = sp.store
 local R = store.rpc
 
-if not R then
-  R = {}
-  store.rpc = R
-end
+if not R then R = {} store.rpc = R end
 
--- L'etat survit d'un passage a l'autre, donc il peut dater d'une version
--- anterieure du script. On complete plutot que d'ecraser : sinon un champ
--- manquant part en nil et casse un string.format bien plus loin.
+-- L'etat survit d'un passage a l'autre et peut dater d'une version anterieure
+-- du script : on complete plutot que d'ecraser. Un champ manquant part en nil
+-- et casse un string.format deux cents lignes plus loin.
 R.sortie = R.sortie or {}
 R.entree = R.entree or {}
 R.lignes = R.lignes or {}
@@ -82,10 +83,11 @@ R.nsortie = R.nsortie or 0
 R.nentree = R.nentree or 0
 R.vue = R.vue or 0
 R.poses = R.poses or 0
+R.orig = R.orig or {}
 if R.actif == nil then R.actif = true end
 
 local LIGNES_MAX = 300
-local enAoi = false            -- reentrance AoiComponent -> ClientEntity
+local enInterne = false          -- reentrance AoiComponent -> ClientEntity
 
 -- ---------------------------------------------------------------- formes
 
@@ -124,90 +126,85 @@ local function note(sens, nom, t, n)
   R.lignes[R.tete % LIGNES_MAX] = string.format('%s %-34s %s', sens, nom, forme(t, n))
 end
 
--- ---------------------------------------------------------------- pose
+-- ---------------------------------------------------------------- retirer
 
-if not R.arme then
-  local pose = 0
-  local RpcIndex = require('Core.Common.RpcIndex')
+for _, o in ipairs(R.orig) do o.vtbl[o.cle] = o.orig end
+R.orig = {}
 
-  -- Le jeu fait deja cette conversion dans entityMessageV2. On la refait pour
-  -- mettre un NOM dans le journal plutot qu'un entier de 2 milliards.
-  local function nomDe(index)
-    local n = RpcIndex.INDEX2RPC[index]
-    if n == nil then n = RpcIndex.RPC_INDEX2NAME[index] end
-    return n or ('#' .. tostring(index))
-  end
+-- ---------------------------------------------------------------- poser
 
-  local function enveloppe(vtbl, cle, avant)
-    local orig = rawget(vtbl, cle)
-    if type(orig) ~= 'function' then
-      print(string.format('rpc_log : %s introuvable (%s) -- passe', cle, type(orig)))
-      return
-    end
-    R.orig = R.orig or {}
-    R.orig[#R.orig + 1] = {vtbl = vtbl, cle = cle, orig = orig}
-    vtbl[cle] = avant(orig)
-    pose = pose + 1
-  end
-
-  local CE = require('Core.Client.ClientEntity')
-  local vCE = getmetatable(CE).__index
-
-  enveloppe(vCE, 'serverMsg', function(orig)
-    return function(self, name, ...)
-      if not enAoi then
-        local n = select('#', ...)
-        local t = {n = n}
-        for k = 1, n do t[k] = (select(k, ...)) end
-        note('>', name or '?', t, n)
-      end
-      return orig(self, name, ...)
-    end
-  end)
-
-  local AC = require('Entities.SpaceEntities.CommonComponent.ClientAoiComponent')
-  local vAC = getmetatable(AC).__index
-
-  enveloppe(vAC, 'serverMsg', function(orig)
-    return function(self, name, ...)
-      if not enAoi then
-        local n = select('#', ...)
-        local t = {n = n}
-        for k = 1, n do t[k] = (select(k, ...)) end
-        note('>', name or '?', t, n)
-        enAoi = true
-      end
-      local r = orig(self, name, ...)
-      enAoi = false
-      return r
-    end
-  end)
-
-  local GH = require('Core.Client.GateClientRpcHandler')
-  local vGH = getmetatable(GH).__index
-
-  enveloppe(vGH, 'entityMessageV2', function(orig)
-    return function(self, entityId, raw, index, context, ...)
-      local n = select('#', ...)
-      local t = {n = n + 1}
-      t[1] = entityId
-      for k = 1, n do t[k + 1] = (select(k, ...)) end
-      note('<', nomDe(index), t, n + 1)
-      return orig(self, entityId, raw, index, context, ...)
-    end
-  end)
-
-  enveloppe(vGH, 'entityMessage', function(orig)
-    return function(self, entityId, raw, index, parameters, context)
-      note('<', nomDe(index), {entityId, parameters}, 2)
-      return orig(self, entityId, raw, index, parameters, context)
-    end
-  end)
-
-  R.arme = true
-  R.poses = pose
-  print(string.format('rpc_log : %d/4 points poses', pose))
+local function enveloppe(vtbl, cle, avant)
+  local orig = rawget(vtbl, cle)
+  if type(orig) ~= 'function' then return false end
+  R.orig[#R.orig + 1] = {vtbl = vtbl, cle = cle, orig = orig}
+  vtbl[cle] = avant(orig)
+  return true
 end
+
+local function avantSortie(orig)
+  return function(self, name, ...)
+    if not enInterne then
+      local n = select('#', ...)
+      local t = {n = n}
+      for k = 1, n do t[k] = (select(k, ...)) end
+      note('>', name or '?', t, n)
+      enInterne = true
+    end
+    local r = orig(self, name, ...)
+    enInterne = false
+    return r
+  end
+end
+
+-- SORTIE : les 38 vtbl qui portent une copie de serverMsg, plus les deux
+-- classes de base (que le registre ne contient pas : ce sont des composants).
+local pose = 0
+local vues = {}
+
+local function enveloppeSi(serverMsg)
+  local v = getmetatable(serverMsg) and rawget(getmetatable(serverMsg), '__index')
+  if type(v) ~= 'table' or vues[v] then return end
+  vues[v] = true
+  if enveloppe(v, 'serverMsg', avantSortie) then pose = pose + 1 end
+end
+
+local EF = require('Core.Common.EntityFactory')
+for _, cls in pairs(EF._entities or {}) do
+  if type(cls) == 'table' then enveloppeSi(cls) end
+end
+enveloppeSi(require('Core.Client.ClientEntity'))
+enveloppeSi(require('Entities.SpaceEntities.CommonComponent.ClientAoiComponent'))
+
+-- ENTREE : une seule classe, et ca marche deja -- une seule entite distribue.
+local RpcIndex = require('Core.Common.RpcIndex')
+
+local function nomDe(index)
+  local n = RpcIndex.INDEX2RPC[index]
+  if n == nil then n = RpcIndex.RPC_INDEX2NAME[index] end
+  return n or ('#' .. tostring(index))
+end
+
+local vGH = getmetatable(require('Core.Client.GateClientRpcHandler')).__index
+
+if enveloppe(vGH, 'entityMessageV2', function(orig)
+  return function(self, entityId, raw, index, context, ...)
+    local n = select('#', ...)
+    local t = {n = n + 1}
+    t[1] = entityId
+    for k = 1, n do t[k + 1] = (select(k, ...)) end
+    note('<', nomDe(index), t, n + 1)
+    return orig(self, entityId, raw, index, context, ...)
+  end
+end) then pose = pose + 1 end
+
+if enveloppe(vGH, 'entityMessage', function(orig)
+  return function(self, entityId, raw, index, parameters, context)
+    note('<', nomDe(index), {entityId, parameters}, 2)
+    return orig(self, entityId, raw, index, parameters, context)
+  end
+end) then pose = pose + 1 end
+
+R.poses = pose
 
 -- ---------------------------------------------------------------- console
 -- Refaite a chaque passage : c'est ici que print doit etre vivant.
@@ -242,23 +239,20 @@ function sp.rpclog.clear()
   print('rpc_log : efface')
 end
 
--- Remet le jeu exactement dans son etat initial. Les originaux sont memorises
+-- Remet le jeu exactement dans son etat initial : les originaux sont memorises
 -- a la pose, donc c'est un retour vrai, pas une approximation.
 function sp.rpclog.retirer()
   local n = 0
-  for _, o in ipairs(R.orig or {}) do
-    o.vtbl[o.cle] = o.orig
-    n = n + 1
-  end
-  R.orig, R.arme = nil, false
-  print(string.format('rpc_log : %d/4 enveloppes retirees -- le jeu est intact', n))
+  for _, o in ipairs(R.orig) do o.vtbl[o.cle] = o.orig; n = n + 1 end
+  R.orig = {}
+  print(string.format('rpc_log : %d enveloppes retirees -- le jeu est intact', n))
 end
 
 function sp.rpclog.dump(n)
   n = n or 15
   print('')
   print(string.rep('=', 68))
-  print(string.format('  points poses %d/4      appeles vus %d', R.poses or 0, R.vue))
+  print(string.format('  enveloppes posees %d      appeles vus %d', R.poses, R.vue))
   print(string.format('  SORTIE %-6d            ENTREE %d', R.nsortie, R.nentree))
   if R.suivre then print(string.format('  filtre : %s', R.suivre)) end
   if not R.actif then print('  enregistrement EN PAUSE') end
@@ -268,7 +262,7 @@ function sp.rpclog.dump(n)
   print('')
   print(string.format('--- SORTIE : ce que le jeu demande au serveur (%d noms) ---', #so))
   if #so == 0 then
-    print('  (rien)  -- bouge ton personnage, ouvre un coffre, puis relance')
+    print('  (rien) -- fais une action en jeu, puis relance')
   end
   for i = 1, math.min(#so, 24) do
     print(string.format('  %-36s %5d', so[i][1], so[i][2]))
@@ -291,10 +285,9 @@ function sp.rpclog.dump(n)
   print(string.rep('=', 68))
 end
 
+print(string.format('rpc_log : %d enveloppes posees', pose))
 if R.tete == 0 then
-  print(string.format('rpc_log : pret, %d/4 points poses -- fais une action en jeu,',
-        R.poses or 0))
-  print('           puis relance ce script pour lire.')
+  print('           fais une action en jeu, puis relance ce script pour lire.')
 else
   sp.rpclog.dump()
 end

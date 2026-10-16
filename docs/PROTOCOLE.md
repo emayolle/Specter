@@ -184,17 +184,115 @@ Deuxdetails qui font douter :
 Non vérifié. C'est la piste la plus sérieuse qui reste, et elle est **gratuite
 à tester** : un appel, un comptage d'entités.
 
-## Ce qu'on ne fera pas
+## La capture : le protocole, et où il résiste
 
-Le catalogue est complet et lisible : `RPC_CS_DirectCollect`,
-`RPC_CS_TakeItemFromPlayer`, `RPC_CS_SellItemByGenId`, `RPC_CS_UseItemById`…
-On pourrait tous les appeler.
+Mesuré, parce que la question « est-ce scriptable ? » mérite mieux qu'une
+intuition.
 
-L'étage 4 les refuse. Un client qui triche sur ces appels ne gagne rien : il se
-fait bannir, et le test de triche est fait côté serveur, sur des données que le
-client n'a pas (`RPC_CS_SpecialDamage`, la validation de dégâts de chute — voir
-le point ouvert sur `nofall`).
+### La chaîne réelle, prise dans le logger
 
-**Ce qu'on cherche n'est pas un accès gratuit, c'est la déclaration de zone.**
-Une variable que le serveur écoute et qui élargit ce qu'il nous envoie. Ça se
-teste en une mesure.
+Un lancer complet, du plus ancien au plus récent :
+
+```
+> RPC_CS_CaptureHoldBall      "75940f3d-…",  110001
+> RPC_CS_FireBall             110001,  "75940f3d-…",  1,  <fn>
+< RPC_SC_OnFireBall           "6ad2165…",  "75940f3d-…",  <table>
+> RPC_CS_NotifyCaptureAnimStart   "6ad2165…",  <table>
+> RPC_CS_BallHitEntity        "6ad2165…",  "atITvyiV7L6WztK-",  true,  <fn>
+< RPC_SC_OnCaptureAnimEnd     …
+> RPC_CS_NotifyCaptureAnimEnd "6ad2165…",  <table>
+< RPC_SC_OnCaptureSuccess     ,  <table>,  "6ad2165…"
+```
+
+Signatures réelles (`RpcCSArgDict`) :
+
+| RPC | signature | valeur mesurée |
+|---|---|---|
+| `CaptureHoldBall` | `string, int` | envId fabriqué par nous, **110001** |
+| `FireBall` | `int, string, int` | 110001, envId, **1** = `CATCH_TYPE.Normal` |
+| `BallHitEntity` | `string, string, boolean` | session, cible, **`fromBehind`** |
+
+Le booléen est nommé, `ClientMainAuthorityBall.lua:206` :
+
+```lua
+self.master:serverMsg("RPC_CS_BallHitEntity",
+    self.captureSessionId, hitEntityId, fromBehind or false, ...)
+```
+
+### Où est le verrou
+
+`ThrowBallContext:createBall()` :
+
+```lua
+self.envId = pg.game.envObj:genEnvId()          -- chez nous
+self.ballEnt = self.player:SyncCaptureHoldBall(self.envId, self.itemId, true)
+self.player:serverMsg("RPC_CS_CaptureHoldBall", self.envId, self.itemId)
+```
+
+Et le journal montre que **`ballUid` vaut exactement l'`envId` que nous avons
+fabriqué**. Le GUID part de chez nous et revient identique.
+
+| valeur | forgeable ? |
+|---|---|
+| `envId` / `ballUid` | **oui** — `genEnvId()` est local |
+| `itemId` = 110001 | **oui** |
+| `catchMode` | **oui** — `Other=3, Quick=2, Normal=1` |
+| `captureSessionId` | **NON** — émis par le serveur dans `OnFireBall` |
+
+**Le protocole ne garde qu'un seul chiffre côté serveur, et c'est le seul qui
+compte.** Tout le reste est du client. C'est bien construit.
+
+### Le test (`scripts/capture_probe.lua`)
+
+Une **vraie** session, un `BallHitEntity` forgé sur l'entité la plus loin de la
+carte (4990 u), envoyé après le retour de l'handler du jeu pour éviter la
+réentrance sur le chemin réseau.
+
+```
+session reelle   : 6ad216ff2895ecbe96cf9f64
+cible forgee     : atITv3D69sYPemqc   (4 990 u)
+>>> code = 1010
+```
+
+`Common/NoticeDef.lua:835` :
+
+```lua
+ERROR_INVALID_TARGET = 1010,
+```
+
+**La session a été acceptée. C'est la cible qui a été refusée.** Ce n'est pas un
+« session inconnue » — les codes voisins sont tous des refus de validation :
+
+```
+ERROR_INVALID_CUR_PET  1011     ERROR_POSITION_VALID   1002
+ERROR_PET_NOT_FOUND    1018     ERROR_ENTITY_NOT_EXIST 1008
+ERROR_IN_COOLDOWN      1007     ERROR_INVALID_STATUS   1003
+```
+
+**Conclusion : le serveur ne se fie pas au rapport de touchement du client.**
+
+Ce que ça ne prouve pas : `ERROR_INVALID_TARGET` ne distingue pas « hors de
+portée » de « pas une cible capturable ». Les deux sont un refus, et les deux
+disent la même chose — mais on ne peut pas en déduire qu'une cible **voisine et
+légitime** serait acceptée. Mesurer ça demanderait un second essai, plus
+agressif, et le serveur audite.
+
+### Ce qui reste scriptable
+
+**Le lancer.** `CaptureHoldBall` + `FireBall` sont entièrement forgeables : tous
+leurs arguments naissent chez nous. Un timer qui tient la balle et la lance,
+c'est fait.
+
+**La réussite, non.** `MUST_SUCCESS_PROB_THRESHOLD = 0.999999`,
+`MAX_HIT_DISTANCE = 5`, `MAX_BEHIND_ANGLE = math.pi / 2`, et une taxonomie
+d'échecs serveur :
+
+```lua
+SETTLE_REASON = {
+ NORMAL_MISSED = 2, LEAVE_SPACE = 3, LOSE_CLIENT = 4, TIMEOUT = 5,
+ NO_PUPPET = 6, NO_VALID_PUPPET = 7,
+ FRAME_CONTEXT_CHANGED = 8, FRAME_BALL_CONTEXT_MISMATCH = 9,
+}
+```
+
+Un script peut donc **lancer plus vite**. Il ne peut pas **réussir plus**.

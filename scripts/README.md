@@ -32,6 +32,7 @@ plupart des scripts ont leurs réglages dans des constantes en tête de fichier)
 | `entities-classes.lua` | **combien de chaque type** (entités vivantes par classe) |
 | `entities-near.lua` | qu'y a-t-il autour de moi (rayon réglable) |
 | `entity-dump.lua` | tous les champs d'une entité (joueur / plus proche / par classe) |
+| `quest-waypoints.lua` | **waypoints des missions** : 3 sources — `tracked` (marques affichées sur la carte), `accepted` (toutes les quêtes en cours, position résolue par le jeu), `catalogue` (mesuré : vide, cf. plus bas) |
 
 ## Conventions de sortie
 
@@ -40,8 +41,9 @@ Une ligne = un objet, préfixes stables (parsable au `grep`) :
 ```
 M <scene> <cfg> <x> <y> <z> <nom>     marque quelconque
 C <scene> <x> <y> <z>                 coffre (marque monde)
+W <source> <scene> <questId> <objId> <x> <y> <z> <nom>   waypoint de quête
 LIVE ...                              entité vivante
-TOTAL=<n> / TOTAL_MARKS=<n> / TOTAL_LIVE=<n>
+TOTAL=<n> / TOTAL_MARKS=<n> / TOTAL_LIVE=<n> / TOTAL_<SOURCE>=<n>
 ```
 
 ## Repères du jeu (ce qui a été vérifié en live)
@@ -92,6 +94,41 @@ Dr Glass, `10404` Casquillon, `10407` Avant-poste, `10412` Aider l'Aniimo,
 `name` (text id), `icon` `$UI_Icon_MarkPoint_Chest.png`, `markConfigId=10506`,
 `model`, `actionPrototypeId`, `openingTime`, `unlockSound`…). C'est la **config**,
 pas les positions : celles-ci viennent des marques.
+
+### Quêtes / waypoints de mission
+
+Le jeu appelle « quêtes » ce qu'on entend par missions. Tout est dans
+`require('GameApp.Quest.QuestUtils')` — 278 fonctions, dont les trois qui
+comptent :
+
+| quoi | comment | mesuré (scene 3000) |
+|---|---|---|
+| **marques affichées** (carte + HUD) | `pg.game.map.tempMarkPointData` : `markId → {questId, questType, sceneId, markPosition, markConfigId, objId, circleRadius, infoTitle, icon, showPath, …}` | **20** |
+| **toutes les quêtes en cours** | `QU.getAllAcceptedQuestsData()` → `questId → {configId, objectives, runCond, runState, state}` | **231** |
+| **position d'un objectif** | `QU.getQuestTargetInfo(questData, objId)` → `{posInfo, questId, state}`, `posInfo[i]` = `{objId, pathId, pos, posConfig, showPath}` | **34** waypoints |
+| **position d'une quête (config)** | `SU.getSceneTargetPositionData(scene)[posConfigId].position` | lu, mais inutilisable sans quêtes acceptées |
+| config d'une quête | `QU.getQuestConfig(questId)` : `name` (text id), `objectives[objId]` = `{desc, paramVals, pathfindingID}` | — |
+
+Un **vecteur se lit par indice** : `pos[1]=x pos[2]=y pos[3]=z` (`.x`/`.y`/`.z`
+renvoient `nil`, et `pairs()` sur ces `userdata` « BIN DESIGN DATA TABLE »
+débouche sur la mémoire brute — ne pas le faire).
+
+`paramVals` est une liste plate `clé, valeur, clé, valeur…`. Sur les 231 quêtes
+acceptées : `QUEST_STATE` (47), `UNLOCK_DIALOGUE_GRAPH` (76), `GOTO_POSITION` (12),
+`HAS_PET_ID`, `SPAWNER_DONE`, `TRIGGER_SANDBOX_SUCCESS`… Seul `GOTO_POSITION`
+porte un `posConfigId` résolvable en position.
+
+⚠️ **Ce ne sont pas des marques monde.** `getSceneMarkPointData(3000)` renvoie
+2323 marques et **aucune** en `markConfigId` 100 / 109, qui sont ceux des
+marques de quête : les waypoints de mission n'existent que dans le système de
+quêtes. Un aller-retour dans `quest-waypoints.lua` le confirme.
+
+⚠️ **Le catalogue complet n'est pas disponible côté client.** `Data.quest_main`
+expose 34 sections / 118 quêtes en mémoire, mais **0** d'entre elles a
+`objectives` rempli, et `QU.getQuestConfig()` renvoie `nil` sur une quête non
+acceptée : la config ne se matérialise que pour les quêtes du joueur. La liste
+de *toutes* les missions du jeu n'est donc pas extractible par ce chemin (mode
+`catalogue` du script, qui rend 0 ligne et le dit).
 
 ## Pièges (vécus)
 
