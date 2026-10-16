@@ -20,6 +20,12 @@
 //
 // Un log par frame NOIERAIT le log lui-même, et il le ferait d'autant plus
 // fort qu'on cherche à mesurer un problème de performance.
+//
+// ET CHAQUE NOMBRE EST PAR FRAME, PAS PAR SECONDE. Mesure : le total de la
+// seconde affiche "2.00 ms" a cote d'un budget de 16.7 ms laisse croire a 12%.
+// Divise par le nombre de frames, c'est 0.027 ms, soit 0.2%. Un compteur qui
+// exagre notre cout de quarante fois fait perdre du temps au lieu d'en
+// economiser.
 
 #pragma once
 
