@@ -205,18 +205,24 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
 
     // On rend la main EXACTEMENT d'une ligne de haut, puis on pose la zone
     // cliquable a son point de depart.
-    ImGui::SetCursorScreenPos(depart);
-    ImGui::Dummy(ImVec2(largeur + marge, hauteur));
-    // APRES le Dummy : c'est la ou le curseur doit se retrouver.
-    const ImVec2 apres = ImGui::GetCursorScreenPos();
-
-    // Zone cliquable par-dessus, posee SANS deplacer le curseur : un
-    // InvisibleButton avance le curseur comme n'importe quel item, donc sans ce
-    // retour les pages de la nav se reservaient DEUX lignes chacune — c'est
-    // l'ecart enorme entre Joueur et Monde.
+    // LE DERNIER ITEM DOIT ETRE LE Dummy.
+    //
+    // ImGui verifie, a la fermeture de la fenetre, que le curseur n'est pas
+    // plus bas que le contenu maxi. Un Dummy avance le curseur de sa hauteur,
+    // PUIS ImGui ajoute l'espacement d'item : si on repose le curseur sur la
+    // position d'apres, il est d'un espacement en dessous du maxi, et on
+    // obtient :
+    //
+    //     Code uses SetCursorPos()/SetCursorScreenPos() to extend window
+    //     parent boundaries. Please submit an item e.g. Dummy() afterwards.
+    //
+    // Donc : zone cliquable d'abord, puis Dummy en DERNIER. Une seule ligne
+    // reservee, et le curseur finit exactement sur le contenu.
     ImGui::SetCursorScreenPos(depart);
     ImGui::InvisibleButton("##zone", ImVec2(largeur + marge, hauteur));
-    ImGui::SetCursorScreenPos(apres);
+
+    ImGui::SetCursorScreenPos(depart);
+    ImGui::Dummy(ImVec2(largeur + marge, hauteur));
 
     ImGui::PopID();
 }
@@ -375,8 +381,10 @@ inline bool bouton_ligne(const char* libelle)
     ImGui::InvisibleButton("##b", ImVec2(q.x - p0.x, q.y - p0.y));
     const bool clic = ImGui::IsItemClicked();
 
-    // On rend la main APRES le bouton, pas a sa place.
-    ImGui::SetCursorScreenPos(q);
+    // On rend la main au point de DEPART, pas apres le bouton : partir de q
+    // reservait deux lignes. Et le Dummy reste le dernier item, pour la meme
+    // raison qu'en entree_nav.
+    ImGui::SetCursorScreenPos(d);
     ImGui::Dummy(ImVec2(0.0f, h));
 
     ImGui::PopID();
@@ -464,7 +472,9 @@ inline bool ligne_repere(const char* nom, float x, float y, float z,
     ImGui::InvisibleButton("##act", ImVec2(q.x - p0.x, q.y - p0.y));
     const bool clic = ImGui::IsItemClicked();
 
-    // UNE SEULE ligne reservee.
+    // UNE SEULE ligne reservee, et le Dummy repart du DEPART : partir de q
+    // reservait deux hauteurs de ligne — c'etait l'ecart entre les reperes.
+    // Et comme en entree_nav, il doit etre le dernier item.
     ImGui::SetCursorScreenPos(d);
     ImGui::Dummy(ImVec2(0.0f, h));
 
