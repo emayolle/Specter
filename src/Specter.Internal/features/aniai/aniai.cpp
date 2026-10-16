@@ -56,7 +56,7 @@ void draw_ui()
         g_enabled = on;
     }
     ImGui::Dummy(ImVec2(0.0f, 2.0f));
-    ImGui::TextDisabled("decochee : ils ne font plus rien");
+    ImGui::TextColored(render::texte_faible(), "decochee : ils ne font plus rien");
 
     ImGui::SameLine();
     ImGui::BeginDisabled();

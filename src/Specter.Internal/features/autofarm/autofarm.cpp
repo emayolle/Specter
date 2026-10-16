@@ -80,7 +80,7 @@ void draw_ui()
     if (on) {
         ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
     } else {
-        ImGui::TextDisabled("desactive");
+        ImGui::TextColored(render::texte_faible(), "desactive");
     }
     ImGui::EndDisabled();
 

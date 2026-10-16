@@ -82,20 +82,27 @@ private:
 // Les glyphes qu'on utilise reellement, par nom plutot que par nombre.
 // Font Awesome Free, zone privee d'Unicode.
 namespace ico {
-constexpr unsigned int reglages = 0xF013;   // cog
-constexpr unsigned int eclair = 0xF0E7;     // bolt
-constexpr unsigned int terminal = 0xF120;   // terminal
-constexpr unsigned int carte = 0xF041;      // map-marker
-constexpr unsigned int vise = 0xF05B;       // crosshairs
-constexpr unsigned int robot = 0xF544;      // robot
-constexpr unsigned int cube = 0xF1B2;       // cube
-constexpr unsigned int curseur = 0xF3C5;   // sliders-h
-constexpr unsigned int bug = 0xF118;        // bug
-constexpr unsigned int liste = 0xF0C9;      // bars
-constexpr unsigned int code = 0xF1C9;       // file-code
-constexpr unsigned int outil = 0xF0AD;      // wrench
-constexpr unsigned int oeil = 0xF06E;       // eye
-constexpr unsigned int info = 0xF05A;       // info-circle
+// Lucide, sous-ensemble de 107 glyphes. Les points de code viennent de
+// Lucide.css via third_party/lucide/GLYPHES.txt ; les recopier a la main serait
+// la facon sure de les derapper a la prochaine mise a jour.
+constexpr unsigned int vise = 0xE0AC;        // crosshair
+constexpr unsigned int carte = 0xE111;      // map-pin
+constexpr unsigned int eclair = 0xE1B4;     // zap
+constexpr unsigned int robot = 0xE1BB;      // bot
+constexpr unsigned int bug = 0xE20C;        // bug
+constexpr unsigned int terminal = 0xE181;   // terminal
+constexpr unsigned int reglages = 0xE154;   // settings
+constexpr unsigned int outil = 0xE1B1;      // wrench
+constexpr unsigned int cible = 0xE345;      // circle-dot
+constexpr unsigned int fleche = 0xE06F;     // chevron-right
+constexpr unsigned int croix = 0xE1B2;      // x
+constexpr unsigned int info = 0xE0F9;       // info
+constexpr unsigned int alerte = 0xE193;     // triangle-alert
+constexpr unsigned int ok = 0xE226;         // circle-check
+constexpr unsigned int actif = 0xE140;      // power
+constexpr unsigned int bannir = 0xE051;     // ban
+constexpr unsigned int oeil = 0xE0BA;       // eye
+constexpr unsigned int liste = 0xE106;      // list
 }  // namespace ico
 
 // Une entree de navigation : icone + libelle, comme sur la maquette.
@@ -116,19 +123,22 @@ inline void entree_nav(ImFont* police, const char* libelle, unsigned int glyphe,
                           coul(accent()), 1.5f);
     }
 
-    // Icone, a l'etat de la page.
+    // Icone.
     if (police) {
-        Icone portee(police, 15.0f);
-        ImGui::SetCursorPos(ImVec2(p.x + 14.0f, p.y + (hauteur - 15.0f) * 0.5f));
+        Icone portee(police, 16.0f);
+        ImGui::SetCursorPos(ImVec2(p.x + 14.0f, p.y + (hauteur - 16.0f) * 0.5f));
         ImGui::TextColored(actif ? accent() : texte_faible(), "%c",
                            static_cast<unsigned short>(glyphe));
     }
 
-    // Libelle. Selectable reste pose dessous : c'est lui qui capte le clic, et
-    // on ne peut pas le poser sous un texte qu'on dessine a la main.
+    // Libelle, a cote de l icone.
+    ImGui::SetCursorPos(ImVec2(p.x + 38.0f, p.y + (hauteur - ImGui::GetTextLineHeight()) * 0.5f));
+    ImGui::TextColored(actif ? texte() : texte_faible(), "%s", libelle);
+
+    // Zone cliquable, posee APRES le texte donc par-dessus, et transparente.
     ImGui::SetCursorScreenPos(p);
     ImGui::InvisibleButton("##nav", ImVec2(largeur, hauteur));
-    if (actif && ImGui::IsItemHovered()) {
+    if (ImGui::IsItemHovered()) {
         dl->AddRect(p, q, coul(accent_doux()), 6.0f, 0, 1.0f);
     }
 }
@@ -221,7 +231,7 @@ inline bool case_a_cocher(const char* libelle, bool* valeur)
     if (*valeur) {
         ImGui::TextUnformatted(libelle);
     } else {
-        ImGui::TextDisabled("%s", libelle);
+        ImGui::TextColored(texte_faible(), "%s", libelle);
     }
 
     ImGui::PopID();

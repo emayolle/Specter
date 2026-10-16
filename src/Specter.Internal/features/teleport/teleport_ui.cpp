@@ -16,6 +16,7 @@
 #include "features/teleport/teleport.h"
 #include "features/teleport/teleport_ui.h"
 #include "imgui.h"
+#include "render/ui_widgets.h"
 
 namespace specter::features {
 namespace teleport {
@@ -68,7 +69,7 @@ void draw_ui()
                     ImGui::Text("Position: (%.2f, %.2f, %.2f)  space %d", cx, cy,
                                 cz, csp);
                 } else {
-                    ImGui::TextDisabled(
+                    ImGui::TextColored(render::texte_faible(), 
                         "position unknown - wait until you are in-world");
                 }
 
@@ -86,7 +87,7 @@ void draw_ui()
                 ImGui::Separator();
                 ImGui::TextUnformatted("Lerp tuning");
                 ImGui::SameLine();
-                ImGui::TextDisabled(
+                ImGui::TextColored(render::texte_faible(), 
                     "(a teleport walks to the target in small steps)");
                 float stepv = features::teleport::lerp_step();
                 ImGui::SetNextItemWidth(240.0f);
@@ -120,14 +121,14 @@ void draw_ui()
                 const float cap = fps > 1.0f ? fps : 60.0f;
                 const float sps = features::teleport::lerp_speed();
                 const float eff_speed = sps < cap ? sps : cap;
-                ImGui::TextDisabled(
+                ImGui::TextColored(render::texte_faible(), 
                     "=> ~%.0f u/s  (step x min(speed, %.0f fps))",
                     features::teleport::lerp_step() * eff_speed, cap);
 
                 ImGui::Separator();
                 ImGui::BeginChild("##tp_slots", ImVec2(-1.0f, -1.0f), true);
                 if (features::teleport::count() == 0) {
-                    ImGui::TextDisabled("no saved positions yet");
+                    ImGui::TextColored(render::texte_faible(), "no saved positions yet");
                 }
                 for (int i = 0; i < features::teleport::count(); ++i) {
                     char nm[36] = {};
@@ -136,7 +137,7 @@ void draw_ui()
                     ImGui::PushID(i);
                     ImGui::TextUnformatted(nm);
                     ImGui::SameLine();
-                    ImGui::TextDisabled("(%.2f, %.2f, %.2f)", sx, sy, sz);
+                    ImGui::TextColored(render::texte_faible(), "(%.2f, %.2f, %.2f)", sx, sy, sz);
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Teleport")) {
                         if (!features::teleport::teleport_to(i)) {
@@ -208,9 +209,9 @@ void draw_ui_waypoints()
                 }
 
                 if (features::teleport::marks_pending()) {
-                    ImGui::TextDisabled("scanning the game...");
+                    ImGui::TextColored(render::texte_faible(), "scanning the game...");
                 } else {
-                    ImGui::TextDisabled(
+                    ImGui::TextColored(render::texte_faible(), 
                         "%d zone(s): %d Floraison(s), %d waypoint(s)", nz,
                         nflora, nwp);
                 }
@@ -232,13 +233,13 @@ void draw_ui_waypoints()
                 ImGui::Separator();
                 ImGui::BeginChild("##wp_list", ImVec2(-1.0f, -1.0f), true);
                 if (nz == 0) {
-                    ImGui::TextDisabled(
+                    ImGui::TextColored(render::texte_faible(), 
                         "nothing yet - press Refresh once in-world");
                 }
                 for (int zi = 0; zi < nz; ++zi) {
                     const int zone = zones[zi];
                     ImGui::Separator();
-                    ImGui::TextDisabled("Zone %d", zone);
+                    ImGui::TextColored(render::texte_faible(), "Zone %d", zone);
                     for (int i = 0; i < nflora; ++i) {
                         int z = 0;
                         float fx = 0.0f, fy = 0.0f, fz = 0.0f;
@@ -249,7 +250,7 @@ void draw_ui_waypoints()
                         ImGui::PushID(100000 + i);
                         ImGui::TextUnformatted("Floraison");
                         ImGui::SameLine();
-                        ImGui::TextDisabled("(%.1f, %.1f, %.1f)", fx, fy, fz);
+                        ImGui::TextColored(render::texte_faible(), "(%.1f, %.1f, %.1f)", fx, fy, fz);
                         ImGui::SameLine();
                         if (ImGui::SmallButton("Teleport")) {
                             if (!features::teleport::teleport_to_floraison(i)) {
@@ -270,7 +271,7 @@ void draw_ui_waypoints()
                         ImGui::PushID(200000 + i);
                         ImGui::TextUnformatted(nm[0] ? nm : "(unnamed)");
                         ImGui::SameLine();
-                        ImGui::TextDisabled("(%.1f, %.1f, %.1f)", wx, wy, wz);
+                        ImGui::TextColored(render::texte_faible(), "(%.1f, %.1f, %.1f)", wx, wy, wz);
                         ImGui::SameLine();
                         if (ImGui::SmallButton("Teleport")) {
                             if (!features::teleport::teleport_to_waypoint(i)) {

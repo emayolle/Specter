@@ -532,7 +532,7 @@ void draw_ui()
         g_log.clear();
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("(an infinite loop freezes the game)");
+    ImGui::TextColored(render::texte_faible(), "(an infinite loop freezes the game)");
 
     // The shell window. Ticking this is the only thing that lets anything run
     // Lua without the Execute button, which is the whole point: the precondition
@@ -551,7 +551,7 @@ void draw_ui()
     if (open) {
         ImGui::Text("ouvert (par defaut) -- decocher pour fermer");
     } else {
-        ImGui::TextDisabled("ferme");
+        ImGui::TextColored(render::texte_faible(), "ferme");
     }
 
     ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);

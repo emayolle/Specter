@@ -37,7 +37,7 @@
 #include "platform/perf.h"
 
 #include "imgui.h"
-#include "font_awesome.h"          // generated/, from third_party/fontawesome/
+#include "icon_font.h"            // generated/, from third_party/lucide/
 #include "render/ui_widgets.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
@@ -438,7 +438,7 @@ InitResult init_once(IDXGISwapChain* sc)
     // Font Awesome Free place ses glyphes dans la zone privee d'Unicode, donc
     // la plage se construit a la main : passer 0xFFFF ferait cuire 65 000
     // glyphes dont on n'en utilise qu'une dizaine.
-    static const ImWchar kPlageIcones[] = {0xF000, 0xF8FF};
+    static const ImWchar kPlageIcones[] = {0xE000, 0xF8FF};
     static bool police_ajoutee = false;
     if (!police_ajoutee) {
         police_ajoutee = true;
@@ -671,13 +671,13 @@ void build_ui()
                 ImGui::TextColored(texte(), "SPECTER");
                 ImGui::SetCursorPos(ImVec2(p.x + c + 11.0f, p.y + 3.0f +
                                                 ImGui::GetTextLineHeight()));
-                ImGui::TextDisabled("Aniimoe");
+                ImGui::TextColored(texte_faible(), "Aniimoe");
             }
             ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
             // Titres de section, comme sur la maquette : CA combat, CA autre.
             // Sans ca, six entrees de meme niveau donnent une liste grise.
-            ImGui::TextDisabled("  DEPLACEMENT");
+            ImGui::TextColored(texte_faible(), "  DEPLACEMENT");
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
             for (int i = 0; i < npages; ++i) {
@@ -689,7 +689,7 @@ void build_ui()
                 const bool suivant_mouvement = mouvement && !affiche_mouvement;
                 if (suivant_mouvement) {
                     ImGui::Dummy(ImVec2(0.0f, 8.0f));
-                    ImGui::TextDisabled("  JEU");
+                    ImGui::TextColored(texte_faible(), "  JEU");
                     ImGui::Dummy(ImVec2(0.0f, 4.0f));
                     affiche_mouvement = true;
                 }
@@ -732,14 +732,14 @@ void build_ui()
                     Panneau p2("RENDU");
                     ImGui::Text("%.1f fps", io.Framerate);
                     ImGui::SameLine();
-                    ImGui::TextDisabled("(%.2f ms par image)",
+                    ImGui::TextColored(texte_faible(), "(%.2f ms par image)",
                                         1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
                     ImGui::Dummy(ImVec2(0.0f, 4.0f));
                     if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
                         g_ui_enabled = false;
                     }
                     ImGui::SameLine();
-                    ImGui::TextDisabled("ou DELETE");
+                    ImGui::TextColored(texte_faible(), "ou DELETE");
                 }
             } else {
                 for (int i = 0; i < features::registry_count(); ++i) {

@@ -15,8 +15,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TTF="${ROOT}/third_party/fontawesome/fa-solid-900.ttf"
-OUT="${ROOT}/generated/font_awesome.h"
+TTF="${ROOT}/third_party/lucide/lucide-subset.ttf"
+OUT="${ROOT}/generated/icon_font.h"
 
 [[ -f "${TTF}" ]] || { echo "ERREUR: absent ${TTF}" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "ERREUR: python3 requis" >&2; exit 1; }
