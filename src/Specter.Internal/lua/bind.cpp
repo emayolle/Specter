@@ -11,7 +11,6 @@
 #include "features/autofarm/autofarm.h"
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/nofall/nofall.h"
-#include "features/streaming/streaming.h"
 #include "features/teleport/teleport.h"
 #include "platform/log.h"
 
@@ -199,12 +198,6 @@ bool install(lua_State* L, int specter_idx)
                          features::autofarm::ouverts())
             .addProperty("autofarm_phase", features::autofarm::phase(),
                          features::autofarm::phase())
-            // Le rayon de streaming force, en chunks de 256 u. 0 = neutre.
-            .addProperty("stream_distance", features::streaming::value(),
-                         features::streaming::value())
-            // Le plafond du MOTEUR, pose dans son propre code. 12 = original.
-            .addProperty("stream_lod_cap", features::streaming::lod_cap(),
-                         features::streaming::lod_cap())
             // The lerp settings. Read by scripts/init.lua's specter.tp.here on
             // every teleport: the player tunes them in the overlay, so they are
             // C++'s, and passing them as call arguments would mean formatting
