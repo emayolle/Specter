@@ -1,7 +1,13 @@
 -- =====================================================================
 -- test-workers.lua — escalade progressive des workers, un palier a la fois.
 --
---   tools/lua.sh -f scripts/test-workers.lua [palier]
+--   tools/lua.sh -f scripts/test-workers.lua
+--
+-- Le palier monte tout seul a chaque execution : le bac a sable n'a pas de
+-- parametres (son chunk n'est pas une fonction vararg, donc `...` y est
+-- illegal), alors le compte est tenu dans notre store. Une execution = un
+-- palier de plus. Apres un crash, le store repart a zero avec la session, ce
+-- qui est le comportement voulu.
 --
 -- Le dernier crash est mort SANS RAISON ECRITE : le log s'arretait sur
 -- « worker N demarre » et rien ne disait pourquoi. Ca ne doit plus
@@ -24,7 +30,9 @@
 -- des blocs apres lua_close, et on a une vraie fuite a regarder.
 -- =====================================================================
 
-local PALIER = tonumber(...) or 1
+local S = specter.store
+S.palier = (S.palier or 0) + 1
+local PALIER = S.palier
 local CORPS  = [[
   local n = 0
   local t = {}
