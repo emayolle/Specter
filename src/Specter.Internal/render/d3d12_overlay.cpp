@@ -34,6 +34,7 @@
 #include "features/feature.h"
 #include "il2cpp/api.h"
 #include "platform/log.h"
+#include "platform/perf.h"
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -582,6 +583,18 @@ void build_ui()
 
 void render_frame()
 {
+    // Notre part du temps de frame. C'est LE chiffre qui dit si la chute de fps
+    // est chez nous : tout le reste est la mesure en trop. Voir perf.h.
+    const long long perf_t0 = perf::now_ns();
+    struct PerfGuard {
+        long long t0;
+        ~PerfGuard() {
+            perf::add(perf::kOverlay, perf::now_ns() - t0);
+            perf::frame();
+            perf::report();
+        }
+    } perf_guard{perf_t0};
+
     Frame& f = g_frames[g_frame_index % kFlight];
     if (f.fence && g_fence->GetCompletedValue() < f.fence) {
         g_fence->SetEventOnCompletion(f.fence, g_fence_event);

@@ -22,6 +22,7 @@
 #include "il2cpp/target.h"
 #include "platform/hook/detour.h"
 #include "platform/log.h"
+#include "platform/perf.h"
 #include "platform/seh.h"
 
 namespace specter::lua {
@@ -676,6 +677,15 @@ void build_specter(lua_State* L, int reg)
 
 void pump_impl(void* self)
 {
+    // Notre part du temps de frame sur le thread Lua. Les return multiples
+    // plus bas sont tous couverts par le garde : c'est le cout de NOTRE
+    // passage, pas celui du jeu. Voir perf.h.
+    const long long perf_t0 = perf::now_ns();
+    struct PerfGuard {
+        long long t0;
+        ~PerfGuard() { perf::add(perf::kPump, perf::now_ns() - t0); }
+    } perf_guard{perf_t0};
+
     g_ticks.fetch_add(1, std::memory_order_relaxed);
 
     if (!resolve_xlua()) {

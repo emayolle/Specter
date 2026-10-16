@@ -203,7 +203,11 @@ for spec in \
   OUR_OBJS+=("$obj")
 done
 
-# --- [4/5] vendored ImGui -> specter_imgui.lib -------------------------------
+# perf.cpp ne veut PAS du PCH : il n'a besoin ni de l'il2cpp SDK ni de Windows
+# que pour QueryPerformanceFrequency, et un PCH de 50 Mo pour deux fonctions
+# serait absurde. Meme traitement que vendored/ImGui.
+build_obj platform-perf "$OBJ/platform-perf.obj" "$SRC/platform/perf.cpp" nopch "$SRC"
+OUR_OBJS+=("$OBJ/platform-perf.obj")
 
 echo "== [4/5] vendored ImGui library =="
 IMGUI_OBJS=()
