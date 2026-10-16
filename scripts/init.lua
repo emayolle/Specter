@@ -114,35 +114,29 @@ do
 
     specter.tp = specter.tp or {}
 
-    -- Position, DANS LE FORMAT QUE LE C++ LIT DEJA.
+    -- Position du joueur.
     --
-    -- !!! print, PAS return !!!
+    -- Elle APPELLE specter.set_position(). Elle n'imprime rien et ne renvoie
+    -- rien.
     --
-    -- Le bac a sable N'EXPOSE PAS les valeurs de retour du chunk. Mesure :
+    -- Elle faisait print('P x y z'), et le C++ relisait la ligne au sscanf.
+    -- C'etait un contournement d'une epoque ou il n'existait aucune couche de
+    -- liaison : sans pont, une valeur ne pouvait circuler qu'en passant par du
+    -- texte. Le pont existe. Ecrire une ligne pour donner un nombre a une
+    -- fonction du meme processus n'a plus de sens.
     --
-    --     return "X"                      -> sortie vide
-    --     local x = 1 return x, "Y"       -> sortie vide
-    --     print("X")                      -> "X"
+    -- Et le bac a sable n'expose de toute facon pas les valeurs de retour, ce
+    -- que la migration vers `return` a appris a mes depens : voir pump.cpp.
     --
-    -- Ce qui apparait dans le resultat, c'est ce que print a ecrit et les
-    -- erreurs. Un return ne produit rien du tout.
-    --
-    -- J'ai remplace le print de l'ancienne sonde par un return en croyant
-    -- moderniser, et la position a cesse de s'afficher. Le print n'etait pas
-    -- de la laideur : il etait PORTANT. Une migration qui casse parce qu'elle
-    -- est plus jolie, c'est une migration.
+    -- Les echecs se disent maintenant en retournant un message, parce que
+    -- personne ne l'attend et qu'un echec muet est un echec qu'on ne voit pas.
     specter.tp.pos = function()
         local e = joueur()
-        if not e then
-            print('E pas d entite')
-            return
-        end
+        if not e then return 'pas d entite' end
         local p = e:getPosition()
-        if not p then
-            print('E pas de position')
-            return
-        end
-        print(string.format('P %.2f %.2f %.2f %d', p[1], p[2], p[3], p[4] or 0))
+        if not p then return 'pas de position' end
+        specter.set_position(p[1], p[2], p[3], p[4] or 0)
+        return
     end
 
     -- Un petit setPosition est rejete par le deplacement autoritaire et le
@@ -231,9 +225,11 @@ do
     local CRYSTAL_MARK_CONFIG = 10406
     local FLORAL_MARK_TYPE = 26
 
-    -- Chaque ligne imprimee est une entree. Le bac a sable capture le print,
-    -- donc handle_result() lit exactement ce qu'il lisait avant : meme
-    -- protocole, meme parseur. Seul le qui produit les lignes change.
+    -- Chaque repere est APPELLE, pas imprime.
+    --
+    -- kind : 0 = Floraison, 1 = cristal de teleportation. Le nom porte l' unite
+    -- et le type, parce que cinq doubles a la suite, c'est une faute qui
+    -- attend que quelqu'un la fasse.
     specter.tp.marks = function()
         local SU = require('Common.Utils.SceneUtils')
         local CTU = require('Utils.ClientTextUtils')
@@ -260,8 +256,8 @@ do
                         seen[id] = true
                         local mp = p.markPosition
                         if mp then
-                            print(string.format('F %d %.2f %.2f %.2f',
-                                                p.largeAreaId or 0, mp[1], mp[2], mp[3]))
+                            specter.add_mark(0, p.largeAreaId or 0,
+                                             mp[1], mp[2], mp[3], '')
                         end
                     elseif p.markConfigId == CRYSTAL_MARK_CONFIG then
                         seen[id] = true
@@ -273,14 +269,18 @@ do
                                 if good and t then nm = tostring(t) end
                             end
                             nm = nm:gsub('%s+', ' ')
-                            print(string.format('W %d %.2f %.2f %.2f %s',
-                                                p.largeAreaId or 0, mp[1], mp[2], mp[3], nm))
+                            specter.add_mark(1, p.largeAreaId or 0,
+                                             mp[1], mp[2], mp[3], nm)
                         end
                     end
                 end
             end
         end
-        print('MARKS_DONE')
+
+        -- Appele meme si le scan n'a rien trouve : c'est le but. Le
+        -- finaliseur garde les listes en cache quand une scene n'en a pas, et
+        -- une reponse partielle ne doit jamais ecraser de bonnes donnees.
+        specter.marks_done()
     end
 end
 

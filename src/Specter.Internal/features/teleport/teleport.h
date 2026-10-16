@@ -3,6 +3,32 @@
 namespace specter::features {
 namespace teleport {
 
+// --- called BY LUA, through the binding layer --------------------------------
+//
+// These replace a text protocol. The Lua side used to PRINT "P x y z", "F zone
+// x y z", "W zone x y z nom" and "MARKS_DONE", and the C++ side parsed those
+// lines back out of the result buffer with sscanf.
+//
+// That was a workaround for a time when there was nothing else: there was no
+// binding layer, so values had to travel as text. There is now, and printing a
+// line to hand a number to a function in the same process is absurd.
+//
+// So: Lua CALLS these. No serialisation, no sscanf, no parse_position, no
+// handle_result, no letter tags, and no "(no output)" to wonder about.
+//
+// Names carry the unit, so a caller cannot pass them in the wrong order: a
+// signature of five doubles is a bug waiting to happen.
+
+void set_position(double x, double y, double z, double space);
+
+// kind: 0 = Leyline Flower (Floraison), 1 = Teleportation Array crystal.
+void add_mark(int kind, double zone, double x, double y, double z,
+              const char* name);
+
+// The scan is over. Called even if it found nothing -- that is the point: the
+// finaliser keeps the cached lists when a scene had no marks in it.
+void marks_done();
+
 // The lerp step and rate, as ADDRESSES, for the binding layer to hand to Lua.
 //
 // Named _addr and not lerp_step(), because there is already a float lerp_step()
@@ -25,7 +51,8 @@ float* lerp_speed_addr();
 bool init();
 
 // Queue a chunk that reads the player's current position. The answer arrives
-// asynchronously; feed drained channel output to handle_result().
+// asynchronously; scripts/init.lua reports what it found straight into the
+// variables above, through the binding layer.
 void request_position();
 
 // True once at least one position result has been parsed.
@@ -35,7 +62,6 @@ bool have_position();
 void position(float* x, float* y, float* z, int* space);
 
 // Consume one drained teleport-channel result (parses "P x y z space").
-void handle_result(const char* text);
 
 // Save the current position under `name` (replaces an existing slot). Returns
 // false when no position is known yet, the name is empty, or the list is full.
@@ -67,13 +93,13 @@ void get_slot(int idx, char* name, int cap, float* x, float* y, float* z);
 //    share a zone.
 //
 // Both come from the game's Lua, so the read goes through the same TP channel:
-// request_marks() scans the open-world scenes once and handle_result() parses
+// request_marks() scans the open-world scenes once and add_mark() collects
 // the answer. The two lists are also loaded at init(), from
 // /tmp/specter-floraisons.json and /tmp/specter-waypoints.json.
 
 // Queue a chunk that lists both families in one scan. The answer arrives
 // asynchronously as "F <zone> <x> <y> <z>" lines (Floraisons) and
-// "W <zone> <x> <y> <z> <name>" lines (crystals), terminated by "MARKS_DONE".
+// one specter.add_mark() call per crystal. No lines, no buffer, no parser.
 // One scan on purpose: the TP channel keeps a single result buffer, so two
 // queued probes would clobber each other.
 void request_marks();

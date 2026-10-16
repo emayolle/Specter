@@ -40,15 +40,12 @@ void on_frame()
         features::teleport::init();
     }
 
-    // Drain the teleport channel and feed parsed position data to the feature.
-    {
-        char buf[256];
-        bool ok = false;
-        if (console::take_result(console::kChannelTeleport, buf, sizeof(buf),
-                                 &ok)) {
-            features::teleport::handle_result(buf);
-        }
-    }
+    // No drain any more. The Lua side used to print "P x y z" and "F <zone>..."
+    // and this used to read those lines back out of the channel's single result
+    // buffer, on the render thread, to fill in what the UI displays. Now
+    // scripts/init.lua calls specter.set_position() and specter.add_mark()
+    // directly, so the numbers are already in the variables the UI reads and
+    // there is nothing to collect here.
 }
 
 // ---- the two tabs -----------------------------------------------------------

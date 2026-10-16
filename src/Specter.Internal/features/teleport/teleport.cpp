@@ -365,6 +365,18 @@ void sanitize_name(char* out, std::size_t cap, const char* src)
 
 // Parse "x y z [space]" (optionally prefixed by a "P " tag from kPosProbe).
 // Returns false when fewer than three numbers are present.
+// Parse "x y z [space]" out of a PERSISTED SLOT LINE.
+//
+// This is the /tmp/specter-tp.json reader, and that is all it is for now. It
+// used to have a second caller -- the Lua protocol, where the probe printed
+// "P x y z" and this parsed it back -- and when the protocol went away it
+// looked dead. It is not: a file on disk IS a text format, and parsing one is
+// not a smell.
+//
+// What WAS a smell was serialising between two halves of the same process.
+// That is gone: scripts/init.lua calls specter.set_position() and
+// specter.add_mark() now, and no number is ever formatted into a line and read
+// back out of it.
 bool parse_position(const char* text, float* x, float* y, float* z, int* space)
 {
     const char* p = text;
@@ -403,8 +415,6 @@ bool parse_position(const char* text, float* x, float* y, float* z, int* space)
     return true;
 }
 
-// --- Lua chunks (run on the Lua thread via the dedicated TP channel) --------
-
 // --- calling the Lua side ----------------------------------------------------
 //
 // Both of these used to be Lua source in C++ constants, rebuilt with snprintf
@@ -414,10 +424,10 @@ bool parse_position(const char* text, float* x, float* y, float* z, int* space)
 
 // Where the player is.
 //
-// `specter.tp.pos()` RETURNS the string the old probe PRINTED -- the sandbox
-// captures return values -- so handle_result() is untouched. Changing the
-// protocol and the parser in the same commit, for no gain, is two things that
-// can break instead of one.
+// It used to PRINT "P x y z" and be parsed back with sscanf. Now
+// `specter.tp.pos()` calls `specter.set_position(...)` and the C++ side holds
+// the numbers. Nothing is serialised, so there is nothing to get wrong in
+// either direction.
 bool send_pos_probe()
 {
     return features::console::submit_call(
@@ -448,11 +458,10 @@ bool send_setpos(float x, float y, float z)
 // so a list of two integers was paid for with string building, and the list
 // itself was duplicated between a C++ array and the code that used it.
 //
-// Now: a name, no arguments. `specter.tp.marks()` in scripts/init.lua walks
-// the scenes and prints one line per Leyline Flower ("F <zone> <x> <y> <z>")
-// and per Teleportation Array crystal ("W <zone> <x> <y> <z> <name>"), ending
-// with "MARKS_DONE". The sandbox captures print, so handle_result() reads
-// exactly what it read before.
+// Now: a name, no arguments. `specter.tp.marks()` walks the scenes and calls
+// `specter.add_mark(...)` for every Leyline Flower and Teleportation Array
+// crystal it finds, then `specter.marks_done()`. Each call lands directly in
+// the C++ list it belongs to.
 //
 // Both probes share one result buffer, which is why they were one chunk and
 // stay one call: two queued probes would clobber each other.
@@ -587,96 +596,61 @@ void position(float* x, float* y, float* z, int* space)
     }
 }
 
-void handle_result(const char* text)
+void set_position(double x, double y, double z, double space)
 {
-    if (!text || !*text) {
+    g_cur[0] = static_cast<float>(x);
+    g_cur[1] = static_cast<float>(y);
+    g_cur[2] = static_cast<float>(z);
+    g_cur_space = static_cast<int>(space);
+    g_cur_valid = true;
+}
+
+void add_mark(int kind, double zone, double x, double y, double z,
+              const char* name)
+{
+    const int zi = static_cast<int>(zone);
+    const float fx = static_cast<float>(x);
+    const float fy = static_cast<float>(y);
+    const float fz = static_cast<float>(z);
+
+    if (kind == 0) {
+        if (g_flora_tmp.size() < kMaxFlora) {
+            g_flora_tmp.push_back(Floraison{zi, fx, fy, fz});
+        }
         return;
     }
-    // One result may hold several lines: a position ("P x y z space"), a
-    // fast-travel scan (a run of "F <zone> <x> <y> <z>" and
-    // "W <zone> <x> <y> <z> <name>" lines ending in "MARKS_DONE"), or an error.
-    // Handle each line on its own so the probes can share the buffer.
-    const char* p = text;
-    while (*p) {
-        const char* eol = std::strchr(p, '\n');
-        std::size_t len =
-            eol ? static_cast<std::size_t>(eol - p) : std::strlen(p);
-        while (len > 0 && (p[len - 1] == '\r' || p[len - 1] == ' ' ||
-                           p[len - 1] == '\t')) {
-            --len;
-        }
-        if (len > 0 && p[0] == 'F' && (p[1] == ' ' || p[1] == '\t')) {
-            int zone = 0;
-            float x = 0.0f, y = 0.0f, z = 0.0f;
-            if (std::sscanf(p + 1, "%d %f %f %f", &zone, &x, &y, &z) == 4 &&
-                g_flora_tmp.size() < kMaxFlora) {
-                Floraison f;
-                f.zone = zone;
-                f.x = x;
-                f.y = y;
-                f.z = z;
-                g_flora_tmp.push_back(f);
-            }
-        } else if (len > 1 && p[0] == 'W' && (p[1] == ' ' || p[1] == '\t')) {
-            int zone = 0;
-            int off = 0;
-            float x = 0.0f, y = 0.0f, z = 0.0f;
-            if (std::sscanf(p + 1, "%d %f %f %f %n", &zone, &x, &y, &z,
-                            &off) == 4 &&
-                g_wp_tmp.size() < kMaxWp) {
-                Waypoint w;
-                w.zone = zone;
-                w.x = x;
-                w.y = y;
-                w.z = z;
-                const char* nm = p + 1 + off;
-                std::size_t nl = 0;
-                while (nm[nl] && nm[nl] != '\r' && nm[nl] != '\n' &&
-                       nl + 1 < sizeof(w.name)) {
-                    w.name[nl] = nm[nl];
-                    ++nl;
-                }
-                w.name[nl] = '\0';
-                g_wp_tmp.push_back(w);
-            }
-        } else if (std::strncmp(p, "MARKS_DONE", 10) == 0) {
-            // The scan only reports what it found, so keep the cached list if
-            // one of the two came back empty (e.g. the player is in a scene
-            // without marks yet): never wipe good data with a partial answer.
-            if (!g_flora_tmp.empty()) {
-                sort_flora(g_flora_tmp);
-                g_flora = g_flora_tmp;
-                write_floraisons();
-            }
-            if (!g_wp_tmp.empty()) {
-                sort_waypoints(g_wp_tmp);
-                g_wp = g_wp_tmp;
-                write_waypoints();
-            }
-            log::info(
-                "tp: fetched %d Floraison(s) and %d waypoint(s) from the game",
-                static_cast<int>(g_flora.size()),
-                static_cast<int>(g_wp.size()));
-            g_flora_tmp.clear();
-            g_wp_tmp.clear();
-            g_marks_pending = false;
-        } else if (std::strncmp(p, "ERROR", 5) == 0) {
-            g_flora_tmp.clear();
-            g_wp_tmp.clear();
-            g_marks_pending = false;
-        } else {
-            float x = 0.0f, y = 0.0f, z = 0.0f;
-            int sp = 1;
-            if (parse_position(p, &x, &y, &z, &sp)) {
-                g_cur[0] = x;
-                g_cur[1] = y;
-                g_cur[2] = z;
-                g_cur_space = sp;
-                g_cur_valid = true;
-            }
-        }
-        p = eol ? eol + 1 : p + std::strlen(p);
+    if (g_wp_tmp.size() < kMaxWp) {
+        Waypoint w;
+        w.zone = zi;
+        w.x = fx;
+        w.y = fy;
+        w.z = fz;
+        sanitize_name(w.name, sizeof(w.name), name ? name : "");
+        g_wp_tmp.push_back(w);
     }
+}
+
+void marks_done()
+{
+    // The scan only reports what it found, so keep the cached list if one of
+    // the two came back empty: the player may simply be in a scene without
+    // marks, and a partial answer must never wipe good data.
+    if (!g_flora_tmp.empty()) {
+        sort_flora(g_flora_tmp);
+        g_flora = g_flora_tmp;
+        write_floraisons();
+    }
+    if (!g_wp_tmp.empty()) {
+        sort_waypoints(g_wp_tmp);
+        g_wp = g_wp_tmp;
+        write_waypoints();
+    }
+    log::info("tp: fetched %d Floraison(s) and %d waypoint(s) from the game",
+              static_cast<int>(g_flora.size()),
+              static_cast<int>(g_wp.size()));
+    g_flora_tmp.clear();
+    g_wp_tmp.clear();
+    g_marks_pending = false;
 }
 
 bool save_current(const char* name)

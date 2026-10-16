@@ -194,7 +194,12 @@ bool install(lua_State* L, int specter_idx)
             .addProperty("tp_speed", features::teleport::lerp_speed_addr(),
                          features::teleport::lerp_speed_addr())
         .endNamespace()
-        .addFunction("reset", &api_reset);
+        .addFunction("reset", &api_reset)
+        // Lua calling C, which is what the P/F/W text protocol used to fake.
+        // These are plain calls: no print, no sscanf, no parse_position.
+        .addFunction("set_position", &features::teleport::set_position)
+        .addFunction("add_mark", &features::teleport::add_mark)
+        .addFunction("marks_done", &features::teleport::marks_done);
 
     lua_pop(L, 1);  // our copy of the table; the bindings live inside it
 

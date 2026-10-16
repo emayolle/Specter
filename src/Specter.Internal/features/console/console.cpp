@@ -208,12 +208,12 @@ void sink(bool ok, const char* text, int n)
 
     // Which channels' output is a human reading it, and which is a machine.
     //
-    // The teleport channel answers "P x y z", "F <zone> ...", "W <zone> ...".
-    // handle_result() parses those back into position slots and lists; nobody
-    // reads them. Mirroring them to the log wrote one line every 0.75 s for as
-    // long as the Teleport tab was open -- which showed up as a wall of
-    // "(no output)", and the real question underneath it ("does the probe
-    // work?") was invisible in the noise.
+    // The teleport channel produces no output worth reading: it runs a chunk
+    // that calls straight into C++. When it DID print "P x y z" and
+    // "F <zone>..." for a parser, mirroring them to the log wrote one line
+    // every 0.75 s for as long as the Teleport tab was open -- a wall of
+    // "(no output)", with the real question underneath it invisible in the
+    // noise.
     //
     // Errors are logged whatever the channel: a chunk that failed is worth
     // seeing even if its output was meant for a parser.
