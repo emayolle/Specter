@@ -27,13 +27,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${ROOT}/scripts/init.lua"
 AUTOFARM="${ROOT}/scripts/autofarm_loop.lua"
 ANI_AI="${ROOT}/scripts/ani_ai.lua"
+CHESTS="${ROOT}/scripts/chest-open.lua"
+VITESSE="${ROOT}/scripts/vitesse.lua"
 OUT="${ROOT}/generated/lua_init.h"
 OUT_AF="${ROOT}/generated/lua_autofarm.h"
 OUT_AI="${ROOT}/generated/lua_aniai.h"
+OUT_CH="${ROOT}/generated/lua_chests.h"
+OUT_VT="${ROOT}/generated/lua_vitesse.h"
+
+# L'ORDRE EST LE MEME QUE DANS features/init/init.cpp (kParts). Pas de require
+# entre nos scripts : chacun est pose par un #include et joue dans le sandbox.
+BOOTSTRAP=("${SRC}" "${AUTOFARM}" "${CHESTS}" "${VITESSE}" "${ANI_AI}")
 
 [[ -f "${SRC}" ]] || { echo "ERREUR: absent ${SRC}" >&2; exit 1; }
 [[ -f "${AUTOFARM}" ]] || { echo "ERREUR: absent ${AUTOFARM}" >&2; exit 1; }
 [[ -f "${ANI_AI}" ]] || { echo "ERREUR: absent ${ANI_AI}" >&2; exit 1; }
+[[ -f "${CHESTS}" ]] || { echo "ERREUR: absent ${CHESTS}" >&2; exit 1; }
+[[ -f "${VITESSE}" ]] || { echo "ERREUR: absent ${VITESSE}" >&2; exit 1; }
 
 # ---- 0. TOUS les scripts : ils compilent, et ils tiennent dans le tampon -----
 #
@@ -58,7 +68,7 @@ KMAX="$(sed -n 's/^constexpr int kMaxCode = \([0-9]*\) \* \([0-9]*\);/\1 \2/p' \
         | head -1 | awk '{print $1 * $2}')"
 [[ -n "${KMAX}" ]] || { echo "ERREUR: kMaxCode introuvable dans console.cpp" >&2; exit 1; }
 
-# LE BOOTSTRAP EST LA SOMME DES DEUX. C'est ce que features/init/init.cpp
+# LE BOOTSTRAP EST LA SOMME DE TOUS. C'est ce que features/init/init.cpp
 # transmet, donc c'est la somme qu'il faut comparer au plafond -- pas chaque
 # fichier separement. 18 Ko + 15 Ko passent individuellement et juntos non, ce
 # qui est exactement le piege d'aujourd'hui.
@@ -67,7 +77,9 @@ echo "-- scripts : compilation + taille (plafond ${KMAX} o, on verifie la SOMME)
 for f in "${ROOT}"/scripts/*.lua; do
   [[ -f "$f" ]] || continue
   n=$(wc -c < "$f")
-  if [[ "$f" == "${SRC}" || "$f" == "${AUTOFARM}" || "$f" == "${ANI_AI}" ]]; then SUM=$((SUM + n)); fi
+  for b in "${BOOTSTRAP[@]}"; do
+    if [[ "$f" == "$b" ]]; then SUM=$((SUM + n)); fi
+  done
   if [[ "$n" -gt "$KMAX" ]]; then
     echo "ERREUR: ${f##*/} fait ${n} octets, le canal n'en accepte que ${KMAX}." >&2
     echo "         Il sera tronque en silence, et l'erreur qui en sortira" >&2
@@ -82,30 +94,33 @@ for f in "${ROOT}"/scripts/*.lua; do
 done
 
 if [[ "$SUM" -gt "$KMAX" ]]; then
-  echo "ERREUR: le bootstrap fait ${SUM} octets (init.lua + autofarm_loop.lua + ani_ai.lua)," >&2
-  echo "       et le canal n'en accepte que ${KMAX}. Il sera tronque :" >&2
-  echo "       erreur de compilation au milieu d'une chaine, dans un fichier" >&2
-  echo "       qui n'est pas celui du script." >&2
+  echo "ERREUR: le bootstrap fait ${SUM} octets (init.lua + autofarm_loop.lua +" >&2
+  echo "       chest-open.lua + ani_ai.lua), et le canal n'en accepte que" >&2
+  echo "       ${KMAX}. Il sera tronque : erreur de compilation au milieu" >&2
+  echo "       d'une chaine, dans un fichier qui n'est pas celui du script." >&2
   exit 1
 fi
 printf '   %-24s %6d o  (plafond %s, marge %s)\n' "BOOTSTRAP (somme)" "$SUM" \
        "$KMAX" "$((KMAX - SUM))"
 
 # ---- 1. le litteral C ne doit pas pouvoir se refermer tout seul ------------
-if grep -q ')LUA_AF' "${AUTOFARM}"; then
-    echo "ERREUR: ${AUTOFARM} contient ')LUA_AF', ce qui fermerait le litteral." >&2
+#
+# Chaque script est dans SON litteral (R"LUA_INIT(...)LUA_INIT"), donc le
+# controle est par couple : chest-open.lua doit contenir )LUA_CH, et rien
+# d'autre. Un seul test global donnerait un faux positif sur un fichier qui
+# contient la marque d'un autre.
+check_marker() {
+  local f="$1" m="$2"
+  if grep -q ")$m" "$f"; then
+    echo "ERREUR: ${f##*/} contient ')$m', ce qui fermerait le litteral." >&2
     exit 1
-fi
-
-if grep -q ')LUA_AI' "${ANI_AI}"; then
-    echo "ERREUR: ${ANI_AI} contient ')LUA_AI', ce qui fermerait le litteral." >&2
-    exit 1
-fi
-
-if grep -q ')LUA_INIT' "${SRC}"; then
-    echo "ERREUR: ${SRC} contient ')LUA_INIT', ce qui fermerait le litteral." >&2
-    exit 1
-fi
+  fi
+}
+check_marker "${AUTOFARM}" LUA_AF
+check_marker "${ANI_AI}"   LUA_AI
+check_marker "${CHESTS}"   LUA_CH
+check_marker "${VITESSE}"  LUA_VT
+check_marker "${SRC}"      LUA_INIT
 
 # ---- 2. le script doit compiler -------------------------------------------
 # On fait vraiment charger le fichier, pas un « lu et compris » : luajit
@@ -179,9 +194,45 @@ mkdir -p "$(dirname "${OUT_AI}")"
     echo "}  // namespace specter::lua::init"
 } > "${OUT_AI}"
 
+# ---- 5. le quatrieme script ------------------------------------------------
+mkdir -p "$(dirname "${OUT_CH}")"
+{
+    echo "// AUTO-GENERE par tools/embed-lua.sh depuis scripts/chest-open.lua."
+    echo "// Ne pas editer a la main : editer le script et reconstruire."
+    echo "#pragma once"
+    echo
+    echo "namespace specter::lua::init {"
+    echo
+    echo "static constexpr const char* kChestsLoop = R\"LUA_CH("
+    cat "${CHESTS}"
+    echo ")LUA_CH\";"
+    echo
+    echo "}  // namespace specter::lua::init"
+} > "${OUT_CH}"
+
+# ---- 6. le cinquieme script ----------------------------------------------
+mkdir -p "$(dirname "${OUT_VT}")"
+{
+    echo "// AUTO-GENERE par tools/embed-lua.sh depuis scripts/vitesse.lua."
+    echo "// Ne pas editer a la main : editer le script et reconstruire."
+    echo "#pragma once"
+    echo
+    echo "namespace specter::lua::init {"
+    echo
+    echo "static constexpr const char* kVitesseLoop = R\"LUA_VT("
+    cat "${VITESSE}"
+    echo ")LUA_VT\";"
+    echo
+    echo "}  // namespace specter::lua::init"
+} > "${OUT_VT}"
+
 printf "init embarque     : scripts/init.lua -> generated/lua_init.h (%s lignes, %s)\n" \
     "$(wc -l < "${SRC}")" "${CHECKED}"
 printf "autofarm embarque : scripts/autofarm_loop.lua -> generated/lua_autofarm.h (%s lignes)\n" \
     "$(wc -l < "${AUTOFARM}")"
+printf "coffres embarque  : scripts/chest-open.lua -> generated/lua_chests.h (%s lignes)\n" \
+    "$(wc -l < "${CHESTS}")"
+printf "vitesse embarque  : scripts/vitesse.lua -> generated/lua_vitesse.h (%s lignes)\n" \
+    "$(wc -l < "${VITESSE}")"
 printf "ani_ai embarque   : scripts/ani_ai.lua -> generated/lua_aniai.h (%s lignes)\n" \
     "$(wc -l < "${ANI_AI}")"

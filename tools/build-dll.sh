@@ -190,6 +190,8 @@ for spec in \
   "$SRC/features/teleport/teleport.cpp:features-teleport" \
   "$SRC/features/teleport/teleport_ui.cpp:features-teleport_ui" \
   "$SRC/features/autofarm/autofarm.cpp:features-autofarm" \
+  "$SRC/features/chests/chests.cpp:features-chests" \
+  "$SRC/features/vitesse/vitesse.cpp:features-vitesse" \
   "$SRC/features/aniai/aniai.cpp:features-aniai" \
   "$SRC/features/inf_stamina/inf_stamina.cpp:features-inf_stamina" \
   "$SRC/features/registry.cpp:features-registry" \

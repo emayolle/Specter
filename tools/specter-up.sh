@@ -66,8 +66,15 @@ fi
 
 # 3. injection
 echo "== injection Specter.Internal =="
+# Meme garde-fou que specter-inject.sh, et pour la meme raison : la DLL est
+# manuellement mappee, donc rien de visible de l'exterieur ne dit qu'elle est
+# deja la. Injecter deux fois ne donne aucune erreur.
+specter_refuse_double_injection "$PID" || exit 1
+
 python3 "$HOSTCH_CLIENT" --pid "$PID" --token "$TOKEN" \
   map --pe "$DLL" --dllmain --hide-system
+
+specter_note_injection "$PID"
 
 # 4. suivre le tap au premier plan (Ctrl-C quitte le tap, pas le jeu)
 echo
