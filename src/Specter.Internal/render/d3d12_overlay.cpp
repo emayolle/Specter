@@ -479,6 +479,30 @@ void feed_input()
 {
     ImGuiIO& io = ImGui::GetIO();
 
+    // LA POSITION D'ABORD, LES BOUTONS ENSUITE. L'ORDRE EST LE CORRECTIF.
+    //
+    // ImGui traite Evenements() dans l'ordre, et MouseClickEvent s'applique a
+    // la position CONNUE AU MOMENT ou il est traite. Boutons d'abord, position
+    // ensuite : le clic de ce frame se retrouve donc applique a la position
+    // d'il y a UN FRAME. Un clic Registerait la ou la souris etait, pas la ou
+    // elle est — le widget passe a cote, et ca resemble a un clic manque.
+    //
+    // Ce n'etait visible qu'en bougeant la souris pendant le clic, parce que
+    // souris immobile : les deux positions sont la meme, et le retard de un
+    // frame ne se voit pas. C'est un bug de course, pas de clic.
+    //
+    // AddMousePosEvent, PAS io.MousePos = ... : MousePos est un etat, on ne
+    // peut que le SURCHARGER, et ImGui 1.92 ecarte toute ecriture directe entre
+    // NewFrame et Render. L'API Evenement est l'unique voie.
+    //
+    // Le jeu garde sa souris verrouillee, donc le curseur de l'OS ne bouge pas :
+    // c'est celle qu'input::accumuler_delta a construite, a partir des deltas
+    // bruts (voir render/input.cpp).
+    int cx = 0, cy = 0;
+    if (input::curseur_pos(&cx, &cy)) {
+        io.AddMousePosEvent(static_cast<float>(cx), static_cast<float>(cy));
+    }
+
     // Mouse buttons on edges only, so ImGui sees clean down/up pairs.
     static const int kButtons[3] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON};
     static bool prev[3] = {};
@@ -488,23 +512,6 @@ void feed_input()
             io.AddMouseButtonEvent(i, down);
             prev[i] = down;
         }
-    }
-
-    // LA POSITION VIENT DU CURSEUR VIRTUEL, PAS DE L'OS.
-    //
-    // Le jeu garde sa souris verrouillee : le curseur de l'OS ne bouge pas, donc
-    // ImGui, qui recoit sa position par WM_MOUSEMOVE, ne verrait qu'une
-    // position figee. On lui pousse donc celle qu'input::accumuler_delta a
-    // construite a partir
-    // des deltas bruts (voir render/input.cpp).
-    //
-    // AddMousePosEvent, PAS io.MousePos = ... : MousePos est un etat, on ne
-    // peut que le SURCHARGER, et ImGui 1.92 ecarte toute ecriture directe pendant
-    // qu'un frame est ouvert. L'API Evenement est l'unique voie qui fonctionne,
-    // et c'est aussi celle que le backend Win32 utilise.
-    int cx = 0, cy = 0;
-    if (input::curseur_pos(&cx, &cy)) {
-        io.AddMousePosEvent(static_cast<float>(cx), static_cast<float>(cy));
     }
 }
 
