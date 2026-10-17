@@ -133,15 +133,13 @@ void draw_ui()
     ImGui::TextDisabled("~%.0f u/s   steps x min(speed, %.0f fps)",
                        features::teleport::lerp_step() * eff_speed, cap);
 
-    }  { const int ns = features::teleport::count();
-      // 3 lignes d'entete, puis une par position (nom + coordonnees), et une
-      // ligne de plus si la liste est vide. Sans AutoResizeY, la hauteur doit
-      // etre fournie — voir ui_widgets.h pour pourquoi elle ne peut pas se
-      // mesurer elle-meme.
-      // 34 px par position, et NON 20 : la ligne de tableau elle-meme fait
-      // 20 px, mais le bouton fait 19 px de haut plus l'espacement d'item —
-      // et 34 laissait deux lignes vides sous chaque entree sur la capture.
-      render::Group g("Saved positions", 56.0f + 26.0f * static_cast<float>(ns));
+    }  {
+      // AutoResizeY : autorise ici parce que la carte n'est PAS imbriquee dans
+      // un enfant qui defile — elle est dans la page. Elle se mesure donc sur son
+      // contenu, et l'espace du dessous disparait. Les cartes de ZONE, elles, sont
+      // dans la liste defilante : c'est la qu'AutoResizeY plantait.
+      render::Group g("Saved positions");
+
     if (features::teleport::count() == 0) {
         ImGui::TextDisabled("none yet - save one above");
     }
@@ -310,51 +308,13 @@ void draw_ui_waypoints()
 
                 for (int zi = 0; zi < nz; ++zi) {
                     const int zone = zones[zi];
-                    if (zi > 0) {
-                        ImGui::Spacing();
-                    }
                     char titre[32];
                     std::snprintf(titre, sizeof(titre), "Zone %d", zone);
 
-                    // UNE CARTE PAR ZONE, DE HAUTEUR FIXE.
-                    //
-                    // Group ne se mesure plus lui-meme (AutoResizeY plante
-                    // quand il est embarque dans un BeginChild qui defile,
-                    // voir ui_widgets.h). On compte donc les lignes de la zone
-                    // ICI, avant de la construire, et on donne cette hauteur.
-                    //
-                    // Compter d'abord, construire ensuite : c'est l'inverse de
-                    // ce que faisait AutoResizeY, et c'est pourquoi ca ne peut
-                    // pas boucler.
-                    int lignes = 0;
-                    for (int i = 0; i < nflora; ++i) {
-                        int z = 0;
-                        features::teleport::get_floraison(i, &z, nullptr,
-                                                          nullptr, nullptr);
-                        if (z == zone) {
-                            ++lignes;
-                        }
+                    if (zi > 0) {
+                        ImGui::Separator();
                     }
-                    for (int i = 0; i < nwp; ++i) {
-                        int z = 0;
-                        features::teleport::get_waypoint(i, &z, nullptr, 0,
-                                                         nullptr, nullptr,
-                                                         nullptr);
-                        if (z == zone) {
-                            ++lignes;
-                        }
-                    }
-                    // Deux lignes par entree (nom + coordonnees) plus le titre,
-                    // l'espacement du tableau, et une marge de securite : une
-                    // carte trop courte fait deborder son contenu sur la
-                    // suivante, ce qui est laid mais pas fatal — on prefere
-                    // ca a une boucle de mesure.
-                    // 26 px par repere : titre + marge d'une ligne de tableau.
-                    // 34 laissait un vide de 8 px sous chaque repere.
-                    const float h_zone =
-                        static_cast<float>(lignes) * 26.0f + 34.0f;
-
-                    render::Group gz(titre, h_zone);
+                    ImGui::TextDisabled("%s", titre);
 
                     // BeginTable / EndTable : LES DEUX OU AUCUN.
                     //
@@ -447,7 +407,7 @@ void draw_ui_waypoints()
 
                     ImGui::EndTable();
                     }  // BeginTable (les deux ou aucun)
-                }  // group "Zone N"
+                }  // zone
 
                 ImGui::EndChild();
 }

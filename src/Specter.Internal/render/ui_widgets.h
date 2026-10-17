@@ -84,6 +84,17 @@ public:
     // et c'est ce qu'il faut pour une carte de controles : elle a un nombre de
     // lignes connu, donc une hauteur qui colle au contenu est un detail, et le
     // prix a payer est un espace vide en bas de la carte.
+    // `hauteur` a 0 = se mesurer sur son contenu (AutoResizeY).
+    //
+    // RESERVEE AUX CARTES NON IMBRIQUEES. AutoResizeY mesure la carte ET borne
+    // son parent dans la MEME frame : dans un parent qui defile, la mesure se
+    // mord la queue. C'est experimentale et ImGui le dit — voir le gros
+    // commentaire plus haut.
+    //
+    // Hors de ce cas-la, donner une hauteur. C'est moins joli, mais c'est la
+    // seule facon honnete : la hauteur d'une BeginChild doit etre CONNUE avant
+    // le rendu, donc devinee, donc un jour fausse. Une fausse par defaut, ca
+    // fait un vide sous le contenu — un tableau, lui, se mesure pour de vrai.
     explicit Group(const char* titre, float hauteur = 0.0f) : titre_(titre)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));

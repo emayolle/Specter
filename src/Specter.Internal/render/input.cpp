@@ -114,6 +114,7 @@ bool g_etait_ouvert = false;
 struct Diagnostic {
     unsigned long messages = 0;   // WM_INPUT recus
     unsigned long deltas = 0;     // deltas non nuls recus
+    unsigned long roues = 0;      // WM_MOUSEWHEEL recus
     bool journalise = false;
 } g_diag;
 
@@ -287,6 +288,11 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
 // HI_RESOLUTE : sans lui, une molette Brucefox ou un trackpad haute resolution
 // est arrondi au cran le plus proche — donc perdu sur les petits deplacements.
 if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
+            // Le compteur repond a LA question qui compte : le message
+            // arrive-t-il jusqu'ici ? S'il reste a zero, ce n'est pas ImGui qui
+            // refuse de defiler — c'est que la roue n'atteint jamais la
+            // sous-classe, et le probleme est en amont du gate.
+            ++g_diag.roues;
             const mouse_sink sink = g_mouse_sink.load(std::memory_order_relaxed);
             if (sink) {
                 sink(GET_X_LPARAM(l), GET_Y_LPARAM(l), static_cast<int>(w));
@@ -530,6 +536,7 @@ void set_menu_open(bool open)
             // WM_INPUT -> accumuler_delta -> curseur_pos tient.
             g_diag.messages = 0;
             g_diag.deltas = 0;
+            g_diag.roues = 0;
             g_diag.journalise = true;
         }
     }
@@ -549,8 +556,10 @@ bool curseur_pos(int* x, int* y)
     // utilise une autre source, et il faut le savoir avant de corriger quoi que
     // ce soit en aval.
     if (g_diag.journalise && g_diag.messages >= 120) {
-        log::info("input: curseur virtuel -- %lu WM_INPUT, %lu deltas, pos %d,%d",
-                  g_diag.messages, g_diag.deltas, g_curseur.x, g_curseur.y);
+        log::info("input: virtuel -- %lu WM_INPUT, %lu deltas, pos %d,%d | "
+                  "%lu roues",
+                  g_diag.messages, g_diag.deltas, g_curseur.x, g_curseur.y,
+                  g_diag.roues);
         g_diag.journalise = false;
     }
     return true;
