@@ -1359,7 +1359,26 @@ static const float NAV_WINDOWING_LIST_APPEAR_DELAY          = 0.15f;    // Time 
 static const float NAV_ACTIVATE_HIGHLIGHT_TIMER             = 0.10f;    // Time to highlight an item activated by a shortcut.
 static const float NAV_ACTIVATE_INPUT_WITH_GAMEPAD_DELAY    = 0.60f;    // Time to hold activation button (e.g. FaceDown) to turn the activation into a text input.
 static const float WINDOWS_RESIZE_FROM_EDGES_FEEDBACK_TIMER = 0.04f;    // Reduce visual noise by only highlighting the border after a certain time.
-static const float WINDOWS_MOUSE_WHEEL_SCROLL_LOCK_TIMER    = 0.70f;    // Lock scrolled window (so it doesn't pick child windows that are scrolling through) for a certain time, unless mouse moved.
+// 0.15 s, et non les 0.70 s d'ImGui.
+//
+// Le verrou sert a un probleme PRECIS : un meme geste ne doit pas faire defiler
+// deux fenetres imbriquees. Finir une liste dans un menu ne doit pas repartir
+// dans le parent.
+//
+// Il a un cout : pendant le verrou, TestKeyOwner renvoie faux, donc le prochain
+// evenement de molette est mis a zero — il est CONSOMME sans effet. D'ou :
+// « en bas, chaque cran compte ; pour remonter, le premier ne compte pas, et a
+// partir du deuxieme ca defile ».
+//
+// C'est mesure, et c'est la faute du delai : 0.70 s est assez long pour qu'un
+// changement de sens « ne marche pas ». Le meme mecanisme, plus rapide, ne se
+// remarque pas : le verrou remplit toujours son role pendant le quart de seconde
+// ou deux gestes successifs pourraient se chevaucher, ce qui est le seul cas
+// qu'il protege.
+//
+// Ce n'est pas « desactiver une protection » : c'est la mettre a la duree du
+// probleme qu'elle traite.
+static const float WINDOWS_MOUSE_WHEEL_SCROLL_LOCK_TIMER    = 0.15f;    // Lock scrolled window (so it doesn't pick child windows that are scrolling through) for a certain time, unless mouse moved.
 
 // Tooltip offset
 static const ImVec2 TOOLTIP_DEFAULT_OFFSET_MOUSE = ImVec2(16, 10);      // Multiplied by g.Style.MouseCursorScale
