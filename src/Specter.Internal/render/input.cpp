@@ -115,7 +115,8 @@ struct Diagnostic {
     unsigned long messages = 0;   // WM_INPUT recus
     unsigned long deltas = 0;     // deltas non nuls recus
     // CRANS DE MOLETTE recus, lus dans usButtonFlags de l'entree brute.
-    // Un WM_MOUSEWHEEL n'arrive jamais : la fenetre fantome de 1x1 le vole.
+    // Crans de molette recus, lus dans usButtonFlags de l'entree brute. C'est la
+    // SEULE lecture de la roue : WM_MOUSEWHEEL est avale sans etre transmis.
     unsigned long roues = 0;
     bool journalise = false;
 } g_diag;
@@ -313,31 +314,28 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
 // Les boutons, on les relit chaque frame : GetAsyncKeyState dit « enfonce » ou
 // « pas enfonce », et on deduit le front. Ca marche parce qu'un bouton reste
 // enfonce.
-//
-// La molette, elle, n'existe que pendant le message. Un cran, et plus rien. Il
-// n'y a aucun etat a relire, donc aucun polling ne peut la rattraper : si on
-// avale WM_MOUSEWHEEL sans rien transmettre, le defilement est perdu DEFINITIVEMENT
-// — et c'est exactement ce qui se passait : la liste des reperes de « World »
-// ne defilait pas.
-//
-// Donc on la transmet au handler Win32 d'ImGui, qui sait en faire un
-// AddMouseWheelEvent. Et on continue de l'avaler pour le jeu : la molette fait
-// zoomer la camera, et un defilement de menu ne doit pas allumer le telescope.
-//
-// HI_RESOLUTE : sans lui, une molette Brucefox ou un trackpad haute resolution
-// est arrondi au cran le plus proche — donc perdu sur les petits deplacements.
-if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
-            // Le compteur repond a LA question qui compte : le message
-            // arrive-t-il jusqu'ici ? S'il reste a zero, ce n'est pas ImGui qui
-            // refuse de defiler — c'est que la roue n'atteint jamais la
-            // sous-classe, et le probleme est en amont du gate.
-            ++g_diag.roues;
-            const mouse_sink sink = g_mouse_sink.load(std::memory_order_relaxed);
-            if (sink) {
-                sink(GET_X_LPARAM(l), GET_Y_LPARAM(l), static_cast<int>(w));
-            }
-            return 0;
-        }
+// PLUS DE BLOC WM_MOUSEWHEEL ICI. IL Y EN AVAIT UN, ET IL FAISAIT DOUBLE
+        // COMPTE.
+        //
+        // Mesure, sur la meme interaction :
+        //
+        //     brut=-120 (0xFF88) cran=-1.00       <- l'entree brute, correct
+        //     brut=-7864320 (0x0000) cran=-65536  <- WM_MOUSEWHEEL, absurde
+        //
+        // Deux lectures, un seul geste. La seconde venait de
+        // static_cast<int>(w) : wParam porte le delta dans ses 16 bits HAUTS, donc
+        // 120 y devient 120 << 16 = 7 864 320. Exactement la valeur du journal.
+        //
+        // Ce bloc devait disparaitre au commit « la molette etait dans l'entree
+        // brute » : ma suppression avait leve une exception, et je n'ai pas vu
+        // qu'elle n'avait rien retire. Le code etait-la, intact.
+        //
+        // Puis vint la correction « delta par le haut », qui rendait le scroll
+        // instantane. Elle ne faisait qu'aggraver une double lecture qui
+        // existait deja : le premier cran etait correct, le second projetait
+        // 65 536 lignes d'un coup.
+        //
+        // La molette arrive par l'entree brute, une seule fois. C'est tout.
 
         // LE DELTA BRUT, qu'on consomme et qu'on avale ensuite.
         //
@@ -414,9 +412,12 @@ if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
             case WM_XBUTTONDBLCLK:
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL:
-                // Inatteignable en pratique — la fenetre fantome de 1x1 prend le
-                // focus et la molette part la. On avale quand meme : si une
-                // machine l'a jamais, le jeu ne doit pas zoomer non plus.
+                // On AVALE, sans transmettre. La molette utile passe par
+                // WM_INPUT (voir plus haut) : WM_MOUSEWHEEL n'est delivre qu'a la
+                // fenetre active, et la fenetre fantome de 1x1 la prend. Quand
+                // elle arrive quand meme, la transmettre creerait un SECOND
+                //evenement de defilement pour un seul geste — c'est exactement
+                // ce qui faisait defiler de 65 536 lignes d'un coup.
                 return 0;
             case WM_INPUT:
                 return 0;  // le jeu ne voit rien du tout pendant le menu

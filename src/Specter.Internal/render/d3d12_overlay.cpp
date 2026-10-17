@@ -167,20 +167,6 @@ void mouse_sink(int x, int y, int wheel)
     // AddMouseWheelEvent et non le handler Win32 : ce handler s'attend a un
     // WM_MOUSEWHEEL qu'on ne recoit jamais — fenetre fantome de 1x1 qui garde le
     // focus (voir render/input.cpp).
-    // DIAGNOSTIC : la valeur REELLE, imprimee comme un short — donc comme elle
-    // est. La version precedente affichait « 7 864 320 » pour un cran, valeur qui
-    // ne tient pas dans les 16 bits de usButtonData : c'etait le printf qui
-    // mentait, pas la souris. On imprime donc le short, et on ajoute sa valeur
-    // decimale, pour qu'un promoteur ne puisse plus rien cacher.
-    {
-        static int n = 0;
-        if (++n <= 8) {
-            log::info("overlay: roue brut=%d (0x%04X) cran=%.2f", wheel,
-                      static_cast<unsigned>(static_cast<short>(wheel)) & 0xFFFFu,
-                      static_cast<float>(wheel) /
-                          static_cast<float>(WHEEL_DELTA));
-        }
-    }
     ImGui::GetIO().AddMouseWheelEvent(
         0.0f, static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA));
 }
