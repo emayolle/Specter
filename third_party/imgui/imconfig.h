@@ -141,6 +141,45 @@
 //---- Debug Tools: Enable slower asserts
 //#define IMGUI_DEBUG_PARANOID
 
+//---- IM_ASSERT QUI ECRIT DANS UN FICHIER, PARCE QUE /DNDEBUG L'EFFACE.
+//
+// imgui.h dit lui-meme (ligne 93) : « compiling with NDEBUG will usually strip
+// out assert() to nothing, which is NOT recommended because we use asserts to
+// notify of programmer mistakes. »
+//
+// tools/build-dll.sh compile avec /DNDEBUG, donc assert() ne genere rien et les
+// assertions d'ImGui n'existent pas. Consequence measurable : quand ImGui
+// detecte un appel invalide — un ID en conflit, un Begin sans son End, un
+// BeginChild mal dimensionne — il ne se passe RIEN. Le moteur continue avec un
+// etat incoherent, et le crash arrive des frames plus tard, dans une fonction
+// qui n'a rien a voir avec l'erreur.
+//
+// C'est exactement ce qu'on a eu : un menu qui s'affiche UNE frame puis meurt.
+// Sans ce qui suit, la cause est invisible.
+//
+// On ecrit dans un fichier plutot que sur stderr : le jeu tourne sous Proton,
+// sa sortie stderr part dans le terminal Steam, ou l'on ne la lit pas. Un
+// fichier, lui, se lit apres coup, a froid.
+//
+// On n'appelle PAS assert() derriere, volontairement. Les assertions
+// d'ImGui sont des invariants, pas des garde-fous de securite : les lancer
+// arreterait le processus sur un detail cosmetique, alors que le defaut reel
+// est ailleurs et qu'on veut le voir d'abord. On note, et on laisse le
+// programme afficher exactement le symptome qu'il avait — ce qui est l'outil de
+// diagnostic le plus honnete qui soit : une hypothese de moins.
+#include <stdio.h>
+#define IM_ASSERT(_EXPR)                                                          \
+    do {                                                                          \
+        if (!(_EXPR)) {                                                           \
+            FILE* f = fopen("Z:/tmp/specter-imgui-assert.txt", "a");              \
+            if (f) {                                                              \
+                fprintf(f, "IM_ASSERT(%s) at %s:%d\n", #_EXPR, __FILE__,          \
+                        __LINE__);                                                \
+                fclose(f);                                                        \
+            }                                                                     \
+        }                                                                         \
+    } while (false)
+
 //---- Tip: You can add extra functions within the ImGui:: namespace from anywhere (e.g. your own sources/header files)
 /*
 namespace ImGui
