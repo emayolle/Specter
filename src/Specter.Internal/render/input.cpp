@@ -120,6 +120,43 @@ struct Diagnostic {
     bool journalise = false;
 } g_diag;
 
+// LE DELTA DE ROUE.
+//
+// usButtonData est un USHORT : 16 bits, et sa valeur est SIGNEE (la doc le dit
+// explicitement). Donc un cran y vaut au plus 32767, et WHEEL_DELTA = 120 y
+// tient largement.
+//
+// DIAGNOSTIC, ET SA LECON
+//
+// La premiere version journalisait « brut %d » avec un parametre int recu de
+// usButtonData. Sur la machine de test, ca a affiche :
+//
+//     brut 7864320
+//
+// 7 864 320 ne TIENT PAS dans 16 bits. C'etait donc la conversion qui
+// inventait le nombre, pas la souris qui l'envoyait : un short promu en int, puis
+// multiplie. La valeur reelle du champ etait 0.
+//
+// J'en ai conclu — a tort — que Wine placait le delta dans les 16 bits HAUTS, et
+// j'ai ecrit un decalage par le haut pour « corriger » un defaut qui n'existait
+// pas. Le scroll instantane ne venait pas de la.
+//
+// La vraie lecture est celle de la documentation, appliquee telle quelle :
+//
+//     (short)usButtonData   ->  +120 pour un cran vers le haut
+//                             -120 pour un cran vers le bas
+//
+// et le changement a faire dans le sink est de NE PLUS DIVISER par
+// WHEEL_DELTA, puisque 120 est deja un cran.
+//
+// Un journal qui affiche une valeur impossible est un journal FAUX : il faut
+// verifier que la valeur tient dans le type qui la porte avant de lui croire.
+// On n'a pas commence par ca.
+int delta_de_roue(unsigned short brut)
+{
+    return static_cast<short>(brut);
+}
+
 void accumuler_delta(int dx, int dy)
 {
     ++g_diag.deltas;
@@ -355,9 +392,7 @@ if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
                     const mouse_sink sink =
                         g_mouse_sink.load(std::memory_order_relaxed);
                     if (sink) {
-                        // usButtonData est signe : vers le haut, c'est positif.
-                        // (short) evite de lire 65416 crans au lieu de -1.
-                        sink(0, 0, static_cast<short>(m.usButtonData));
+                        sink(0, 0, delta_de_roue(m.usButtonData));
                     }
                 }
             }

@@ -154,20 +154,21 @@ void mouse_sink(int x, int y, int wheel)
     if (wheel == 0) {
         return;
     }
-    // Le delta est en UNITES DE WHEEL_DELTA (120 par cran), pas en messages.
-    // On convertit donc en unites de cran, ce qu'ImGui attend.
+    // `wheel` est en UNITES DE WHEEL_DELTA : 120 pour un cran, -120 pour un cran
+    // vers le bas. On convertit en crans, ce qu'ImGui attend (1.0 = un cran).
+    //
+    // Le diagnostic du commit precedent affichait « 7 864 320 » pour un cran :
+    // cette valeur ne tient pas dans les 16 bits de usButtonData. C'etait la
+    // conversion du printf qui inventait le nombre — la vraie valeur du champ
+    // etait 0. D'ou ce decalage par le haut « correctif » qui rendait le scroll
+    // instantane : on corrigeait un defaut qui n'existait pas, et on cassait le
+    // vrai. 120 = un cran, tout simplement.
     //
     // AddMouseWheelEvent et non le handler Win32 : ce handler s'attend a un
-    // WM_MOUSEWHEEL qu'on ne recoit jamais (fenetre fantome de 1x1 qui garde le
-    // focus — voir input.cpp), et il convertirait un delta deja converti.
-    // DIAGNOSTIC : la valeur recue, pour verifier le pas reel. Un cran doit
-    // valoir 1.0 ici ; au-dela, ImGui defile de plusieurs pages d'un coup.
-    const float pas = static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA);
-    if (pas < -20.0f || pas > 20.0f) {
-        static int n = 0;
-        if (++n <= 5) log::info("overlay: molette pas=%.1f (brut %d)", pas, wheel);
-    }
-    ImGui::GetIO().AddMouseWheelEvent(0.0f, pas);
+    // WM_MOUSEWHEEL qu'on ne recoit jamais — fenetre fantome de 1x1 qui garde le
+    // focus (voir render/input.cpp).
+    ImGui::GetIO().AddMouseWheelEvent(
+        0.0f, static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA));
 }
 
 void log_once(const char* what)
