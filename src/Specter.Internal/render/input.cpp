@@ -87,8 +87,34 @@ struct CurseurVirtuel {
 };
 CurseurVirtuel g_curseur;
 
+// L'etat d'ouverture PRECEDENT, uniquement pour detecter une transition.
+//
+// set_menu_open() est appele a chaque frame. Sans cette memoire, impossible de
+// distinguer « le menu vient de s'ouvrir » de « le menu est ouvert » — et c'est
+// exactement la distinction qui compte ici.
+bool g_etait_ouvert = false;
+
+// COMPTEURS DE DIAGNOSTIC.
+//
+// Parce que « le curseur ne bouge pas » a deja eu TROIS causes differentes
+// dans cette seule session : WM_MOUSEMOVE avale, un recentrage a chaque frame,
+// et -- possible -- le jeu qui n'envoie pas de delta brut du tout. Les deux
+// premiers se voyaient a la lecture ; le troisieme, non.
+//
+// Alors on compte, et on l'ecrit dans le log une fois par session. Le compteur
+// de deltas non nuls est LA question : s'il reste a zero, la chaine est rompue
+// en amont (le jeu ne parle pas via WM_INPUT a notre sous-classe), et aucun
+// correctif en aval ne servoit a rien.
+struct Diagnostic {
+    unsigned long messages = 0;   // WM_INPUT recus
+    unsigned long deltas = 0;     // deltas non nuls recus
+    bool journalise = false;
+} g_diag;
+
 void accumuler_delta(int dx, int dy)
 {
+    ++g_diag.deltas;
+
     g_curseur.x += dx;
     g_curseur.y += dy;
 
@@ -243,6 +269,7 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
         // dwSize -- la taille que GetRawInputData ecrirait -- est deja dans le
         // header RAWINPUT. Une seule lecture suffit, et elle est deja faite.
         if (msg == WM_INPUT) {
+            ++g_diag.messages;
             RAWINPUT brut = {};
             UINT lu = sizeof(brut);
             if (real_get_raw_input_data(reinterpret_cast<HRAWINPUT>(l), RID_INPUT,
@@ -396,21 +423,48 @@ void set_menu_open(bool open)
     // traverserait vers le jeu et le personnage tournerait.
     g_open.store(open, std::memory_order_relaxed);
 
-    // A L'OUVERTURE, LE CURSEUR VIRTUEL AU CENTRE DE LA FENETRE.
+    // A L'OUVERTURE — ET SEULEMENT A L'OUVERTURE.
     //
-    // Pas a zero : (0,0) est le coin haut-gauche, donc le menu s'ouvrirait avec
-    // le curseur colle en haut a gauche, au-dessus du premier onglet. Et pas
-    // « la ou etait le curseur de l'OS » : celle-la est verrouillee au centre par
-    // le jeu, donc on commencerait exactement la ou on a fini la derniere fois.
-    if (open && g_wnd) {
+    // CE BUG AVAIT EXACTEMENT LE SYMPTOME « reste fige au milieu ».
+    //
+    // set_menu_open() est appele A CHAQUE FRAME (d3d12_overlay.cpp). La premiere
+    // version recentrait donc le curseur 60 fois par seconde : chaque frame
+    // annulait les deltas accumules depuis la precedente, et le curseur
+    // retombait au centre a chaque fois. Il n'etait pas immobile par absence de
+    // deltas — il etait recentre plus vite qu'il ne pouvait bouger.
+    //
+    // Ce n'estait pas visible a la compilation, et pas visible non plus a la
+    // lecture : la condition `open && g_wnd` est vraie exactement quand on
+    // veut... sauf que « quand on veut » est une FOIS, pas soixante.
+    //
+    // D'ou le test de TRANSITION. g_open vient d'etre mis a jour, donc c'est
+    // l'ancien etat qu'il faut comparer — d'ou les deux lectures locales.
+    const bool etait_ouvert = g_etait_ouvert;
+    g_etait_ouvert = open;
+
+    if (open && !etait_ouvert && g_wnd) {
         RECT r = {};
         if (::GetClientRect(g_wnd, &r)) {
             g_curseur.min_x = 0;
             g_curseur.min_y = 0;
             g_curseur.max_x = r.right - 1;
             g_curseur.max_y = r.bottom - 1;
+            // Pas zero : (0,0) est le coin haut-gauche, et le curseur s'ouvrirait
+            // colle au-dessus du premier onglet. Ni « la ou etait le curseur de
+            // l'OS » : celle-la est verrouillee au centre par le jeu, donc on
+            // recommencerait la ou on a fini.
             g_curseur.x = (r.right - 1) / 2;
             g_curseur.y = (r.bottom - 1) / 2;
+
+            // UNE LIGNE DE DIAGNOSTIC, UNE FOIS PAR OUVERTURE.
+            //
+            // Le compteur est remis a zero ICI, pas au fil de l'eau : on veut
+            // savoir ce qui est arrive PENDANT ce menu-la. Lu apres quelques
+            // secondes de deplacement souris, il dit si la chaine
+            // WM_INPUT -> accumuler_delta -> curseur_pos tient.
+            g_diag.messages = 0;
+            g_diag.deltas = 0;
+            g_diag.journalise = true;
         }
     }
 }
@@ -422,6 +476,17 @@ bool curseur_pos(int* x, int* y)
     }
     if (x) *x = g_curseur.x;
     if (y) *y = g_curseur.y;
+
+    // Le verdict, une fois : apres quelques frames, le compteur de deltas dit
+    // si la souris a bouge. S'il est a zero alors que le compteur de messages
+    // est grand, c'est qu'on recoit des WM_INPUT sans souris dedans — le jeu
+    // utilise une autre source, et il faut le savoir avant de corriger quoi que
+    // ce soit en aval.
+    if (g_diag.journalise && g_diag.messages >= 120) {
+        log::info("input: curseur virtuel -- %lu WM_INPUT, %lu deltas, pos %d,%d",
+                  g_diag.messages, g_diag.deltas, g_curseur.x, g_curseur.y);
+        g_diag.journalise = false;
+    }
     return true;
 }
 
