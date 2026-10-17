@@ -51,7 +51,7 @@ const char* etat_label(int v)
 
 void draw_ui()
 {
-    render::section(render::ico::robot, "COMPORTEMENT DES ANIIMOE");
+    ImGui::SeparatorText("COMPORTEMENT DES ANIIMOE");
 
     bool on = g_enabled;
     if (ImGui::Checkbox("IA des Aniimoe", &on)) {

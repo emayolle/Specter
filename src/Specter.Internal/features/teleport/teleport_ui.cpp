@@ -73,21 +73,20 @@ void draw_ui()
     // fond. SeparatorText fait la meme separation en UN item, sans la gestion
     // de la hauteur — et une hauteur mal calculee, c'est le contenu qui sort de
     // l'ecran, ce qui s'est produit.
-    render::section(render::ico::vise, "OU JE SUIS");
+    ImGui::SeparatorText("OU JE SUIS");
     float cx = 0.0f, cy = 0.0f, cz = 0.0f;
     int csp = 0;
     if (features::teleport::have_position()) {
         features::teleport::position(&cx, &cy, &cz, &csp);
         char buf[96];
         std::snprintf(buf, sizeof(buf), "%.0f   %.0f   %.0f", cx, cy, cz);
-        ImGui::TextColored(render::texte(), "%s", buf);
-        ImGui::TextColored(render::texte_faible(), "x   y   z  -  scene %d", csp);
+        ImGui::Text("%s", buf);
+        ImGui::TextDisabled("x   y   z  -  scene %d", csp);
     } else {
-        ImGui::TextColored(render::texte_faible(),
-                           "position inconnue - entre dans le monde");
+        ImGui::TextDisabled("position inconnue - entre dans le monde");
     }
 
-    render::section(render::ico::carte, "ENREGISTRER ICI");
+    ImGui::SeparatorText("ENREGISTRER ICI");
     ImGui::SetNextItemWidth(-1.0f - 200.0f);
     ImGui::InputText("##nom", g_tp_name, sizeof(g_tp_name));
     ImGui::SameLine();
@@ -100,9 +99,8 @@ void draw_ui()
         ImGui::SetTooltip("Sauvegarde la position courante sous ce nom.");
     }
 
-    render::section(render::ico::fleche, "TELEPORTATION");
-    ImGui::TextColored(render::texte_faible(),
-                       "le personnage marche vers la cible par petits pas");
+    ImGui::SeparatorText("TELEPORTATION");
+    ImGui::TextDisabled("le personnage marche vers la cible par petits pas");
     ImGui::SetNextItemWidth(-1.0f);
 
     float stepv = features::teleport::lerp_step();
@@ -135,14 +133,12 @@ void draw_ui()
     const float cap = fps > 1.0f ? fps : 60.0f;
     const float sps = features::teleport::lerp_speed();
     const float eff_speed = sps < cap ? sps : cap;
-    ImGui::TextColored(render::texte_faible(),
-                       "soit ~%.0f u/s  (pas x min(vitesse, %.0f fps))",
+    ImGui::TextDisabled("soit ~%.0f u/s  (pas x min(vitesse, %.0f fps))",
                        features::teleport::lerp_step() * eff_speed, cap);
 
-    render::section(render::ico::liste, "MES POSITIONS");
+    ImGui::SeparatorText("MES POSITIONS");
     if (features::teleport::count() == 0) {
-        ImGui::TextColored(render::texte_faible(),
-                           "rien pour l'instant - enregistre une position ci-dessus");
+        ImGui::TextDisabled("rien pour l'instant - enregistre une position ci-dessus");
     }
     for (int i = 0; i < features::teleport::count(); ++i) {
         char nm[36] = {};
@@ -173,7 +169,7 @@ void draw_ui()
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::TextUnformatted(nm);
-        ImGui::TextColored(render::texte_faible(), "%s", xyz);
+        ImGui::TextDisabled("%s", xyz);
 
         ImGui::TableNextColumn();
         if (ImGui::Button("Aller", ImVec2(-1.0f, 0.0f))) {
@@ -248,11 +244,9 @@ void draw_ui_waypoints()
                 }
 
                 if (features::teleport::marks_pending()) {
-                    ImGui::TextColored(render::texte_faible(),
-                                       "scanning the game...");
+                    ImGui::TextDisabled("scanning the game...");
                 } else {
-                    ImGui::TextColored(render::texte_faible(),
-                                       "%d zone(s): %d Floraison(s), %d waypoint(s)",
+                    ImGui::TextDisabled("%d zone(s): %d Floraison(s), %d waypoint(s)",
                                        nz, nflora, nwp);
                 }
                 ImGui::SameLine();
@@ -283,8 +277,7 @@ void draw_ui_waypoints()
                 ImGui::BeginChild("##wp_list", ImVec2(0.0f, h));
 
                 if (nz == 0) {
-                    ImGui::TextColored(render::texte_faible(),
-                                       "nothing yet - press Refresh once in-world");
+                    ImGui::TextDisabled("nothing yet - press Refresh once in-world");
                 }
                 for (int zi = 0; zi < nz; ++zi) {
                     const int zone = zones[zi];
@@ -298,7 +291,7 @@ void draw_ui_waypoints()
                     // faisait trois dessins a trois positions differentes et
                     // reservait sa ligne a la main ; un tableau aligne tout seul,
                     // et ne peut pas laisser le curseur ou il ne devrait pas.
-                    render::section(titre);
+                    ImGui::SeparatorText(titre);
 
                     ImGui::BeginTable("##zp", 2,
                                       ImGuiTableFlags_SizingStretchSame |
@@ -317,9 +310,8 @@ void draw_ui_waypoints()
                         ImGui::PushID(100000 + i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextColored(render::texte(), "Floraison");
-                        ImGui::TextColored(render::texte_faible(),
-                                           "(%.0f, %.0f, %.0f)", fx, fy, fz);
+                        ImGui::Text("Floraison");
+                        ImGui::TextDisabled("(%.0f, %.0f, %.0f)", fx, fy, fz);
                         ImGui::TableNextColumn();
                         if (ImGui::Button("Teleport", ImVec2(-1.0f, 0.0f))) {
                             if (!features::teleport::teleport_to_floraison(i)) {
@@ -340,10 +332,9 @@ void draw_ui_waypoints()
                         ImGui::PushID(200000 + i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextColored(render::texte(), "%s",
+                        ImGui::Text("%s",
                                            nm[0] ? nm : "(unnamed)");
-                        ImGui::TextColored(render::texte_faible(),
-                                           "(%.0f, %.0f, %.0f)", wx, wy, wz);
+                        ImGui::TextDisabled("(%.0f, %.0f, %.0f)", wx, wy, wz);
                         ImGui::TableNextColumn();
                         if (ImGui::Button("Teleport", ImVec2(-1.0f, 0.0f))) {
                             if (!features::teleport::teleport_to_waypoint(i)) {

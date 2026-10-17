@@ -66,7 +66,7 @@ const char* phase_label(int v)
 
 void draw_ui()
 {
-    render::section(render::ico::liste, "RAMASSAGE AUTOMATIQUE");
+    ImGui::SeparatorText("RAMASSAGE AUTOMATIQUE");
 
     bool on = g_enabled;
     if (ImGui::Checkbox("Auto-farm (ramasse ce qui s'interagit, SAUF les coffres)",
@@ -97,7 +97,7 @@ void draw_ui()
     if (on) {
         ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
     } else {
-        ImGui::TextColored(render::texte_faible(), "desactive");
+        ImGui::TextDisabled("desactive");
     }
     ImGui::EndDisabled();
 }

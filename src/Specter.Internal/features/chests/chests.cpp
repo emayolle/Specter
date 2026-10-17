@@ -102,7 +102,7 @@ const char* phase_label(int v)
 
 void draw_ui()
 {
-    render::section(render::ico::boite, "OUVERTURE DES COFFRES");
+    ImGui::SeparatorText("OUVERTURE DES COFFRES");
 
     bool on = g_enabled;
     if (ImGui::Checkbox("Auto-ouverture (SEULEMENT les coffres, rien d'autre)",
@@ -201,7 +201,7 @@ void draw_ui()
     if (on) {
         ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
     } else {
-        ImGui::TextColored(render::texte_faible(), "desactive");
+        ImGui::TextDisabled("desactive");
     }
     ImGui::EndDisabled();
 }

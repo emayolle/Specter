@@ -89,7 +89,7 @@ float* mult(const char* nom)
 
 void draw_ui()
 {
-    render::section(render::ico::eclair, "VITESSE");
+    ImGui::SeparatorText("VITESSE");
 
     bool on = g_actif;
     if (ImGui::Checkbox("Multiplicateurs de vitesse", &on)) {
@@ -120,8 +120,7 @@ void draw_ui()
             }
         }
     } else {
-        ImGui::TextColored(render::texte_faible(),
-                           "desactive -- les vitesses originales sont restaurees");
+        ImGui::TextDisabled("desactive -- les vitesses originales sont restaurees");
     }
 
     // CE QUE CELA TOUCHE, ET CE QUE CELA NE TOUCHE PAS.
@@ -133,9 +132,8 @@ void draw_ui()
     //
     // Donc le wrapper est CONDITIONNEL : il ne multiplie que si l'instance
     // appelante est la tienne ou celle d'un de tes pets.
-    render::section(render::ico::boussole, "PORTEE");
-    ImGui::TextColored(render::texte_faible(),
-                       "Toi et tes pets. Les PNJ et les betes sauvages non.");
+    ImGui::SeparatorText("PORTEE");
+    ImGui::TextDisabled("Toi et tes pets. Les PNJ et les betes sauvages non.");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Le patch enveloppe les methodes de vitesse de la CLASSE,\n"

@@ -37,8 +37,6 @@
 #include "platform/perf.h"
 
 #include "imgui.h"
-#include "icon_font.h"            // generated/, from third_party/lucide/
-#include "ui_font.h"              // generated/, from third_party/inter/
 #include "render/ui_widgets.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
@@ -63,13 +61,15 @@ enum class State { Idle, Ready, Failed };
 enum class InitResult { Ok, Defer, Fail };
 
 std::atomic<bool> g_ui_enabled{true};
+
+// Le menu s'ouvre une fois sur « Joueur ». See build_ui() et le drapeau
+// ImGuiTabItemFlags_SetSelected : sans lui, ImGui ouvre le PREMIER onglet du
+// registre, c'est-a-dire « Outils », qui est la console Lua.
+bool g_onglet_defaut_pose = false;
+
 State g_state = State::Idle;
 bool g_err_logged = false;
 bool g_queue_wait_logged = false;
-
-// La police d icones, une fois l'atlas cuit. Pas la police par defaut :
-// voir le commentaire au chargement.
-ImFont* g_icon_font = nullptr;
 
 HWND g_probe_hwnd = nullptr;
 HWND g_hwnd = nullptr;
@@ -427,61 +427,14 @@ InitResult init_once(IDXGISwapChain* sc)
     io.MouseDrawCursor = true;
     ImGui::StyleColorsDark();
 
-    // LES DEUX POLICES, DANS L'ORDRE.
+    // LE MENU S'OUVRE SUR « Joueur », UNE FOIS PAR SESSION.
     //
-    // ImFontAtlas n'ajoute sa police par defaut QUE s'il n'y a aucune police.
-    // Donc ajouter la police d'icones — comme je le faisais — SUPPRIME la
-    // police normale, et ImGui se retrouve avec une seule police : celle des
-    // glyphes. Tout le texte du menu passe alors par elle, et les libelles
-    // s'affichent en glyphes vides. C'est exactement ce qu'on voit a l'ecran :
-    // la mise en page est la, et plus un seul mot.
-    //
-    // L'ordre compte donc : le defaut d'abord, l'icone ensuite. Les icones se
-    // demandent avec PushFont(police) ; tout le reste utilise Fonts[0].
-    static bool polices_ajoutees = false;
-    if (!polices_ajoutees) {
-        polices_ajoutees = true;
-
-        // Le TEXTE, en Inter. Sans elle, tout sort en ProggyClean — le pixel
-        // font par defaut d'ImGui — et c'est la premiere chose qui faisait
-        // dire que le menu n'etait pas fini. 16.5 px : Inter a des x-height
-        // plus petits que ProggyClean, a la meme taille il paraissait plus
-        // petit.
-        static const ImWchar kPlageTexte[] = {0x0020, 0x00FF, 0x2013, 0x2014,
-                                              0x2018, 0x2019, 0x201C, 0x201D,
-                                              0x2022, 0x2026, 0x20AC, 0x00B0,
-                                              0x2013, 0xFFFF};
-        ImFontConfig cfg_txt;
-        cfg_txt.FontDataOwnedByAtlas = false;
-        ImFont* defaut = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
-            render::kUiFont, static_cast<int>(render::kUiFontSize),
-            16.5f, &cfg_txt, kPlageTexte);
-
-        // Lucide place ses glyphes dans la zone privee d'Unicode. On cuit donc
-        // E000-F8FF : 6400 emplacements, dont 107 dessines. La plage complete
-        // de la police, pas juste nos icones — un libelle qui deborderait du
-        // sous-ensemble doit s'afficher proprement, pas disparaitre.
-        static const ImWchar kPlageIcones[] = {0xE000, 0xF8FF};
-        ImFontConfig cfg;
-        // kIconFont est un tableau statique : ImGui ne doit surtout pas tenter
-        // de le liberer a la destruction de l'atlas.
-        cfg.FontDataOwnedByAtlas = false;
-        g_icon_font = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
-            render::kIconFont, static_cast<int>(render::kIconFontSize),
-            16.0f, &cfg, kPlageIcones);
-
-        // Les features titrent aussi leurs sections, donc la police doit
-        // etre lisible depuis le header — pas seulement depuis ce .cpp.
-        render::police_icones() = g_icon_font;
-
-        if (g_icon_font == nullptr) {
-            log_once("police d icones refusee -- le menu tournera sans icone");
-        } else if (defaut == nullptr) {
-            // Le defaut en tete reste la seule police du texte, c'est lui
-            // qu'ImGuiira chercher Fonts[0].
-            ImGui::GetIO().Fonts->SetTexID(ImTextureID());
-        }
-    }
+    // g_onglet_defaut_pose est un static local de build_ui(), donc il survit a
+    // la destruction du contexte ImGui : sans cette remise a zero, le premier
+    // menu de la session poserait l'onglet, et tous les suivants s'ouvriraient
+    // sur « Outils » — c'est-a-dire la console, parce que SetSelected n'a jamais
+    // ete redemande.
+    g_onglet_defaut_pose = false;
 
     ImGui_ImplWin32_Init(g_hwnd ? g_hwnd : g_probe_hwnd);
 
@@ -546,108 +499,16 @@ void feed_input()
 // Aucune police d'icones : le backend D3D12 n'en embarque aucune, et en ajouter
 // une pour six entrees ne vaut pas le cout. Les libelles sont la navigation.
 
-void poser_style()
-{
-    static bool fait = false;
-    if (fait) {
-        return;
-    }
-    fait = true;
-
-    ImGuiStyle& st = ImGui::GetStyle();
-    st.WindowRounding = 12.0f;
-    st.ChildRounding = 10.0f;
-    st.FrameRounding = 7.0f;
-    st.GrabRounding = 7.0f;
-    st.ScrollbarRounding = 2.0f;
-    st.ItemSpacing = ImVec2(10.0f, 9.0f);
-    st.FramePadding = ImVec2(11.0f, 7.0f);
-    // 12 px de zone cliquable, poignee de 4 : ScrollbarPadding est retire des
-    // deux cotes du cadre, donc la poignee fait ScrollbarSize - 2 x celui-ci.
-    st.ScrollbarSize = 12.0f;
-    st.ScrollbarPadding = 4.0f;
-    st.WindowPadding = ImVec2(0.0f, 0.0f);   // la coque dessine son propre padding
-
-    ImVec4* c = st.Colors;
-    c[ImGuiCol_WindowBg] = fond();
-    c[ImGuiCol_ChildBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    c[ImGuiCol_PopupBg] = panneau();
-    c[ImGuiCol_Border] = bordure();
-    // LE FOND DE CADRE, A 0.17 ET NON 0.11.
-    //
-    // ImGui dessine avec ca trois choses du meme coup : la piste d'un curseur,
-    // le cadre d'un champ de saisie, et le fond d'un bouton. A 0.11 — la
-    // couleur du panneau qui les contient — les trois etaient invisibles. Sur
-    // la capture du Teleport, le curseur n'etait qu'une pastille violette sans
-    // rail, et « Enregistrer ici » montrait un cadre vide a gauche.
-    // Un fond de cadre doit se detacher de ce qui le porte, sinon ce n'est pas
-    // un cadre.
-    c[ImGuiCol_FrameBg] = survol();
-    c[ImGuiCol_FrameBgHovered] = ImVec4(0.22f, 0.21f, 0.28f, 1.00f);
-    c[ImGuiCol_FrameBgActive] = accent_doux();
-
-    // LA BARRE DE DEFILEMENT.
-    //
-    // Aucune de ses quatre couleurs n'etait posee : elles restaient au gris
-    // clair d'ImGui, la seule chose claire du menu sur un fond noir. Et sur
-    // la capture de Monde on en voyait DEUX cotes cotes — celle du panneau
-    // « reperes » et celle de la page — parce que les deux defilent.
-    //
-    // Cadre de 12 px pour la zone cliquable, poignee de 4 px au milieu, piste
-    // invisible. C'est la regle des interfaces sombres : une piste dessinee se
-    // voit plus qu'une pointe de defilement qu'on cherche pas.
-    c[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    c[ImGuiCol_ScrollbarGrab] = ImVec4(0.34f, 0.32f, 0.42f, 0.55f);
-    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.55f, 0.52f, 0.66f, 0.85f);
-    c[ImGuiCol_ScrollbarGrabActive] = accent();
-    c[ImGuiCol_TitleBg] = fond();
-    c[ImGuiCol_TitleBgActive] = fond();
-    c[ImGuiCol_Button] = panneau();
-    c[ImGuiCol_ButtonHovered] = survol();
-    c[ImGuiCol_ButtonActive] = accent_doux();
-    c[ImGuiCol_Header] = survol();
-    c[ImGuiCol_HeaderHovered] = survol();
-    c[ImGuiCol_HeaderActive] = accent_doux();
-    c[ImGuiCol_CheckMark] = accent();
-    c[ImGuiCol_SliderGrab] = accent();
-    c[ImGuiCol_SliderGrabActive] = ImVec4(0.76f, 0.58f, 1.00f, 1.00f);
-    c[ImGuiCol_Text] = texte();
-    c[ImGuiCol_TextDisabled] = texte_faible();
-    c[ImGuiCol_Separator] = ImVec4(0.30f, 0.28f, 0.36f, 0.40f);
-}
-
-// Une case a cocher qui ressemble a une case a cocher.
-//
-// ImGui dessine la sienne en mode « frame », ce qui se lit comme un champ de
-// saisie des qu'elle est cochee : c'est la premiere chose qui rendait l'ancien
-// menu peu representatif. Ici la coche est un glyphe, le cadre s'allume a
-// l'accent au survol, et la ligne entiere reagit.
-
 using namespace specter::render;
 
 void build_ui()
 {
-    poser_style();
     ImGuiIO& io = ImGui::GetIO();
 
-    ImGui::SetNextWindowPos(ImVec2(40.0f, 40.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(860.0f, 640.0f), ImGuiCond_FirstUseEver);
-
+    ImGui::SetNextWindowPos(ImVec2(24.0f, 24.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(780.0f, 600.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Specter")) {
-        // LE TITRE, et le seul endroit ou une icone est toleree.
-        //
-        // Partout ailleurs, le menu ne dessine rien : il APPELLE. Une icone
-        // dans un titre de section est faite de texte concatené, pas de
-        // rectangles et de SetCursorScreenPos — voir ui_widgets.h, qui explique
-        // pourquoi la version qui separait l'icone et le libelle chevauchait les
-        // deux.
-        { Icone_titre_large logo(ico::vise, 18.0f); }
-        ImGui::SameLine();
-        ImGui::TextColored(texte(), "Specter");
-        ImGui::SameLine();
-        ImGui::TextColored(texte_faible(), "  %s", g_ui_enabled
-                                                     ? "overlay actif"
-                                                     : "overlay en pause");
+        ImGui::TextUnformatted(g_snapshot);
         ImGui::Separator();
 
         // Feed every feature first, visible tab or not.
@@ -658,35 +519,42 @@ void build_ui()
             }
         }
 
-        // ---- les onglets : UN PAR LIBELLE DISTINCT, pas un par feature ----
-        //
-        // LE LIBELLE EST L'ID IMGUI. Deux features qui portent le meme libelle
-        // produisent deux onglets avec le meme ID : on selectionne l'un, on
-        // selectionne les deux, et le deuxieme devient inatteignable — sans
-        // erreur, et sans symptome que quiconque irait chercher.
-        //
-        // Donc la cle de regroupement est le LIBELLE, pas la feature.
-        // « Mouvement » porte la stamina et les degats de chute ; Teleport et
-        // Reperes ont chacun le leur. Rien ici ne sait quelle feature vit dans
-        // quel onglet.
-        //
-        // BeginTabItem rend false pour tout onglet non selectionne. On
-        // memorise donc les libelles PASSEES a BeginTabItem, avec l'etat de
-        // cet appel — pas les libelles OUVERTES. Un seul passage par libelle
-        // distincte, toujours ; seul le contenu est dessine si l'onglet est
-        // ouvert.
-        //
-        // Un tableau fixe plutot qu'un std::vector : ceci tourne a chaque frame
-        // et l'image est chargee manuellement, donc moins de choses dynamiques
-        // touchees par une frame de rendu, mieux c'est.
-        struct OngletVu {
-            const char* label;
-            bool open;
-        };
-        OngletVu vus[16];
-        int nvus = 0;
+        if (ImGui::BeginTabBar("##main_tabs")) {
+            // ONE TAB PER DISTINCT LABEL, not one per feature.
+            //
+            // The overlay no longer knows what a console is, or that a teleport
+            // tab used to exist. But the tab LABEL is the ImGui ID, so two
+            // features carrying the same label produce two tabs with the same
+            // ID: selecting one selects both, and the second is unreachable --
+            // with no error, and no symptom anyone would look for.
+            //
+            // So the label is the grouping key, not the feature. "Movement"
+            // holds the stamina checkbox and the fall-damage one. Teleport and
+            // Waypoints each keep their own. Nothing here knows or cares which
+            // feature lives in which tab.
+            //
+            // The first version tracked the labels it had OPENED, which is the
+            // wrong set. BeginTabItem returns false for every tab that is not
+            // the selected one, so an unselected label never got recorded and
+            // the NEXT feature with that label called BeginTabItem again --
+            // two tabs, one ID, and ImGui saying so:
+            //
+            //     Programmer error: 2 visible items with conflicting ID!
+            //
+            // So what is tracked is every label PASSED to BeginTabItem, along
+            // with whether that call ended up open. One call per distinct
+            // label, always; drawing only for the ones that are open.
+            //
+            // A small fixed array rather than a std::vector: this runs every
+            // frame, and the image is manually mapped, so the fewer dynamic
+            // things a render frame touches, the better.
+            struct TabVu {
+                const char* label;
+                bool open;
+            };
+            TabVu vus[16];
+            int nvus = 0;
 
-        if (ImGui::BeginTabBar("##onglets")) {
             for (int i = 0; i < features::registry_count(); ++i) {
                 const features::Feature* f = features::registry()[i];
                 if (!f->tab || !f->draw_ui) {
@@ -702,7 +570,7 @@ void build_ui()
                 }
 
                 if (dejaVu >= 0) {
-                    // Deja dans cet onglet : dessiner, ne pas le rouvrir.
+                    // Already inside that tab: draw, do not open it again.
                     if (vus[dejaVu].open) {
                         f->draw_ui();
                     }
@@ -710,9 +578,43 @@ void build_ui()
                 }
 
                 if (nvus >= 16) {
-                    continue;  // plus de libelles distincts que le tableau n'en tient
+                    continue;  // more distinct labels than the array holds
                 }
-                const bool open = ImGui::BeginTabItem(f->tab);
+
+                // L'ONGLET PAR DEFAUT, et pourquoi il faut le demander.
+                //
+                // BeginTabItem ouvre le PREMIER onglet qu'on lui passe si aucun
+                // n'est selectionne — et le premier du registre est « Outils »,
+                // c'est-a-dire la console Lua. Mesure sur la capture : le menu
+                // s'ouvrait donc sur un champ de saisie vide, ce qui est la
+                // page la moins parlante comme premiere impression.
+                //
+                // Et ce n'est PAS un choix qu'ImGui retient : io.IniFilename est
+                // nul (le jeu ecrit dans son prefixe, on n'y touche pas), donc
+                // il n'y a aucun imgui.ini. Sans SetSelected, c'est « Outils »
+                // a CHAQUE ouverture, indefiniment.
+                //
+                // SetSelected ne doit etre demande qu'une fois, sur la premiere frame ou le
+                // menu est dessine : ImGui bascule l'onglet, puis le deselectionne
+                // tout seul. Le demander en boucle vole la selection a
+                // l'utilisateur a chaque clic sur une autre page.
+                //
+                // CE N'EST PAS g_frame_index == 0. g_frame_index est un compteur
+                // circulaire d'images D3D, qui tourne en permanence et n'est
+                // jamais nul apres le premier rendu -- et il compte les images
+                // presentees, pas les frames de menu dessinees. Un flag dedie
+                // dit ce qu'il veut dire.
+                ImGuiTabItemFlags drapeaux = ImGuiTabItemFlags_None;
+                if (!g_onglet_defaut_pose &&
+                    std::strcmp(f->tab, "Joueur") == 0) {
+                    drapeaux = ImGuiTabItemFlags_SetSelected;
+                    g_onglet_defaut_pose = true;
+                }
+                // Le 2e parametre est bool* p_open, PAS les drapeaux : les
+                // drapeaux sont le 3e. Passer les drapeaux en 2e ne compile
+                // meme pas, et c'est le seul endroit du fichier ou l'ordre
+                // compte.
+                const bool open = ImGui::BeginTabItem(f->tab, nullptr, drapeaux);
                 vus[nvus].label = f->tab;
                 vus[nvus].open = open;
                 ++nvus;
@@ -722,31 +624,16 @@ void build_ui()
                 }
             }
 
-            // ---- Divers : l'etat du client, et la fermeture ----
-            //
-            // C'est une PAGE, pas une feature : elle n'a pas sa place dans le
-            // registre, et c'est le seul endroit du overlay ou l'on nomme
-            // encore une page.
             if (ImGui::BeginTabItem("Divers")) {
-                section(ico::info, "ETAT DU CLIENT");
-                ImGui::TextColored(texte(), "%s",
-                                   g_ui_enabled ? "overlay actif"
-                                                : "overlay en pause");
-                ImGui::TextColored(texte_faible(), "%s", g_snapshot);
 
-                section(ico::balance, "RENDU");
-                ImGui::Text("%.1f fps", io.Framerate);
-                ImGui::SameLine();
-                ImGui::TextColored(texte_faible(), "(%.2f ms par image)",
-                                   1000.0f /
-                                       (io.Framerate > 0.1f ? io.Framerate : 1.0f));
-                ImGui::Spacing();
+                ImGui::Separator();
                 ImGui::Checkbox("ImGui demo window", &g_demo);
-                if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
+                ImGui::Separator();
+                ImGui::Text("FPS %.1f (%.2f ms)", io.Framerate,
+                            1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
+                if (ImGui::Button("Close menu (DELETE)", ImVec2(-1.0f, 0.0f))) {
                     g_ui_enabled = false;
                 }
-                ImGui::SameLine();
-                ImGui::TextColored(texte_faible(), "ou DELETE");
                 ImGui::EndTabItem();
             }
 
