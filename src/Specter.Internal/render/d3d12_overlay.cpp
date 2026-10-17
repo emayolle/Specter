@@ -154,15 +154,26 @@ void mouse_sink(int x, int y, int wheel)
     if (wheel == 0) {
         return;
     }
-    // `wheel` est en UNITES DE WHEEL_DELTA : 120 pour un cran, -120 pour un cran
-    // vers le bas. On convertit en crans, ce qu'ImGui attend (1.0 = un cran).
+    // DIAGNOSTIC : la suite des crans recus, signe compris. C'est la seule
+    // information qui manque. On sait que la roue arrive ; on sait que le
+    // symptome est « un cran perdu par changement de direction ».
     //
-    // Le diagnostic du commit precedent affichait « 7 864 320 » pour un cran :
-    // cette valeur ne tient pas dans les 16 bits de usButtonData. C'etait la
-    // conversion du printf qui inventait le nombre — la vraie valeur du champ
-    // etait 0. D'ou ce decalage par le haut « correctif » qui rendait le scroll
-    // instantane : on corrigeait un defaut qui n'existait pas, et on cassait le
-    // vrai. 120 = un cran, tout simplement.
+    // Si la suite montre un signe MANQUANT, la perte est avant ImGui, et elle
+    // est a notre cote. Si la suite est complete, la perte est apres, et c'est
+    // ImGui qui ecarte — auquel cas le verrou de molette est innocent et c'est
+    // TestKeyOwner qu'il faut regarder.
+    //
+    // Les deux sont distinguables uniquement par la sequence, donc on journalise
+    // la sequence et pas un compteur.
+    static int n = 0;
+    if (++n <= 24) {
+        log::info("overlay: cran recu %+d",
+                  static_cast<int>(static_cast<float>(wheel) /
+                                   static_cast<float>(WHEEL_DELTA)));
+    }
+
+    // `wheel` est en UNITES DE WHEEL_DELTA : 120 pour un cran, -120 vers le
+    // bas. On convertit en crans, ce qu'ImGui attend (1.0 = un cran).
     //
     // AddMouseWheelEvent et non le handler Win32 : ce handler s'attend a un
     // WM_MOUSEWHEEL qu'on ne recoit jamais — fenetre fantome de 1x1 qui garde le
@@ -170,6 +181,7 @@ void mouse_sink(int x, int y, int wheel)
     ImGui::GetIO().AddMouseWheelEvent(
         0.0f, static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA));
 }
+
 
 void log_once(const char* what)
 {
