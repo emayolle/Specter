@@ -409,7 +409,31 @@ void draw_ui_waypoints()
                         ImGui::PushID(200000 + i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextUnformatted("%s", nm[0] ? nm : "(unnamed)");
+                        // LE NOM, ET LA FAUTE QUI L'EFFACAIT.
+                        //
+                        // TextUnformatted("%s", nom) est le MAUVAIS appel, et il
+                        // rend RIEN — silencieusement.
+                        //
+                        // TextUnformatted n'est pas un printf. Sa signature est
+                        //
+                        //     TextUnformatted(const char* text, const char* text_end)
+                        //
+                        // Le second parametre n'est pas une vararg : c'est la FIN
+                        // de la plage d'octets a rendre. En passant `nom`, on
+                        // rendait la plage « "%s" a nom », soit DEUX octets, dont
+                        // un '%' — qu'ImGui lit comme un debut de commande de
+                        // texte, donc a vide.
+                        //
+                        // Le nom etait la, correct, en memoire : le marqueur de
+                        // diagnostic affichait « len=22 Coll », longueur et
+                        // premiers caracteres exacts. TextColored est un VRAI
+                        // printf, donc lui fonctionnait. C'est ce qui a designe
+                        // la panne : donnees correctes, rendu faux, meme ligne,
+                        // meme police, meme couleur.
+                        //
+                        // La forme correcte : TextEx fait le formatage, donc
+                        // Text("%s", ...) et non TextUnformatted.
+                        ImGui::Text("%s", nm[0] ? nm : "(unnamed)");
                         ImGui::SameLine();
                         ImGui::TextDisabled("(%.0f, %.0f, %.0f)", wx, wy, wz);
                         ImGui::TableNextColumn();

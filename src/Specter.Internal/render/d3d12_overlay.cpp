@@ -375,6 +375,24 @@ InitResult init_once(IDXGISwapChain* sc)
     fetch_desc(sc);
 
     // Arm the input gate + cursor control as soon as we know the game window.
+    //
+    // LES SINKS D'ABORD. Cet ordre n'est pas cosmetique.
+    //
+    // install() sous-classe la fenetre tout de suite : a partir de la, chaque
+    // message passe par notre wnd_proc. Si le sink est encore null a ce moment,
+    // le message est traite par le gate qui l'AVALE — et un avale definitif.
+    //
+    // Pour la molette, c'est fatal : elle n'existe que pendant son message, donc
+    // il n'y a aucun etat a relire ensuite. Un message perdu est perdu. C'etait
+    // exactement ce qui se passait : install() ligne 378, set_mouse_sink()
+    // ligne 471 — quatre-vingt-treize lignes trop tard, et le defilement ne
+    // pouvait jamais fonctionner.
+    //
+    // Le clavier echappait au sort par chance : les touches sont relues par
+    // GetAsyncKeyState a chaque frame, donc un message rate est rattrape au
+    // frame suivant. La molette, non.
+    input::set_keyboard_sink(&keyboard_sink);
+    input::set_mouse_sink(&mouse_sink);
     input::install(g_hwnd ? g_hwnd : g_probe_hwnd);
 
     // Shader-visible SRV heap (fonts/textures) with a wrapping bump allocator.
@@ -465,10 +483,9 @@ InitResult init_once(IDXGISwapChain* sc)
 
     ImGui_ImplWin32_Init(g_hwnd ? g_hwnd : g_probe_hwnd);
 
-    // Once the context exists, route keyboard messages the subclass swallows to
-    // ImGui, so the Lua console can receive typed text.
-    input::set_keyboard_sink(&keyboard_sink);
-    input::set_mouse_sink(&mouse_sink);
+    // Les sinks sont poses plus haut, AVANT input::install() — voir le commentaire
+    // la : la sous-classe s'arme la et tout message trouve un sink null si on
+    // attend. On ne les repose donc pas ici.
 
     ImGui_ImplDX12_InitInfo info = {};
     info.Device = g_dev;
