@@ -114,15 +114,38 @@ public:
     // possible. Et le defaut n'est PAS la place disponible : c'est AsIs, qui
     // laisse la carte se contenir elle-meme.
     const float h = hauteur;
-    ImGui::BeginChild(titre, ImVec2(0.0f, h),
-                      ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
-        if (titre_ && *titre_) {
-            // TextDisabled, pas SeparatorText : le separateur avec son trait
-            // etait demande a disparaitre. Le titre en gris fait le groupement
-            // sans trait.
-            ImGui::TextDisabled("%s", titre_);
-        }
+    // BeginChild PEUT RETOURNER FALSE, et c'est NORMAL.
+    //
+    // Il rend false quand la fenetre est sautee — hors de l'ecran, ou trop
+    // haute pour ce qui reste. Dans ce cas ImGui pose SkipItems : tout item
+    // suivant est ignore. BeginTable est appele quand meme, il rend lui aussi
+    // false, et g.CurrentTable reste NUL.
+    //
+    // La suite hurle alors : TableSetupColumn et TableHeadersRow verifient
+    // qu'elles sont dans un BeginTable, et echouent sur :
+    //
+    //     Call should only be done while in BeginTable() scope!
+    //
+    // Ce n'etait pas une hypothese : /tmp/specter-imgui-assert.txt contenait
+    // exactement ces quatre lignes, et le jeu crashait une frame apres
+    // l'affichage.
+    //
+    // Le correctif N'EST PAS ici : Begin/End doivent toujours etre apparies —
+    // EndChild reste obligatoire meme quand BeginChild rend false. Ce qu'on
+    // peut, c'est que BeginTable et ses appelants respectent le false.
+    // Donc Group expose `ouvert()`, et BeginTable le teste.
+    ouvert_ = ImGui::BeginChild(titre, ImVec2(0.0f, h),
+                                ImGuiChildFlags_Borders,
+                                ImGuiWindowFlags_NoScrollbar);
+    if (ouvert_ && titre_ && *titre_) {
+        ImGui::TextDisabled("%s", titre_);
     }
+    }
+
+    // La carte a-t-elle ete dessinee ? Begin/End restent apparies dans tous
+    // les cas — voir ci-dessus. C'est BeginTable, appele A L'INTERIEUR, qui doit
+    // consulter ce flag.
+    bool ouvert() const { return ouvert_; }
 
     ~Group()
     {
@@ -135,6 +158,7 @@ public:
 
 private:
     const char* titre_;
+    bool ouvert_ = false;
 };
 
 // UN CURSEUR : libelle a gauche, piste a droite.
@@ -156,9 +180,25 @@ inline bool slider_row(const char* libelle, float* valeur, float mini,
                        float largeur_nom = 130.0f)
 {
     ImGui::PushID(libelle);
-    ImGui::BeginTable("##s", 2,
-                      ImGuiTableFlags_SizingStretchProp |
-                          ImGuiTableFlags_NoSavedSettings);
+
+    // Si la fenetre englobante est sautee (SkipItems), BeginTable rend false et
+    // CurrentTable reste NUL : TableSetupColumn et TableHeadersRow verifient
+    // qu'elles sont dans une table et plantent sur :
+    //
+    //     Call should only be done while in BeginTable() scope!
+    //
+    // Mesure : quatre de ces assertions, puis le jeu mort une frame apres.
+    //
+    // BeginChild pose SkipItems tant que la fenetre est hors ecran, et ImGui
+    // ne remet pas l'etat tout seul. Sans ce test, un curseur invisible dans
+    // une carte invisible fait tomber le processus. (Voir Group::ouvert et
+    // l'argumentaire dans Group.)
+    if (!ImGui::BeginTable("##s", 2,
+                           ImGuiTableFlags_SizingStretchProp |
+                               ImGuiTableFlags_NoSavedSettings)) {
+        ImGui::PopID();
+        return false;
+    }
     ImGui::TableSetupColumn("nom", ImGuiTableColumnFlags_WidthFixed, largeur_nom);
     ImGui::TableSetupColumn("piste", ImGuiTableColumnFlags_WidthStretch);
 

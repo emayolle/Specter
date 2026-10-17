@@ -158,9 +158,21 @@ void draw_ui()
         // positionnait lui-meme au draw list et reposait un InvisibleButton :
         // deux systemes de coordonnees, et le curseur qu'il laissait derriere
         // lui. Un tableau, c'est UN item par colonne, et ImGui aligne tout seul.
-        ImGui::BeginTable("##pos", 3,
-                          ImGuiTableFlags_SizingStretchSame |
-                              ImGuiTableFlags_NoSavedSettings);
+        // BeginTable / EndTable : LES DEUX OU AUCUN.
+        //
+        // imgui.h, ligne 907 : « only call EndTable() if BeginTable() returns
+        // true! » — l'INVERSE de BeginChild, qui doit toujours etre apparie.
+        // Melanger les deux regles, c'est laisser g.CurrentTable a nul.
+        //
+        // Ici la forme est « early return » : le PopID est fait explicitement,
+        // et le continue saute le contenu de la ligne. Aucun EndTable ne peut
+        // etre oublie, parce qu'il n'y en a pas a appeler dans ce chemin.
+        if (!ImGui::BeginTable("##pos", 3,
+                               ImGuiTableFlags_SizingStretchSame |
+                                   ImGuiTableFlags_NoSavedSettings)) {
+            ImGui::PopID();
+            continue;
+        }
         ImGui::TableSetupColumn("nom", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("aller", ImGuiTableColumnFlags_WidthFixed,
                                 90.0f);
@@ -327,9 +339,19 @@ void draw_ui_waypoints()
 
                     render::Group gz(titre, h_zone);
 
-                    ImGui::BeginTable("##zp", 2,
-                                      ImGuiTableFlags_SizingStretchSame |
-                                          ImGuiTableFlags_NoSavedSettings);
+                    // BeginTable / EndTable : LES DEUX OU AUCUN.
+                    //
+                    // imgui.h, ligne 907 : « only call EndTable() if BeginTable()
+                    // returns true! » — c'est l'INVERSE de BeginChild, qui doit
+                    // toujours etre apparie. Ne pas melanger les deux regles :
+                    // c'est exactement la confusion qui laisse un CurrentTable
+                    // nul, et l'assertion mesuree venait de la.
+                    //
+                    // Le bloc encapsule tout, donc aucun `continue` ne peut
+                    // sauter le EndTable.
+                    if (ImGui::BeginTable("##zp", 2,
+                                          ImGuiTableFlags_SizingStretchSame |
+                                              ImGuiTableFlags_NoSavedSettings)) {
                     ImGui::TableSetupColumn("quoi",
                                             ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableSetupColumn("tp", ImGuiTableColumnFlags_WidthFixed,
@@ -379,7 +401,8 @@ void draw_ui_waypoints()
                     }
 
                     ImGui::EndTable();
-                }  // zone
+                    }  // BeginTable (les deux ou aucun)
+                }  // group "Zone N"
 
                 ImGui::EndChild();
 }
