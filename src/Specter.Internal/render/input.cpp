@@ -452,6 +452,38 @@ void set_mouse_sink(mouse_sink fn)
 
 void set_menu_open(bool open)
 {
+    // REPRENDRE LE FOCUS. C'est ICI que se joue la molette, et c'est MESURE.
+    //
+    // Mesure, sur cette machine : a l'ouverture du menu, le focus passe de la
+    // fenetre du JEU a une fenetre FANTOME — 1x1, a (-1,-1), sans classe ni nom.
+    // C'est le focus-stealing d'un thread Wine.
+    //
+    // Et la molette n'est pas un cas particulier : c'est la REGLE de Win32.
+    // WM_MOUSEWHEEL n'est envoye qu'a la fenetre ACTIVE. WM_MOUSEMOVE, lui, va a
+    // la fenetre sous le curseur. Donc la souris se deplace sans probleme pendant
+    // que le menu est ouvert — les deltas bruts arrivent, la position est juste —
+    // et la molette part vers la fenetre fantome, jamais vue.
+    //
+    // Compteur mesure : 125 WM_INPUT, 125 deltas, 0 roues. Les deux familles de
+    // messages ne passent pas par la meme porte.
+    //
+    // IL N'Y A PAS D'AUTRE VOIE. Windows n'expose aucun deltas de roue en dehors
+    // du message : GetCursorPos ne les porte pas, et il n'existe pas d'appel
+    // equivalent. On ne peut donc pas aller le chercher chez celui qui l'a recu —
+    // il n'y a rien a lire. Reprendre le focus est le SEUL remede.
+    //
+    // SetFocus et SetForegroundWindow, dans cet ordre : le premier echoue
+    // silencieusement si la fenetre fantome appartient a un autre thread, et le
+    // second est le seul qui traverse les processus sous Wine. On ne peut pas
+    // savoir a l'avance lequel fonctionnera, donc on appelle les deux.
+    //
+    // UNE FOIS, sur la TRANSITION. Le prendre 60 fois par seconde le volerait a
+    // l'utilisateur — c'est ce qui rend un programme agressant.
+    if (open && !g_etait_ouvert && g_wnd) {
+        ::SetForegroundWindow(g_wnd);
+        ::SetFocus(g_wnd);
+    }
+
     // UN SEUL FLAG, ET C'EST TOUT.
     //
     // Ce fonction faisait 60 lignes : il enregistrait la zone de rognage du
