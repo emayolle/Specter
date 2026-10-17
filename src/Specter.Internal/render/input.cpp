@@ -84,6 +84,11 @@ struct CurseurVirtuel {
     // mis de cote -- c'est ce que font les jeux, et c'est le comportement qu'on
     // attend d'un curseur.
     int min_x = 0, min_y = 0, max_x = 1, max_y = 1;
+    // Vrai apres le premier passage de la souris. Tant que c'est faux, x/y
+    // valent (0,0) -- le coin haut-gauche -- qui n'est PAS une position qu'on
+    // a choisie mais celle d'un curseur qui n'a encore bouge de rien. La
+    // distinguer evite de "restaurer" ce coin-la a la premiere ouverture.
+    bool position_reelle = false;
 };
 CurseurVirtuel g_curseur;
 
@@ -117,6 +122,7 @@ void accumuler_delta(int dx, int dy)
 
     g_curseur.x += dx;
     g_curseur.y += dy;
+    g_curseur.position_reelle = true;
 
     // Le verrouillage n'est PAS un simple clamp : un curseur de jeu se
     // recentre quand il atteint un bord, sinon il devient impossible d'atteindre
@@ -449,12 +455,38 @@ void set_menu_open(bool open)
             g_curseur.min_y = 0;
             g_curseur.max_x = r.right - 1;
             g_curseur.max_y = r.bottom - 1;
-            // Pas zero : (0,0) est le coin haut-gauche, et le curseur s'ouvrirait
-            // colle au-dessus du premier onglet. Ni « la ou etait le curseur de
-            // l'OS » : celle-la est verrouillee au centre par le jeu, donc on
-            // recommencerait la ou on a fini.
-            g_curseur.x = (r.right - 1) / 2;
-            g_curseur.y = (r.bottom - 1) / 2;
+
+            // LA POSITION EST CONSERVEE. On ne la remet pas au centre.
+            //
+            // Le centre etait un choix par defaut, pose parce qu'il restait une
+            // question sans reponse : « ou le mettre ? ». On a la reponse
+            // aujourd'hui — la ou il etait. Rouvrir le menu doit retrouver le
+            // curseur la ou on l'a laisse, sinon chaque reouverture impose un
+            // trajet de rattrapage jusqu'a l'option qu'on voulait.
+            //
+            // Une seule precaution : la fenetre a pu changer de taille pendant
+            // le menu ferme, et l'ancienne position peut alors etre hors des
+            // nouvelles bornes. On la RAMENE dedans parbornage — pas par
+            // recentrage, qui l'enverrait au milieu de l'ecran pour un simple
+            // changement de resolution.
+            auto borner = [](int v, int mini, int maxi) {
+                if (v < mini) return mini;
+                if (v > maxi) return maxi;
+                return v;
+            };
+            if (g_curseur.position_reelle) {
+                g_curseur.x = borner(g_curseur.x, g_curseur.min_x,
+                                     g_curseur.max_x);
+                g_curseur.y = borner(g_curseur.y, g_curseur.min_y,
+                                     g_curseur.max_y);
+            } else {
+                // PREMIERE OUVERTURE DE LA SESSION : la souris n'a encore bouge
+                // de rien, donc il n'y a pas de position a restaurer. On part
+                // du milieu de la fenetre, qui est la seule position qui n'est
+                // ni un coin ni un default arbitraire.
+                g_curseur.x = (r.right - 1) / 2;
+                g_curseur.y = (r.bottom - 1) / 2;
+            }
 
             // UNE LIGNE DE DIAGNOSTIC, UNE FOIS PAR OUVERTURE.
             //
