@@ -89,32 +89,40 @@ float* mult(const char* nom)
 
 void draw_ui()
 {
-    { render::Panneau p("VITESSE");
+    render::section(render::ico::eclair, "VITESSE");
+
     bool on = g_actif;
-    if (render::case_a_cocher("Multiplicateurs de vitesse", &on)) {
+    if (ImGui::Checkbox("Multiplicateurs de vitesse", &on)) {
         g_actif = on;
     }
 
     if (on) {
+        // UN CURSEUR PAR RATIO, ET LE RATIO EST DANS SON NOM.
+        //
+        // ImGui ecrit le libelle A DROITE de la piste en 1.92. C'est l'apparence
+        // stock, et elle a un avantage qu'on ne voit pas : IsItemHovered et
+        // IsItemDeactivatedAfterEdit portent sur le CURSEUR, alors que le
+        // wrapper d'avant finissait sur un Dummy et donc rapportait le survol
+        // de toute la ligne.
         for (int i = 0; i < kN; ++i) {
             const Curseur& c = kCurseurs[i];
             if (g_mult[i] == 0.0f) {
-                g_mult[i] = c.defaut;
+                g_mult[i] = c.defaut;   // 0 n'est pas une valeur : « pas lu »
             }
-            float old = g_mult[i];
-            render::curseur(c.label, &g_mult[i], c.min_v, c.max_v, "%.1fx",
-                            150.0f);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::SliderFloat(c.label, &g_mult[i], c.min_v, c.max_v,
+                                   "%.1fx")) {
+                // Lu en direct par le script : un curseur bouge agit sans
+                // qu'on ait a rejouer quoi que ce soit.
+            }
             if (ImGui::IsItemHovered() && c.aide) {
                 ImGui::SetTooltip("%s", c.aide);
             }
-            (void)old;
         }
     } else {
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
         ImGui::TextColored(render::texte_faible(),
                            "desactive -- les vitesses originales sont restaurees");
     }
-    }  // du panneau
 
     // CE QUE CELA TOUCHE, ET CE QUE CELA NE TOUCHE PAS.
     //
@@ -125,9 +133,9 @@ void draw_ui()
     //
     // Donc le wrapper est CONDITIONNEL : il ne multiplie que si l'instance
     // appelante est la tienne ou celle d'un de tes pets.
-    { render::Panneau p("PORTEE");
+    render::section(render::ico::boussole, "PORTEE");
     ImGui::TextColored(render::texte_faible(),
-                       "Toi et tes pets. Les PNJ et les betes Sauvages non.");
+                       "Toi et tes pets. Les PNJ et les betes sauvages non.");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Le patch enveloppe les methodes de vitesse de la CLASSE,\n"
@@ -138,9 +146,13 @@ void draw_ui()
             "Les PNJ et les betes sauvages gardent leur vitesse.\n\n"
             "Il est REPOSE quand tu decoches, et reapplique toutes les\n"
             "demi-secondes -- parce que le jeu peut recreer l attribut,\n"
-            "et un patch disparu sans raison est un reglage inerte.");
+            "et un patch disparu sans raison est un reglage inerte.\n\n"
+            "L ESCALADE N'EST PAS LA. Le source du jeu dit\n"
+            "getClimbSpeed = climbSpeedLevels[canClimb], sans aucun ratio, et\n"
+            "SetAISpeed n'a QU'UN appelant dans tout le jeu : AIControllerUtils.\n"
+            "Ce que TU controles passe par un autre chemin. Le seul levier\n"
+            "restant sur l'escalade est « Cout de stamina » en dessous.");
     }
-    }  // du panneau
 }
 
 }  // namespace vitesse

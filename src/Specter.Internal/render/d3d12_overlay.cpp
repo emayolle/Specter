@@ -470,6 +470,10 @@ InitResult init_once(IDXGISwapChain* sc)
             render::kIconFont, static_cast<int>(render::kIconFontSize),
             16.0f, &cfg, kPlageIcones);
 
+        // Les features titrent aussi leurs sections, donc la police doit
+        // etre lisible depuis le header — pas seulement depuis ce .cpp.
+        render::police_icones() = g_icon_font;
+
         if (g_icon_font == nullptr) {
             log_once("police d icones refusee -- le menu tournera sans icone");
         } else if (defaut == nullptr) {
@@ -627,14 +631,26 @@ void build_ui()
     ImGuiIO& io = ImGui::GetIO();
 
     ImGui::SetNextWindowPos(ImVec2(40.0f, 40.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(920.0f, 620.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(860.0f, 640.0f), ImGuiCond_FirstUseEver);
 
-    const ImGuiWindowFlags fen =
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
+    if (ImGui::Begin("Specter")) {
+        // LE TITRE, et le seul endroit ou une icone est toleree.
+        //
+        // Partout ailleurs, le menu ne dessine rien : il APPELLE. Une icone
+        // dans un titre de section est faite de texte concatené, pas de
+        // rectangles et de SetCursorScreenPos — voir ui_widgets.h, qui explique
+        // pourquoi la version qui separait l'icone et le libelle chevauchait les
+        // deux.
+        { Icone_titre_large logo(ico::vise, 18.0f); }
+        ImGui::SameLine();
+        ImGui::TextColored(texte(), "Specter");
+        ImGui::SameLine();
+        ImGui::TextColored(texte_faible(), "  %s", g_ui_enabled
+                                                     ? "overlay actif"
+                                                     : "overlay en pause");
+        ImGui::Separator();
 
-    if (ImGui::Begin("Specter", nullptr, fen)) {
-        // Feed every feature first, visible page or not.
+        // Feed every feature first, visible tab or not.
         for (int i = 0; i < features::registry_count(); ++i) {
             const features::Feature* f = features::registry()[i];
             if (f->on_frame) {
@@ -642,219 +658,100 @@ void build_ui()
             }
         }
 
-        // ---- les pages : UNE PAR LIBELLE DISTINCT, pas une par feature ----
+        // ---- les onglets : UN PAR LIBELLE DISTINCT, pas un par feature ----
         //
-        // Le overlay ne sait plus ce qu'est une console, ni qu'un onglet
-        // Teleport a existe. Mais la libelle EST l'identifiant ImGui : deux
-        // features qui portent la meme libelle donnent deux entrees de meme ID,
-        // et la seconde devient injoignable -- sans erreur, et sans symptome que
-        // quiconque chercherait.
+        // LE LIBELLE EST L'ID IMGUI. Deux features qui portent le meme libelle
+        // produisent deux onglets avec le meme ID : on selectionne l'un, on
+        // selectionne les deux, et le deuxieme devient inatteignable — sans
+        // erreur, et sans symptome que quiconque irait chercher.
         //
-        // La premiere version memorisait les libelles qu'elle avait OUVERTES.
-        // C'est le mauvais ensemble : BeginTabItem rend false pour toute
-        // libelle non selectionnee, donc une libelle non selectionnee n'etait
-        // jamais enregistree, et la feature SUIVANTE de la meme libelle
-        // rappelait BeginTabItem -- deux entrees, un ID, et ImGui qui le dit :
+        // Donc la cle de regroupement est le LIBELLE, pas la feature.
+        // « Mouvement » porte la stamina et les degats de chute ; Teleport et
+        // Reperes ont chacun le leur. Rien ici ne sait quelle feature vit dans
+        // quel onglet.
         //
-        //     Programmer error: 2 visible items with conflicting ID!
-        //
-        // Ce qu'on memorise est donc l'ensemble des libelles VUES. Un seul
-        // passage par libelle distincte, toujours. La regle a survécu au
-        // changement de coque : c'est elle, pas BeginTabItem, qui faisait foi.
+        // BeginTabItem rend false pour tout onglet non selectionne. On
+        // memorise donc les libelles PASSEES a BeginTabItem, avec l'etat de
+        // cet appel — pas les libelles OUVERTES. Un seul passage par libelle
+        // distincte, toujours ; seul le contenu est dessine si l'onglet est
+        // ouvert.
         //
         // Un tableau fixe plutot qu'un std::vector : ceci tourne a chaque frame
         // et l'image est chargee manuellement, donc moins de choses dynamiques
         // touchees par une frame de rendu, mieux c'est.
-        struct Page {
+        struct OngletVu {
             const char* label;
+            bool open;
         };
-        static Page pages[16];
-        static int choisie = 0;   // JOUEUR par defaut : c'est la page qu'on utilise le plus
-        int npages = 0;
+        OngletVu vus[16];
+        int nvus = 0;
 
-        for (int i = 0; i < features::registry_count(); ++i) {
-            const features::Feature* f = features::registry()[i];
-            if (!f->tab || !f->draw_ui) {
-                continue;
-            }
-            bool deja = false;
-            for (int j = 0; j < npages; ++j) {
-                if (std::strcmp(pages[j].label, f->tab) == 0) {
-                    deja = true;
-                    break;
+        if (ImGui::BeginTabBar("##onglets")) {
+            for (int i = 0; i < features::registry_count(); ++i) {
+                const features::Feature* f = features::registry()[i];
+                if (!f->tab || !f->draw_ui) {
+                    continue;
                 }
-            }
-            if (!deja && npages < 16) {
-                pages[npages].label = f->tab;
-                ++npages;
-            }
-        }
 
-        // « Divers » est une PAGE, pas une feature : elle n'a donc pas sa place
-        // dans le registre, et c'est le seul endroit du overlay ou l'on nomme
-        // encore une page.
-        if (npages < 16) {
-            pages[npages].label = "Divers";
-            ++npages;
-        }
-        if (choisie >= npages) {
-            choisie = npages > 0 ? npages - 1 : 0;
-        }
-
-        const ImVec2 taille = ImGui::GetContentRegionAvail();
-        const float l_nav = 190.0f;
-        bool affiche_mouvement = false;
-
-        // ---------------- colonne de navigation ----------------
-        // VINGT POUITS DE MARGE : le style global a un WindowPadding nul, parce
-        // que la coque dessine son propre bord. Sans ca, les dernieres pages de
-        // la nav touchaient le bas du cadre.
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 14.0f));
-        // ZERO ESPACEMENT D'ITEM : chaque page reserve deja sa hauteur dans
-        // entree_nav. Avec les 9 px du style en plus, quatre pages prenaient
-        // autant de place que huit.
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 0.0f));
-        ImGui::BeginChild("nav", ImVec2(l_nav, taille.y),
-                          ImGuiChildFlags_None,
-                          ImGuiWindowFlags_NoScrollbar |
-                              ImGuiWindowFlags_NoScrollWithMouse);
-        {
-            // Le logo : carre arrondi a l'accent, glyphe du jeu, puis le nom.
-            //
-            // Tout est dessine en absolu et rendu a la main, comme les lignes :
-            // ce qui est dessine ne doit pas laisser le curseur ou il etait,
-            // sinon la colonne derive a la droite — visible des que la fenetre
-            // bouge, invisible tant qu'elle reste en place.
-            {
-                const ImVec2 d = ImGui::GetCursorScreenPos();
-                const ImVec2 o(d.x + 15.0f, d.y + 13.0f);
-                const float c = 30.0f;
-
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                dl->AddRectFilled(o, ImVec2(o.x + c, o.y + c), coul(accent()), 8.0f);
-
-                {
-                    Icone logo(g_icon_font, 17.0f);
-                    ImGui::SetCursorScreenPos(ImVec2(o.x + 7.0f, o.y + 6.0f));
-                    glyphe_dessine(ico::vise, fond());
-                }
-                ImGui::SetCursorScreenPos(ImVec2(o.x + c + 11.0f, o.y + 2.0f));
-                ImGui::TextColored(texte(), "SPECTER");
-                ImGui::SetCursorScreenPos(
-                    ImVec2(o.x + c + 11.0f, o.y + 2.0f + ImGui::GetTextLineHeight()));
-                ImGui::TextColored(texte_faible(), "Aniimoe");
-
-                ImGui::SetCursorScreenPos(d);
-                ImGui::Dummy(ImVec2(l_nav, c + 26.0f));
-            }
-
-            {
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                const ImVec2 s = ImGui::GetCursorScreenPos();
-                dl->AddRectFilled(
-                    ImVec2(s.x, s.y), ImVec2(s.x + l_nav - 30.0f, s.y + 1.0f),
-                    coul(bordure()), 0.5f);
-                ImGui::Dummy(ImVec2(0.0f, 12.0f));
-            }
-
-            // L'ORDRE DES PAGES EST DONNE ICI, et nulle part ailleurs.
-            //
-            // Le registre donne les FONCTIONS, pas l'ordre : Teleport et
-            // Waypoints passent tous deux par teleport::init, et rien dans le
-            // registre ne dit lequel s'affiche en premier. Sans cette liste,
-            // l'ordre venait de l'ordre du registre, et un ajout de feature le
-            // changeait sans qu'on le voie.
-            static const struct {
-                const char* label;
-                unsigned int glyphe;
-            } kOrdre[] = {
-                {"Joueur",    ico::vise},
-                {"Monde",     ico::robot},
-                {"Outils",    ico::terminal},
-                {"Divers",    ico::reglages},
-            };
-            constexpr int kNOrdre = 4;
-
-            // On affiche dans l'ordre ci-dessus, et seulement les pages qui
-            // existent encore : ajouter une feature au registre ne doit pas
-            // necessiter de toucher cette liste pour apparaitre.
-            for (int o = 0; o < kNOrdre; ++o) {
-                bool trouvee = false;
-                for (int i = 0; i < npages; ++i) {
-                    if (std::strcmp(pages[i].label, kOrdre[o].label) != 0) {
-                        continue;
-                    }
-                    trouvee = true;
-
-                    if (o > 0) {
-                        ImGui::Dummy(ImVec2(0.0f, 5.0f));
-                    }
-
-                    const float h = ImGui::GetTextLineHeight() + 7.0f;
-                    if (entree_nav(g_icon_font, pages[i].label,
-                                   kOrdre[o].glyphe, (i == choisie),
-                                   l_nav - 28.0f, h, 14.0f, i)) {
-                        choisie = i;
+                int dejaVu = -1;
+                for (int j = 0; j < nvus; ++j) {
+                    if (std::strcmp(vus[j].label, f->tab) == 0) {
+                        dejaVu = j;
+                        break;
                     }
                 }
-            }
-        }
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        // Sans ce Pop, ImGui dit « Missing PopStyleVar() » a chaque frame et
-        // chaque page herite de la marge de la nav — c'est ce que la capture
-        // montrait : tout le contenu colle au bord.
-        ImGui::PopStyleVar();
 
-        // ---------------- contenu ----------------
-        ImGui::SameLine(0.0f, 1.0f);
-        // 22 a gauche, 18 en haut, 22 a droite, 20 en bas. La marge de droite
-        // et celle du bas etaient les deux qui manquaient : tout le contenu
-        // finissait au bord exact du cadre.
-        // WindowPadding ne prend QUE deux valeurs dans ImGui — il n'y a pas
-        // de marge droite distincte. On pose donc l'ecart du bas et on retirees
-        // la colonne de contenu de la largeur de la marge, ce qui laisse 30 px
-        // a droite.
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 18.0f));
-        ImGui::BeginChild("page", ImVec2(-30.0f, -22.0f), ImGuiChildFlags_None);
-        {
-            entete(pages[choisie].label);
-
-            if (std::strcmp(pages[choisie].label, "Divers") == 0) {
-                {
-                    Panneau p1("ETAT DU CLIENT");
-                    ImGui::TextColored(texte(), "%s", g_ui_enabled ? "overlay actif" : "overlay en pause");
-                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-                    ImGui::TextColored(texte_faible(), "%s", g_snapshot);
-                }
-                {
-                    Panneau p2("RENDU");
-                    ImGui::Text("%.1f fps", io.Framerate);
-                    ImGui::SameLine();
-                    ImGui::TextColored(texte_faible(), "(%.2f ms par image)",
-                                        1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
-                    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-                    if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
-                        g_ui_enabled = false;
-                    }
-                    ImGui::SameLine();
-                    ImGui::TextColored(texte_faible(), "ou DELETE");
-                }
-            } else {
-                for (int i = 0; i < features::registry_count(); ++i) {
-                    const features::Feature* f = features::registry()[i];
-                    if (!f->tab || !f->draw_ui) {
-                        continue;
-                    }
-                    // Meme libelle = meme page, donc jamais deux fois dessus.
-                    if (std::strcmp(f->tab, pages[choisie].label) == 0) {
+                if (dejaVu >= 0) {
+                    // Deja dans cet onglet : dessiner, ne pas le rouvrir.
+                    if (vus[dejaVu].open) {
                         f->draw_ui();
                     }
+                    continue;
+                }
+
+                if (nvus >= 16) {
+                    continue;  // plus de libelles distincts que le tableau n'en tient
+                }
+                const bool open = ImGui::BeginTabItem(f->tab);
+                vus[nvus].label = f->tab;
+                vus[nvus].open = open;
+                ++nvus;
+                if (open) {
+                    f->draw_ui();
+                    ImGui::EndTabItem();
                 }
             }
+
+            // ---- Divers : l'etat du client, et la fermeture ----
+            //
+            // C'est une PAGE, pas une feature : elle n'a pas sa place dans le
+            // registre, et c'est le seul endroit du overlay ou l'on nomme
+            // encore une page.
+            if (ImGui::BeginTabItem("Divers")) {
+                section(ico::info, "ETAT DU CLIENT");
+                ImGui::TextColored(texte(), "%s",
+                                   g_ui_enabled ? "overlay actif"
+                                                : "overlay en pause");
+                ImGui::TextColored(texte_faible(), "%s", g_snapshot);
+
+                section(ico::balance, "RENDU");
+                ImGui::Text("%.1f fps", io.Framerate);
+                ImGui::SameLine();
+                ImGui::TextColored(texte_faible(), "(%.2f ms par image)",
+                                   1000.0f /
+                                       (io.Framerate > 0.1f ? io.Framerate : 1.0f));
+                ImGui::Spacing();
+                ImGui::Checkbox("ImGui demo window", &g_demo);
+                if (ImGui::Button("Fermer le menu", ImVec2(220.0f, 0.0f))) {
+                    g_ui_enabled = false;
+                }
+                ImGui::SameLine();
+                ImGui::TextColored(texte_faible(), "ou DELETE");
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
         }
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
     }
     ImGui::End();
 

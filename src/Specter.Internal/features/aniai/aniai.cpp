@@ -51,23 +51,14 @@ const char* etat_label(int v)
 
 void draw_ui()
 {
-    { render::Panneau p("COMPORTEMENT DES ANIIMOE");
+    render::section(render::ico::robot, "COMPORTEMENT DES ANIIMOE");
+
     bool on = g_enabled;
-    if (render::case_a_cocher("IA des Aniimoe", &on)) {
+    if (ImGui::Checkbox("IA des Aniimoe", &on)) {
         g_enabled = on;
     }
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
-    ImGui::TextColored(render::texte_faible(), "decochee : ils ne font plus rien");
-
-    ImGui::SameLine();
-    ImGui::BeginDisabled();
-    if (g_etat == 0) {
-        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "%s", etat_label(g_etat));
-    } else {
-        ImGui::Text("%s", etat_label(g_etat));
-    }
-    ImGui::EndDisabled();
-
+    // La bulle porte sur la CASE. Elle portait sur le texte d'a cote, donc le
+    // survol de la case n'affichait rien — et c'est la case qu'on vise.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Ecrit Common.Const.AiConst.GLOBAL_OPEN_TICK.\n\n"
@@ -80,7 +71,21 @@ void draw_ui()
             "entre deux passages, et une ecriture conditionnelle ne le "
             "remarkerait pas.");
     }
-    }  // du panneau
+
+    // L'etat lu par le jeu, a cote de la case qui le commande. Desactive : on
+    // ne peut pas cliquer dessus, et le gris le dit sans qu'on ait a le dire.
+    ImGui::BeginDisabled();
+    if (g_etat == 0) {
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "%s",
+                           etat_label(g_etat));
+    } else {
+        ImGui::Text("%s", etat_label(g_etat));
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Ce que le JEU lit en ce moment.\n"
+                          "La case ci-dessus est ce que TU demandes.");
+    }
 }
 
 }  // namespace aniai

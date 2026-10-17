@@ -45,10 +45,12 @@ bool enabled()
 void draw_ui()
 {
     bool on = g_enabled;
-    if (render::case_a_cocher("No fall damage", &on)) {
+    if (ImGui::Checkbox("No fall damage", &on)) {
         set_enabled(on);
     }
-    ImGui::SameLine();
+    // La bulle porte sur la CASE. Avant, elle etaitappelee apres un SameLine :
+    // elle portait donc sur le texte de droite, et une zone cliquable sans
+    // infobulle. Meme information, mauvaise cible.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Patches checkImmuneFallDamage, the game's OWN fall-damage "

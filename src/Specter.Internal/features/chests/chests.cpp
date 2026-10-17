@@ -102,35 +102,28 @@ const char* phase_label(int v)
 
 void draw_ui()
 {
-    { render::Panneau p("OUVERTURE DES COFFRES");
+    render::section(render::ico::boite, "OUVERTURE DES COFFRES");
+
     bool on = g_enabled;
-    if (render::case_a_cocher("Auto-ouverture\n"
-                        "(SEULEMENT les coffres, rien d'autre)",
+    if (ImGui::Checkbox("Auto-ouverture (SEULEMENT les coffres, rien d'autre)",
                         &on)) {
         set_enabled(on);
     }
 
-    // Ce que la case fait, pas ce qu'elle OUVERT. Une case qui dit « coche »
+    // Ce que la case fait, pas ce qu'elle a OUVERT. Une case qui dit « coche »
     // sans dire si la boucle tourne, c'est une case aveugle.
-    ImGui::SameLine();
-    ImGui::BeginDisabled();
-    if (on) {
-        ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
-    } else {
-        ImGui::TextColored(render::texte_faible(), "desactive");
-    }
-    ImGui::EndDisabled();
-
+    //
+    // La bulle porte sur la CASE. Elle portait sur le texte d'a cote, donc le
+    // survol de la case — de la ou on regarde — n'affichait rien.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Boucle permanente, demarree par scripts/chest-open.lua a chaque "
             "nouvel etat Lua.\n\n"
             "ELLE NE TOUCHE QU'AUX COFFRES. Le jeu pose `isChest` aussi sur les "
             "ramassages, les Aniipods et les oeufs -- mesure : 19 cibles "
-            "retenues, 1 seul coffre. Une entite n'est gardee que si sa config "
-            "de jeu dit coffre (Data.chest_data), ou si la marque la plus "
-            "proche a moins de 3 u porte markConfigId 10506. C'est le "
-            "complement exact de l'auto-farm.\n\n"
+            "retenues, 1 seul coffre. Une entite n'est gardee que si la config "
+            "du jeu dit coffre : Data.chest_data[son template].markConfigId "
+            "== 10506. Mesure : 12 coffres acceptes sur 12, 0 desaccord.\n\n"
             "Un coffre n'est compte qu'APRES la disparition de son entite. Un "
             "appel d'interaction qui rend sans erreur ne prouve rien.\n\n"
             "Une seule boucle se deplace a la fois : si l'auto-farm est "
@@ -143,7 +136,7 @@ void draw_ui()
     // Elle passe AVANT le compteur d'echecs de TP : une erreur du pilote, c'est
     // une boucle qui ne demarre pas du tout, ce qui est plus grave qu'un
     // teleport rate. Et elle se voit tout de suite, parce qu'elle est la seule
-    // ligne de ce panneau qui dit « ca ne marche pas » sans ambiguite.
+    // ligne de cette page qui dit « ca ne marche pas » sans ambiguite.
     if (g_erreurs > 0) {
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
                            "ERREUR : le pilote Lua a echoue %d fois", g_erreurs);
@@ -155,7 +148,6 @@ void draw_ui()
                 "Le message est dans le store :\n"
                 "  tools/lua.sh -f scripts/erreurs-coffres.lua");
         }
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
     }
 
     // LES COFFRES QUI ONT COUTE DES PV.
@@ -165,9 +157,8 @@ void draw_ui()
     // a paye. Un coup affiche ici est un coffre que la boucle ne retente pas
     // dans la scene -- pas un coffre qu'elle n'a pas reussi.
     if (g_gagnes > 0) {
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
         ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.35f, 1.0f),
-                          "%d coffre(s) ont coute des PV", g_gagnes);
+                           "%d coffre(s) ont coute des PV", g_gagnes);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
                 "Le coffre a bien ete ouvert, et le joueur a perdu un coeur "
@@ -191,9 +182,8 @@ void draw_ui()
     // le teleport a refuse toute ecriture de position pendant plusieurs heures,
     // et rien ne l'a signale parce que rien ne le comptait.
     if (g_echecs > 0) {
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
         ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
-                          "%d teleportation(s) sans arrivee", g_echecs);
+                           "%d teleportation(s) sans arrivee", g_echecs);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
                 "Un coffre n'a pas ete atteint dans le delai : la boucle passe "
@@ -205,7 +195,15 @@ void draw_ui()
                 "C'est un etat du jeu, pas un bug du filtre a coffres.");
         }
     }
-    }  // du panneau
+
+    // La phase et les compteurs, en bas : ils expliquent le chiffre de la case.
+    ImGui::BeginDisabled();
+    if (on) {
+        ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
+    } else {
+        ImGui::TextColored(render::texte_faible(), "desactive");
+    }
+    ImGui::EndDisabled();
 }
 
 }  // namespace chests

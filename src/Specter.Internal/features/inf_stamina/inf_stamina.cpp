@@ -52,12 +52,11 @@ bool enabled()
 void draw_ui()
 {
     bool inf = g_enabled;
-    if (render::case_a_cocher("Infinite movement stamina\n"
-                              "(sprint / dash / glide / climb)",
-                              &inf)) {
+    if (ImGui::Checkbox("Infinite movement stamina (sprint / dash / glide / climb)",
+                        &inf)) {
         set_enabled(inf);
     }
-    ImGui::SameLine();
+    // La bulle porte sur la CASE, pas sur ce qui suit a cote.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
             "Patches the player's stamina cost function (changeStamina) on "

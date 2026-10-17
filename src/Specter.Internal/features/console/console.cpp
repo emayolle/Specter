@@ -561,13 +561,23 @@ void draw_ui()
     // stays a human action, and it lapses on its own.
     ImGui::Separator();
     bool open = g_cli_armed_at.load(std::memory_order_relaxed) != 0;
-    if (render::case_a_cocher("Autoriser le shell", &open)) {
+    if (ImGui::Checkbox("Autoriser le shell", &open)) {
         if (open) {
             arm_cli();
         } else {
             g_cli_armed_at.store(0, std::memory_order_relaxed);
             log::info("cli: canal ferme");
         }
+    }
+    // IsItemHovered porte sur la case, pas sur le texte d'a cote : c'est la
+    // case qu'on survole, et ImGui sait laquelle.
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Cochee : le canal reste ouvert, et tout script passe par "
+            "tools/lua.sh s'execute sans passer par le bouton Execute.\n\n"
+            "C'est une precondition humaine, et elle se leve d'elle-meme : "
+            "aucune fenetre de tir n'est cablee, donc decocher ferme pour la "
+            "session.");
     }
     ImGui::SameLine();
     if (open) {
