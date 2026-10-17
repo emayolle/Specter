@@ -135,6 +135,28 @@ bool keyboard_sink(void* hwnd, unsigned msg, uintptr_t wparam, intptr_t lparam)
                                           static_cast<LPARAM>(lparam)) != 0;
 }
 
+// La molette. Le gate avale WM_MOUSEWHEEL pour que la camera ne zoome pas, ce
+// qui supprime le seul evenement qui portait le defilement : la molette n'a pas
+// d'etat, donc rien ne peut la rattraper apres coup.
+//
+// On reconstruit un vrai message plutot que d'appeler AddMouseWheelEvent en
+// direct, pour que le backend fasse le travail lui-meme : c'est lui qui
+// convertit WHEEL_DELTA en unites ImGui et qui applique IMGUI_DISABLE_MOUSE_WHEEL.
+// On passe aussi WM_MOUSEHWHEEL, donc les molettes horizontales (et les
+// trackpads) passent aussi.
+//
+// HI_RESOLUTE est indispensable : sans lui, une molette a haute resolution est
+// arrondie au cran, et les petits defilements disparaissent.
+void mouse_sink(int x, int y, int wheel)
+{
+    if (wheel == 0) {
+        return;
+    }
+    const LPARAM lp = MAKELPARAM(static_cast<short>(x), static_cast<short>(y));
+    ImGui_ImplWin32_WndProcHandler(g_hwnd, WM_MOUSEWHEEL,
+                                   MAKEWPARAM(0, (WORD)wheel), lp);
+}
+
 void log_once(const char* what)
 {
     if (!g_err_logged) {
@@ -446,6 +468,7 @@ InitResult init_once(IDXGISwapChain* sc)
     // Once the context exists, route keyboard messages the subclass swallows to
     // ImGui, so the Lua console can receive typed text.
     input::set_keyboard_sink(&keyboard_sink);
+    input::set_mouse_sink(&mouse_sink);
 
     ImGui_ImplDX12_InitInfo info = {};
     info.Device = g_dev;

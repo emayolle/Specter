@@ -69,6 +69,7 @@ namespace {
 
 std::atomic<bool> g_open{false};
 std::atomic<bool> g_ungate{false};  // true only around a keyboard_sink call
+std::atomic<mouse_sink> g_mouse_sink{nullptr};
 std::atomic<keyboard_sink> g_sink{nullptr};
 
 // LE CURSEUR VIRTUEL DU MENU.
@@ -265,6 +266,34 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
             return ::DefWindowProcW(h, msg, w, l);
         }
 
+        // LA ROULETTE : PASSE A IMGUI, AVALEE POUR LE JEU.
+//
+// Elle est un EVENEMENT, pas un ETAT — c'est ce qui la distingue des boutons.
+//
+// Les boutons, on les relit chaque frame : GetAsyncKeyState dit « enfonce » ou
+// « pas enfonce », et on deduit le front. Ca marche parce qu'un bouton reste
+// enfonce.
+//
+// La molette, elle, n'existe que pendant le message. Un cran, et plus rien. Il
+// n'y a aucun etat a relire, donc aucun polling ne peut la rattraper : si on
+// avale WM_MOUSEWHEEL sans rien transmettre, le defilement est perdu DEFINITIVEMENT
+// — et c'est exactement ce qui se passait : la liste des reperes de « World »
+// ne defilait pas.
+//
+// Donc on la transmet au handler Win32 d'ImGui, qui sait en faire un
+// AddMouseWheelEvent. Et on continue de l'avaler pour le jeu : la molette fait
+// zoomer la camera, et un defilement de menu ne doit pas allumer le telescope.
+//
+// HI_RESOLUTE : sans lui, une molette Brucefox ou un trackpad haute resolution
+// est arrondi au cran le plus proche — donc perdu sur les petits deplacements.
+if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
+            const mouse_sink sink = g_mouse_sink.load(std::memory_order_relaxed);
+            if (sink) {
+                sink(GET_X_LPARAM(l), GET_Y_LPARAM(l), static_cast<int>(w));
+            }
+            return 0;
+        }
+
         // LE DELTA BRUT, qu'on consomme et qu'on avale ensuite.
         //
         // On appelle le TRAMPOLINE (real_get_raw_input_data) et pas l'export :
@@ -407,6 +436,11 @@ bool install(void* hwnd)
 void set_keyboard_sink(keyboard_sink fn)
 {
     g_sink.store(fn, std::memory_order_relaxed);
+}
+
+void set_mouse_sink(mouse_sink fn)
+{
+    g_mouse_sink.store(fn, std::memory_order_relaxed);
 }
 
 

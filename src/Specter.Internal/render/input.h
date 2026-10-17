@@ -47,6 +47,14 @@ using keyboard_sink = bool (*)(void* hwnd, unsigned msg, uintptr_t wparam,
 void set_keyboard_sink(keyboard_sink fn);
 
 
+// Callback for WM_MOUSEWHEEL while the menu is open. The message is swallowed so
+// the game does not zoom the camera, but the menu needs it: a wheel notch is an
+// EVENT, there is no state to poll for it, so a swallowed wheel is lost for good.
+using mouse_sink = void (*)(int x, int y, int wheel);
+
+// Install (or clear, with nullptr) the mouse sink.
+void set_mouse_sink(mouse_sink fn);
+
 // THE MENU'S OWN CURSOR POSITION, in window-client pixels.
 //
 // Not the OS cursor: the game locks that one, so it does not move. This is fed
