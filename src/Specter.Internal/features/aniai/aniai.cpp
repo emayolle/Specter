@@ -43,9 +43,9 @@ int* etat()
 const char* etat_label(int v)
 {
     switch (v) {
-    case 1: return "IA activee";
-    case 2: return "IA desactivee";
-    default: return "AiConst introuvable";
+    case 1: return "AI on";
+    case 2: return "AI off";
+    default: return "AiConst not found";
     }
 }
 

@@ -138,7 +138,10 @@ void draw_ui()
       // ligne de plus si la liste est vide. Sans AutoResizeY, la hauteur doit
       // etre fournie — voir ui_widgets.h pour pourquoi elle ne peut pas se
       // mesurer elle-meme.
-      render::Group g("Saved positions", 90.0f + 34.0f * static_cast<float>(ns));
+      // 34 px par position, et NON 20 : la ligne de tableau elle-meme fait
+      // 20 px, mais le bouton fait 19 px de haut plus l'espacement d'item —
+      // et 34 laissait deux lignes vides sous chaque entree sur la capture.
+      render::Group g("Saved positions", 56.0f + 26.0f * static_cast<float>(ns));
     if (features::teleport::count() == 0) {
         ImGui::TextDisabled("none yet - save one above");
     }
@@ -173,16 +176,28 @@ void draw_ui()
             ImGui::PopID();
             continue;
         }
+        // Les libelles de colonnes sont des ID, pas du texte : ils restent en
+        // francais ici parce que personne ne les lit. NE JAMAIS appeler
+        // TableHeadersRow() — sur la capture, on lisait « nom  aller  effacer »
+        // en tete du tableau, alors que les boutons disaient « Go  Delete ».
+        // Le titre d'une colonne n'est pas une etiquette : c'est un identifiant.
         ImGui::TableSetupColumn("nom", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("aller", ImGuiTableColumnFlags_WidthFixed,
-                                90.0f);
-        ImGui::TableSetupColumn("effacer", ImGuiTableColumnFlags_WidthFixed,
-                                100.0f);
-        ImGui::TableHeadersRow();
+        ImGui::TableSetupColumn("go", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("del", ImGuiTableColumnFlags_WidthFixed, 100.0f);
 
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
+        // UNE SEULE LIGNE PAR POSITION. Nom et coordonnees sur la meme ligne.
+        //
+        // En deux lignes, la ligne des coordonnees tombait ENTRE deux lignes de
+        // tableau : chaque coordonnee se lisait a hauteur du bouton de la
+        // position SUIVANTE. C'est ce que montrait la capture — cinq coordonnees
+        // decalees d'un cran par rapport a leur « Teleport ».
+        //
+        // Une ligne de tableau fait UNE ligne de texte. Tout ce qui deborde sort
+        // de la ligne et recouvre la suivante.
         ImGui::TextUnformatted(nm);
+        ImGui::SameLine();
         ImGui::TextDisabled("%s", xyz);
 
         ImGui::TableNextColumn();
@@ -334,8 +349,10 @@ void draw_ui_waypoints()
                     // carte trop courte fait deborder son contenu sur la
                     // suivante, ce qui est laid mais pas fatal — on prefere
                     // ca a une boucle de mesure.
+                    // 26 px par repere : titre + marge d'une ligne de tableau.
+                    // 34 laissait un vide de 8 px sous chaque repere.
                     const float h_zone =
-                        static_cast<float>(lignes) * 34.0f + 40.0f;
+                        static_cast<float>(lignes) * 26.0f + 34.0f;
 
                     render::Group gz(titre, h_zone);
 
@@ -367,7 +384,10 @@ void draw_ui_waypoints()
                         ImGui::PushID(100000 + i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
+                        // UNE LIGNE. Voir la table ##pos : deux lignes font
+                        // deborder les coordonnees sur la ligne du dessous.
                         ImGui::TextUnformatted("Floraison");
+                        ImGui::SameLine();
                         ImGui::TextDisabled("(%.0f, %.0f, %.0f)", fx, fy, fz);
                         ImGui::TableNextColumn();
                         if (ImGui::Button("Teleport", ImVec2(-1.0f, 0.0f))) {
@@ -390,6 +410,7 @@ void draw_ui_waypoints()
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         ImGui::TextUnformatted("%s", nm[0] ? nm : "(unnamed)");
+                        ImGui::SameLine();
                         ImGui::TextDisabled("(%.0f, %.0f, %.0f)", wx, wy, wz);
                         ImGui::TableNextColumn();
                         if (ImGui::Button("Teleport", ImVec2(-1.0f, 0.0f))) {

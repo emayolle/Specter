@@ -79,7 +79,10 @@ void draw_ui()
             "time: the other waits. They would fight over the teleport.");
     }
 
-    ImGui::SameLine();
+    // Un ESPACE entre le libelle et l'etat. Sans, la capture lisait
+    // « Auto-farm off » colle — on ne sait pas si « off » est un mot du libelle
+    // ou l'etat de la case.
+    ImGui::SameLine(0.0f, 12.0f);
     ImGui::BeginDisabled();
     if (on) {
         ImGui::Text("%d", g_ouverts);

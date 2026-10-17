@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdarg>
+#include <algorithm>   // std::max, pour la borne basse du journal
 #include <cstring>
 #include <string>
 
@@ -584,8 +585,24 @@ void draw_ui()
         ImGui::TextDisabled("off");
     }
 
-    ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);
-    ImGui::TextUnformatted(g_log.c_str());
+    // LE JOURNAL, A HAUTEUR FIXE.
+    //
+    // (-1, -1) prenait TOUTE la place restante : sur la capture, c'etait 600 px
+    // de noir sous « Allow shell », le seul « trou beant » du menu. Et ce vide
+    // est un piege : il fait croire que le journal n'a rien affiche, alors que
+    // c'est lui-meme qui est vide au depart.
+    //
+    // 190 px suffisent a lire une poignee de lignes, et on defile au-dela. Le
+    // reste de la page est alors occupe par du CONTENU, pas par une zone qui
+    // attend qu'on la remplisse.
+    const float out_h = std::max(
+        ImGui::GetContentRegionAvail().y - 150.0f, 150.0f);
+    ImGui::BeginChild("##lua_out", ImVec2(-1.0f, out_h), true);
+    if (g_log.empty()) {
+        ImGui::TextDisabled("no output yet");
+    } else {
+        ImGui::TextUnformatted(g_log.c_str());
+    }
     ImGui::EndChild();
 }
 

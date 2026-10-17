@@ -121,7 +121,9 @@ void draw_ui()
     }  // group
 
     // WHAT IT TOUCHES. Three lines on screen; the reasoning is on hover.
-    { render::Group g("Scope", 110.0f);
+    { // Deux lignes de texte + titre : 76 px. 110 laissait 34 px vides —
+    // visible sur la capture comme une bande noire au milieu de la page.
+    render::Group g("Scope", 76.0f);
     ImGui::TextDisabled("You and your pets. NPCs keep their speed.");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
