@@ -37,7 +37,7 @@ namespace {
 // A thread with its own Lua heap is not free. Six is enough to run the heavy
 // things and small enough that a runaway script cannot starve the machine.
 constexpr int kMaxWorkers = 6;
-constexpr int kMaxCode = 64 * 1024;
+constexpr int kMaxCode = 128 * 1024;
 constexpr int kMaxMeta = 16 * 1024;
 constexpr unsigned kShutdownWaitMs = 2000;
 

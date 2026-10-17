@@ -32,7 +32,18 @@ namespace {
 // Meme valeur que lua/pump.cpp : le tampon de la boite et celui du chunk
 // sont le meme objet. tools/embed-lua.sh lit CETTE ligne pour verifier la
 // taille des scripts -- une recopie serait un second endroit a maintenir.
-constexpr int kMaxCode = 64 * 1024;
+//
+// 128 Ko, et non 64. Le bootstrap est passe de 37 Ko (init + autofarm + ani_ai)
+// a 63 Ko des qu'on y a ajoute chest-open : il ne restait que 2 222 o de marge,
+// et le prochain script de quelques kilo-octets faisait echouer le build.
+//
+// Ce qui protege n'est PAS le plafond : c'est la SOMME verifiee a la compilation
+// (tools/embed-lua.sh refuse si la somme des quatre scripts depasse). Un
+// plafond plus grand ne desactive donc rien -- il leve une contrainte de place
+// qui produisait des builds casses, pas la detection de troncature. Et le
+// symptome de la troncature reste tel quel : une erreur de compilation au
+// milieu d'une ligne, dans un fichier du jeu.
+constexpr int kMaxCode = 128 * 1024;
 constexpr int kMaxOut = 48 * 1024;
 
 // POD payloads, stored inline by the mailbox. Kept in lockstep with the caps
@@ -304,13 +315,20 @@ bool claim_request()
     if (tropGrand) {
         // On refuse, et on le DIT. Le refus est publish_cli_result(false, ...)
         // pour que la commande responde au lieu de timeout.
-        const char* msg =
-            "ERREUR: le script depasse kMaxCode (32767 octets).\n"
+        // La taille est formatee depuis kMaxCode et non ecrite en dur : le
+        // message disait « 32767 octets » alors que la constante valait 64 Ki,
+        // puis 128. Un message d'erreur faux est pire qu'un message absent --
+        // on s'en sert pour decider quoi couper.
+        char msg[512];
+        const int n_msg = std::snprintf(
+            msg, sizeof(msg),
+            "ERREUR: le script depasse kMaxCode (%d octets).\n"
             "       Recu tel quel : il serait coupe en plein milieu d'une chaine,\n"
             "       et l'erreur de compilation nommerait un fichier qui n'est pas\n"
-            "       le votre. Coupez-le, ou lancez le en plusieurs morceaux.";
+            "       le votre. Coupez-le, ou lancez le en plusieurs morceaux.",
+            kMaxCode);
         log::error("cli: requete trop grande (%d octets et plus), refusee", n);
-        publish_cli_result(false, msg, static_cast<int>(std::strlen(msg)));
+        publish_cli_result(false, msg, n_msg);
         return false;
     }
     g_cli_len = n;

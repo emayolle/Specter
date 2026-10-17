@@ -12,6 +12,7 @@
 
 #include "features/aniai/aniai.h"
 #include "features/autofarm/autofarm.h"
+#include "features/chests/chests.h"
 #include "features/console/console.h"
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/init/init.h"
@@ -19,6 +20,7 @@
 #include "features/nofall/nofall.h"
 #include "features/teleport/teleport.h"
 #include "features/teleport/teleport_ui.h"
+#include "features/vitesse/vitesse.h"
 
 namespace specter::features {
 namespace {
@@ -53,12 +55,29 @@ const Feature kStamina{
     "inf_stamina", "Joueur", nullptr, &stamina::draw_ui, nullptr,
 };
 
+// Les multiplicateurs de vitesse. Onglet « Joueur » : c'est du deplacement, et
+// c'est la ou l'on va les chercher. nullptr install comme la stamina -- le patch
+// vit dans scripts/vitesse.lua, joue au bootstrap ; il ne reste que la case et
+// les curseurs.
+const Feature kVitesse{
+    "vitesse", "Joueur", nullptr, &vitesse::draw_ui, nullptr,
+};
+
 // The auto-farm toggle. The LOOP lives in scripts/autofarm_loop.lua, which
 // runs on every new lua_State and reads `specter.var.autofarm` -- so nullptr
 // install is right: there is nothing to hook at startup, only a checkbox and
 // the flag it writes.
 const Feature kAutofarm{
     "autofarm", "Monde", nullptr, &autofarm::draw_ui, nullptr,
+};
+
+// L'ouverture des coffres. Meme onglet « Monde » que l'auto-farm, et c'est
+// voulu : ce sont les deux moities du meme travail, posees l'une a cote de
+// l'autre pour qu'on les coche et decoche en connaissance de cause. Meme libelle
+// = meme page (c'est l'ID ImGui qui compte), donc c'est ici qu'on les regroupe,
+// pas deux onglets qui se font concurrence.
+const Feature kChests{
+    "chests", "Monde", nullptr, &chests::draw_ui, nullptr,
 };
 
 // Runs scripts/init.lua once per new lua_State. No tab: it is a bootstrap, not
@@ -91,10 +110,11 @@ const Feature kAniAi{
 // d'abord, parce que ce sont elles qu'on cherche.
 //
 //   Joueur   chute, stamina, teleport
-//   Monde    IA, auto-farm, reperes
+//   Monde    IA, auto-farm, coffres, reperes
 const Feature* const kFeatures[] = {
-    &kInit,   &kConsole, &kNoFall, &kStamina, &kTeleport,
-    &kAniAi,  &kAutofarm, &kWaypoints, &kLuaDump};
+    &kInit,   &kConsole, &kNoFall, &kStamina, &kVitesse,
+    &kTeleport, &kAniAi,  &kAutofarm, &kChests,  &kWaypoints,
+    &kLuaDump};
 }  // namespace
 
 const Feature* const* registry()

@@ -211,7 +211,7 @@ bool resolve_xlua()
 
 // ---- chunk execution (runs on the Lua thread) ------------------------------
 
-constexpr int kMaxCode = 64 * 1024;
+constexpr int kMaxCode = 128 * 1024;
 //
 // 64 Ko, et pas 32. La limite avait ete heritee d'un temps ou un chunk
 // etait « un script court ». Ca n'est plus le cas : le bootstrap —

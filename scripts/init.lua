@@ -193,7 +193,112 @@ do
         return e
     end
 
+    -- QUELLE ENTITE SE DEPLACE VRAIMENT ?
+    --
+    -- Transforme en pet, `pg.me` n'est PAS ton personnage. Mesure, en jeu, sur
+    -- les deux etats d'un meme personnage :
+    --
+    --   TRANSFORME                          NORMAL
+    --     ent.active        false           true
+    --     ent.beControlled  false           true
+    --     ent.visible       false           true
+    --     idx.isInControl   false           true
+    --     idx.controlState  3               2
+    --     idx.isTransparent true            false
+    --     ent.isForceLock   true            false
+    --     ent.perceivedPosition table(1)   table(0)
+    --
+    -- C'est une coquille : passive, transparente, verrouillee, et pilotee par un
+    -- autre acteur. Ecrire sa position ne deplace RIEN -- elle est recalculee par
+    -- le controleur, et l'ecart qu'on observe est `perceivedPosition`, pas la
+    -- position demandee. C'est aussi pourquoi `isForceLock` se réaffirmait, et
+    -- pourquoi le joueur semblait ancre sur un point : il n'etait pas ancre, il
+    -- etait absent.
+    --
+    -- La solution n'est pas de rendre le joueur : c'est de viser l'entite que le
+    -- jeu deplace vraiment. Mesure, meme etat transforme, en bougeant le pet
+    -- visible de 25 u :
+    --
+    --     0.1 s   pet.x = -562.87   joueur.x = -562.87
+    --     ...     (2 s, stable, AUCUN recalage)
+    --
+    -- EN X ET EN Z, le joueur suit le pet exactement. En Y, non : apres un
+    -- deplacement vertical, le pet est a y=286 et le joueur a y=36. Le jeu
+    -- garde le joueur au sol -- ce qui, pour un teleport vers un coffre, est ce
+    -- qu'on veut : on arrive a la hauteur du sol, pas a l'interieur du decor.
+    -- C'est aussi pourquoi il ne faut pas s'inquieter de passer « au travers »
+    -- d'un sol en sautant plus haut que la cible : le Y demande n'est pas
+    -- applique.
+    --
+    -- DONC : joueur si le joueur se bouge, pet de combat sinon.
+    local function entiteQuiSeDeplace()
+        local e = joueur()
+        if not e then return nil end
+
+        -- On ne cherche un pet QUE si le joueur ne se deplace pas lui-meme.
+        -- Dans l'etat normal on rend `pg.me` sans balayer la scene : c'est le
+        -- cas courant, et un balayement par teleport serait du travail repete
+        -- pour rien.
+        local passif = false
+        pcall(function()
+            if e.active == false then passif = true end
+            if e.beControlled == false then passif = true end
+            local i = getmetatable(e) and getmetatable(e).__index
+            if i and i.isTransparent == true then passif = true end
+        end)
+        if not passif then return e, false end
+
+        -- LE PET DE COMBAT, D'ABORD.
+        --
+        -- « Le premier pet visible » n'est pas une regle : mesure, l'entite visee
+        -- a change entre deux appels consecutifs (as9qHUfoobE0vl6G puis
+        -- as9rqUfoobE0vrGe), parce que `pairs()` n'a AUCUN ordre garanti et que
+        -- le jeu peut Basculer le pet affiche. Un teleport qui vise « le premier
+        -- trouve » vise donc parfois la mauvaise entite, sans jamais le dire.
+        --
+        -- `savedCombatPetId` est un identifiant STABLE : c'est celui du pet de
+        -- combat. On le cherche par nom, et seulement ensuite on se rabat sur la
+        -- visibilite.
+        local combat
+        pcall(function()
+            local i = getmetatable(e) and getmetatable(e).__index
+            combat = i and i.savedCombatPetId
+        end)
+        local pet, premierVisible
+        for _, en in pairs(pg.getEntities() or {}) do
+            local mt = getmetatable(en)
+            local i = mt and mt.__index
+            local c = i and (i.className or i.__cname)
+            if c == 'ClientPet' then
+                if combat and tostring(en.id) == tostring(combat) then
+                    pet = en
+                end
+                local v = false
+                pcall(function() v = en.visible end)
+                if v and not premierVisible then premierVisible = en end
+            end
+        end
+        -- Aucun pet trouve : on rend le joueur quand meme. Renvoyer nil ferait
+        -- echouer le teleport sans rien dire, ce qui est le pire des deux -- et
+        -- de toute facon, dans l'etat transforme, un joueur passif ne bouge
+        -- pas, donc c'est deja un echec annonce.
+        return pet or premierVisible or e, (pet or premierVisible) ~= nil
+    end
+
+    -- L'etat de forme, pour l'affichage et les diagnostics. `transforme` vrai
+    -- signifie : le TP vise le pet, pas le joueur.
     specter.tp = specter.tp or {}
+    specter.tp.etat = function()
+        local e, estPet = entiteQuiSeDeplace()
+        if not e then return { transforme = false, classe = '?' } end
+        local mt = getmetatable(e)
+        local i = mt and mt.__index
+        return {
+            transforme = estPet and true or false,
+            classe = (i and (i.className or i.__cname)) or '?',
+            id = tostring(e.id),
+        }
+    end
 
     -- Position du joueur.
     --
@@ -229,7 +334,13 @@ do
     -- quiconque parcourt les champs. C'est le meme probleme que la stamina,
     -- et la meme correction.
     specter.tp.here = function(x, y, z)
-        local e = joueur()
+        -- L'ENTITE QUI SE DEPLACE, pas forcement le joueur.
+        --
+        -- Transforme en pet, `pg.me` est une coquille passive : ecrire sa
+        -- position ne deplace rien, elle est recalculee par le controleur. C'est
+        -- mesuré -- deplacement de 25 u sur le joueur, recalcule a chaque tick ;
+        -- le meme deplacement sur le pet visible tient, et le joueur le suit.
+        local e = entiteQuiSeDeplace()
         if not e or not e.getPosition then return end
 
         local TM = require('Core.Timer.TimerManager')

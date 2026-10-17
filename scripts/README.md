@@ -28,7 +28,7 @@ plupart des scripts ont leurs réglages dans des constantes en tête de fichier)
 | `marks-dump.lua` | positions d'une famille (coffres, cristaux, floraisons, ambre, éco…) |
 | `chests.lua` | les coffres : marques monde + entités vivantes, corrélées |
 | `chest-tp.lua` | coffres **non ouverts** (liste) **+ TP lerp vers le plus proche** — filtre le cache local |
-| `chest-open.lua` | coffres **non ouverts** les plus proches, **enchaînés** : TP lerp + ouverture automatique de `CHAIN_OPENS` coffres d'affilée (3 par défaut), marqués « ouvert » dans le cache dès que l'interaction aboutit |
+| `chest-open.lua` | **boucle d'ouverture des coffres, embarquée dans la DLL** et rejouée à chaque nouvel état Lua. Ne fait rien tant que la case « Auto-ouverture » de l'onglet **Monde** n'est pas cochée. **Coffres uniquement** — voir « Le filtre à coffres » plus bas. |
 | `entities-classes.lua` | **combien de chaque type** (entités vivantes par classe) |
 | `entities-near.lua` | qu'y a-t-il autour de moi (rayon réglable) |
 | `entity-dump.lua` | tous les champs d'une entité (joueur / plus proche / par classe) |
@@ -65,6 +65,34 @@ TOTAL=<n> / TOTAL_MARKS=<n> / TOTAL_LIVE=<n> / TOTAL_<SOURCE>=<n>
 | **cache local « déjà ouverts »** | `pg.me.__specterChestOpened` (champ d'instance, **jamais réinitialisé** s'il existe) : ids des coffres déjà ouverts par nos scripts, posés **dès que l'interaction aboutit** — la liste des « non ouverts » n'attend plus le despawn ni la purge. **Autoritatif** : un id en cache n'y réapparaît plus (l'entité d'un coffre ouvert peut encore traîner un moment avec `chestValid=true`, elle ne fait pas « repasser » l'id en disponible). Reset : `pg.me.__specterChestOpened = nil`. Vérifié en live : 10 coffres ouverts, tous présents dans le registre officiel, tous absents de nos listes. |
 | **ouvrir un coffre** | interaction = chemin de la touche F : unité d'interaction du coffre dans `pg.game.interaction.unitMap[1]` (type 1, `actionPrototypeId` = 59, `globalId` = l'`id` de l'entité), puis `pg.game.interaction:doUnitInteractive(unit)`. Le serveur valide → le coffre s'ouvre (la récompense tombe ; l'entité met un moment à disparaître). Précondition lisible : `unit:canInteractive(pg.me)`. Vérifié : chaîne de 3 coffres ouverts d'affilée sans attendre les despawns ; dernier id dans `pg.me.__specterLastOpen`, progression dans `pg.me.__specterOpenState`. |
 | config interaction | `Data.interact_data[59]` : `type=1`, `interactiveDist=2`, `startAnim=Kick`, `actionTime=1.2`, `actCooldown=5` |
+
+### Le filtre à coffres — `isChest` ne filtre RIEN
+
+Le jeu pose `isChest` sur les vrais coffres **et** sur les ramassages, les
+Aniipods et les œufs. Mesuré, scene 3000, 25 entités `isChest` : 9 coffres,
+16 autres. Les deux signaux qui disent « coffre », tous deux du jeu :
+
+| signal | comment | vrai coffre | « Ramasser » | « Ambre lumin » |
+|---|---|---|---|---|
+| **A — la config** | `Data.chest_data[en.templateId].markConfigId` | `10506` | *champ absent* | `10505` |
+| **B — la marque** | `markConfigId` de la marque la plus proche, à ≤ 3 u | `10506` (0.0 u) | *aucune* | `10505` (0.0 u) |
+
+Deux pièges, tous deux déjà payés :
+
+* **`Data.chest_data` ne contient pas que des coffres.** Les templates
+  `11092`–`11136` y sont aussi, avec `markConfigId` **absent de l'entrée**. Un
+  `return true` sur lecture échouée laissait passer **12 cibles sur 25**.
+  Une lecture qui échoue vaut **NON**.
+* **Le défaut par défaut est « inconnu → on tente ».** C'est l'erreur d'origine
+  de ce fichier, et le nom de l'entité ne l'attrape pas : une tentative
+  d'interaction sur un Aniipod *est* le ramassage. Rater un coffre est un manque
+  que le cycle suivant rattrape ; ouvrir un Aniipod est une faute qu'aucun cycle
+  ne rattrape.
+
+Contrôle en jeu : `tools/lua.sh -f scripts/probe-coffres.lua`. Il affiche, pour
+chaque entité `isChest`, ce que les deux règles voient et leur verdict — puis le
+**compare au nom localisé du jeu**. C'est cette comparaison qui a rattrapé le
+« `return true` » : un filtre peut être cohérent avec lui-même et faux.
 
 ### `markConfigId` connus (scènes 3000 / 3003, valeurs live)
 

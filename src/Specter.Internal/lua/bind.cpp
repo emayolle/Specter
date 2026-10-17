@@ -10,9 +10,11 @@
 
 #include "features/aniai/aniai.h"
 #include "features/autofarm/autofarm.h"
+#include "features/chests/chests.h"
 #include "features/inf_stamina/inf_stamina.h"
 #include "features/nofall/nofall.h"
 #include "features/teleport/teleport.h"
+#include "features/vitesse/vitesse.h"
 #include "platform/log.h"
 
 namespace specter::lua::bind {
@@ -205,6 +207,32 @@ bool install(lua_State* L, int specter_idx)
                          features::autofarm::ouverts())
             .addProperty("autofarm_phase", features::autofarm::phase(),
                          features::autofarm::phase())
+            // L'ouverture des coffres : meme stockage que la case, meme
+            // raison. Et surtout le COMPLEMENT d'`autofarm` — les deux
+            // boucles se lisent l'une l'autre pour savoir laquelle a le
+            // droit de se deplacer.
+            .addProperty("coffres", features::chests::flag(),
+                         features::chests::flag())
+            .addProperty("coffres_ouverts", features::chests::ouverts(),
+                         features::chests::ouverts())
+            .addProperty("coffres_phase", features::chests::phase(),
+                         features::chests::phase())
+            // Les TP qui n'ont pas amene. Un compteur qui reste a zero quand la
+            // case dit « cherche » est un diagnostic ; sans lui, une boucle
+            // incapable de se deplacer est muette.
+            .addProperty("coffres_tp_echecs", features::chests::echecs(),
+                         features::chests::echecs())
+            // Les erreurs du pilote. Le pilote est un pcall, donc sans ce
+            // compteur une erreur y est invisible -- mesure : la case cochee,
+            // la boucle qui ne demarre pas, et le menu qui dit « cherche des
+            // coffres » pendant des heures.
+            .addProperty("coffres_erreurs", features::chests::erreurs(),
+                         features::chests::erreurs())
+            // Les coffres qui ont coute des PV. L'ouverture compte malgre tout :
+            // les deux faits sont vrais, et c'est le second qu'un compteur
+            // d'ouverts ne peut pas dire.
+            .addProperty("coffres_gagnes", features::chests::gagnes(),
+                         features::chests::gagnes())
             // The lerp settings. Read by scripts/init.lua's specter.tp.here on
             // every teleport: the player tunes them in the overlay, so they are
             // C++'s, and passing them as call arguments would mean formatting
@@ -218,6 +246,31 @@ bool install(lua_State* L, int specter_idx)
                          features::teleport::lerp_step_addr())
             .addProperty("tp_speed", features::teleport::lerp_speed_addr(),
                          features::teleport::lerp_speed_addr())
+            // LES MULTIPLICATEURS DE VITESSE.
+            //
+            // Un par ratio, et NON un seul « MULT » global : le patch d'un
+            // vieux projet multipliait les cinq ratios d'un bloc, ce qui
+            // accelere aussi le vol et le dash sans qu'on l'ait demande. Ici
+            // chaque curseur est separe, et le nom du binding EST la cle que le
+            // script cherche.
+            .addProperty("vit_actif", features::vitesse::actif(),
+                         features::vitesse::actif())
+            .addProperty("vit_course", features::vitesse::mult("course"),
+                         features::vitesse::mult("course"))
+            .addProperty("vit_sprint", features::vitesse::mult("sprint"),
+                         features::vitesse::mult("sprint"))
+            .addProperty("vit_dash", features::vitesse::mult("dash"),
+                         features::vitesse::mult("dash"))
+            .addProperty("vit_vol", features::vitesse::mult("vol"),
+                         features::vitesse::mult("vol"))
+            .addProperty("vit_nage", features::vitesse::mult("nage"),
+                         features::vitesse::mult("nage"))
+            .addProperty("vit_nage_rapide", features::vitesse::mult("nage_rapide"),
+                         features::vitesse::mult("nage_rapide"))
+            // Un COUT, pas une vitesse : le curseur descend jusqu'a zero.
+            .addProperty("vit_cout_stamina",
+                         features::vitesse::mult("cout_stamina"),
+                         features::vitesse::mult("cout_stamina"))
         .endNamespace()
         .addFunction("reset", &api_reset)
         // Lua calling C, which is what the P/F/W text protocol used to fake.
