@@ -135,23 +135,6 @@ bool keyboard_sink(void* hwnd, unsigned msg, uintptr_t wparam, intptr_t lparam)
                                           static_cast<LPARAM>(lparam)) != 0;
 }
 
-// Mouse sink: the same handler, for WM_MOUSEMOVE ONLY.
-//
-// The subclass cannot just forward the message to us -- it has to reach the GAME
-// too, because Unity reads it to aim the camera, and swallowing it turned the
-// character on every mouse move. So the subclass forwards to the game AND calls
-// us, and we do the one thing that message does for ImGui: AddMousePosEvent.
-//
-// We build a real WM_MOUSEMOVE lParam rather than inventing a shortcut, so the
-// backend's own parsing does the work: GET_X_LPARAM/GET_Y_LPARAM, which unpack
-// the two 16-bit halves. Packing them wrong is silent -- wrong position, no
-// error -- and the client's screen origin is NOT (0,0) on a multi-monitor setup.
-void mouse_sink(int x, int y)
-{
-    const LPARAM lp = MAKELPARAM(static_cast<short>(x), static_cast<short>(y));
-    ImGui_ImplWin32_WndProcHandler(g_hwnd, WM_MOUSEMOVE, 0, lp);
-}
-
 void log_once(const char* what)
 {
     if (!g_err_logged) {
@@ -463,7 +446,6 @@ InitResult init_once(IDXGISwapChain* sc)
     // Once the context exists, route keyboard messages the subclass swallows to
     // ImGui, so the Lua console can receive typed text.
     input::set_keyboard_sink(&keyboard_sink);
-    input::set_mouse_sink(&mouse_sink);
 
     ImGui_ImplDX12_InitInfo info = {};
     info.Device = g_dev;
@@ -506,6 +488,23 @@ void feed_input()
             io.AddMouseButtonEvent(i, down);
             prev[i] = down;
         }
+    }
+
+    // LA POSITION VIENT DU CURSEUR VIRTUEL, PAS DE L'OS.
+    //
+    // Le jeu garde sa souris verrouillee : le curseur de l'OS ne bouge pas, donc
+    // ImGui, qui recoit sa position par WM_MOUSEMOVE, ne verrait qu'une
+    // position figee. On lui pousse donc celle qu'input::accumuler_delta a
+    // construite a partir
+    // des deltas bruts (voir render/input.cpp).
+    //
+    // AddMousePosEvent, PAS io.MousePos = ... : MousePos est un etat, on ne
+    // peut que le SURCHARGER, et ImGui 1.92 ecarte toute ecriture directe pendant
+    // qu'un frame est ouvert. L'API Evenement est l'unique voie qui fonctionne,
+    // et c'est aussi celle que le backend Win32 utilise.
+    int cx = 0, cy = 0;
+    if (input::curseur_pos(&cx, &cy)) {
+        io.AddMousePosEvent(static_cast<float>(cx), static_cast<float>(cy));
     }
 }
 

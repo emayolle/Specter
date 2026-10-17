@@ -49,6 +49,12 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM, comme le backend Win32
+// L'API d'entree brute est voluntaryment EXCLUE de windows.h par
+// WIN32_LEAN_AND_MEAN. Sans ce header, GetRawInputSize et les structures
+// RAWINPUT/RAWMOUSE n'existent pas — et c'est exactement ce qu'on consomme pour
+// la position du curseur virtuel. Pas une approximation : un header manquant,
+// qui se lit comme un appel non declare.
+#include <winuser.h>
 
 #include <atomic>
 #include <cstdint>
@@ -64,7 +70,39 @@ namespace {
 std::atomic<bool> g_open{false};
 std::atomic<bool> g_ungate{false};  // true only around a keyboard_sink call
 std::atomic<keyboard_sink> g_sink{nullptr};
-std::atomic<mouse_sink> g_mouse_sink{nullptr};
+
+// LE CURSEUR VIRTUEL DU MENU.
+//
+// Une position en pixels ecran, mise a jour par les deltas bruts. Distincte de
+// la position du curseur de l'OS, qui reste celle du jeu : celle-la ne bouge
+// pas tant que le jeu verrouille la souris.
+struct CurseurVirtuel {
+    int x = 0;
+    int y = 0;
+    // Bornes de la zone ou le curseur peut aller : la fenetre du jeu, donc le
+    // menu est entierement atteignable. Un delta qui deborde est PERDU, pas
+    // mis de cote -- c'est ce que font les jeux, et c'est le comportement qu'on
+    // attend d'un curseur.
+    int min_x = 0, min_y = 0, max_x = 1, max_y = 1;
+};
+CurseurVirtuel g_curseur;
+
+void accumuler_delta(int dx, int dy)
+{
+    g_curseur.x += dx;
+    g_curseur.y += dy;
+
+    // Le verrouillage n'est PAS un simple clamp : un curseur de jeu se
+    // recentre quand il atteint un bord, sinon il devient impossible d'atteindre
+    // le coin oppose apres avoir bute dans l'autre sens. Un clamp simple
+    // enfermerait le curseur des qu'on le pousse vers une extremite.
+    if (g_curseur.x < g_curseur.min_x || g_curseur.x > g_curseur.max_x) {
+        g_curseur.x = (g_curseur.min_x + g_curseur.max_x) / 2;
+    }
+    if (g_curseur.y < g_curseur.min_y || g_curseur.y > g_curseur.max_y) {
+        g_curseur.y = (g_curseur.min_y + g_curseur.max_y) / 2;
+    }
+}
 bool g_armed = false;
 bool g_gave_up = false;
 
@@ -168,37 +206,52 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
             return 0;
         }
 
-        // LA POSITION PASSE, LES BOUTONS NON.
+        // LE CURSEUR VIRTUEL. C'est ici que se joue « la pastille ne bouge pas ».
         //
-        // WM_MOUSEMOVE etait avale avec les boutons, et c'etait faux.
+        // Le jeu a la souris VERROUILLEE : il appelle ClipCursor et SetCursor, qu'on
+        // ne touche plus, donc le curseur de l'OS reste captive et ne bouge pas.
+        // En meme temps il pilote sa camera par ENTREE BRUTE (WM_INPUT), qu'on avale
+        // pour qu'il ne reagisse pas a une case cochee.
         //
-        // io.MousePos vient de WM_MOUSEMOVE : c'est la SEULE source de position
-        // de la souris pour le backend Win32 (imgui_impl_win32.cpp, case
-        // WM_MOUSEMOVE -> io.AddMousePosEvent). En l'avalant, on ne bloquait
-        // pas la souris : on jetait l'information dont le menu a besoin. La
-        // pastille ne suivait donc rien : elle restait calee. C'est exactement le
-        // symptome « la boule ne bouge pas », et la cause n'etait pas la
-        // souris bloquee.
+        // Resultat : plus de curseur, plus de camera, et un menu inutilisable. C'est
+        // la consequence inevitable de « ne touche pas au curseur du jeu » : on ne
+        // peut pas liberer SA souris sans manipuler la nôtre.
         //
-        // Et on ne peut PAS simplement laisser passer le message vers le jeu :
-        // Unity lit WM_MOUSEMOVE pour orienter la camera. Un menu ouvert ferait
-        // donc tourner le personnage des qu'on bouge la souris. C'est exactement
-        // ce que le gate empeche.
+        // On fait donc ce que font les jeux eux-memes : un curseur VIRTUEL alimente
+        // par les deltas bruts. L'OS ne bouge pas, on ne demande rien au jeu, et le
+        // menu a un curseur qui repond.
         //
-        // On fait les deux : le jeu recoit le message (camera intacte), et on
-        // donne la position a ImGui en meme temps. Le jeu n'a pas de bouton, il
-        // n'a que la position -- on ne lui donne que ce qui ne peut pas faire de
-        // mal.
+        // WM_MOUSEMOVE ne sert a rien ici : il rapporte la position du curseur de
+        // l'OS -- celle du jeu, donc verrouillee. C'est WM_INPUT qui porte le
+        // DEPLACEMENT, et c'est exactement le message qu'on avale deja.
         if (msg == WM_MOUSEMOVE) {
-            const mouse_sink sink = g_mouse_sink.load(std::memory_order_relaxed);
-            if (sink) {
-                sink(static_cast<short>(GET_X_LPARAM(l)),
-                     static_cast<short>(GET_Y_LPARAM(l)));
-            }
+            // Passe au jeu : Unity en a besoin meme verrouille, et l'avaler
+            // l'empecherait de recalculer son etat interne.
             if (g_orig_wndproc) {
                 return ::CallWindowProcW(g_orig_wndproc, h, msg, w, l);
             }
             return ::DefWindowProcW(h, msg, w, l);
+        }
+
+        // LE DELTA BRUT, qu'on consomme et qu'on avale ensuite.
+        //
+        // On appelle le TRAMPOLINE (real_get_raw_input_data) et pas l'export :
+        // appeler l'export nous reramenerait dans notre propre hook, qui renvoie
+        // un echec -- et le delta disparaitrait en silence.
+        //
+        // PAS GetRawInputSize : ce SDK de headers ne le declare pas, alors que
+        // dwSize -- la taille que GetRawInputData ecrirait -- est deja dans le
+        // header RAWINPUT. Une seule lecture suffit, et elle est deja faite.
+        if (msg == WM_INPUT) {
+            RAWINPUT brut = {};
+            UINT lu = sizeof(brut);
+            if (real_get_raw_input_data(reinterpret_cast<HRAWINPUT>(l), RID_INPUT,
+                                        &brut, &lu, sizeof(RAWINPUTHEADER)) !=
+                    static_cast<UINT>(-1) &&
+                brut.header.dwType == RIM_TYPEMOUSE) {
+                accumuler_delta(brut.data.mouse.lLastX, brut.data.mouse.lLastY);
+            }
+            return 0;
         }
 
         switch (msg) {
@@ -323,10 +376,6 @@ void set_keyboard_sink(keyboard_sink fn)
     g_sink.store(fn, std::memory_order_relaxed);
 }
 
-void set_mouse_sink(mouse_sink fn)
-{
-    g_mouse_sink.store(fn, std::memory_order_relaxed);
-}
 
 void set_menu_open(bool open)
 {
@@ -346,6 +395,34 @@ void set_menu_open(bool open)
     // Ce qui reste, c'est le blocage d'ENTREE : sans lui, un clic dans le menu
     // traverserait vers le jeu et le personnage tournerait.
     g_open.store(open, std::memory_order_relaxed);
+
+    // A L'OUVERTURE, LE CURSEUR VIRTUEL AU CENTRE DE LA FENETRE.
+    //
+    // Pas a zero : (0,0) est le coin haut-gauche, donc le menu s'ouvrirait avec
+    // le curseur colle en haut a gauche, au-dessus du premier onglet. Et pas
+    // « la ou etait le curseur de l'OS » : celle-la est verrouillee au centre par
+    // le jeu, donc on commencerait exactement la ou on a fini la derniere fois.
+    if (open && g_wnd) {
+        RECT r = {};
+        if (::GetClientRect(g_wnd, &r)) {
+            g_curseur.min_x = 0;
+            g_curseur.min_y = 0;
+            g_curseur.max_x = r.right - 1;
+            g_curseur.max_y = r.bottom - 1;
+            g_curseur.x = (r.right - 1) / 2;
+            g_curseur.y = (r.bottom - 1) / 2;
+        }
+    }
+}
+
+bool curseur_pos(int* x, int* y)
+{
+    if (!g_wnd) {
+        return false;
+    }
+    if (x) *x = g_curseur.x;
+    if (y) *y = g_curseur.y;
+    return true;
 }
 
 bool armed()
