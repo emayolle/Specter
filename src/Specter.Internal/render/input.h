@@ -46,6 +46,17 @@ using keyboard_sink = bool (*)(void* hwnd, unsigned msg, uintptr_t wparam,
 // context exists.
 void set_keyboard_sink(keyboard_sink fn);
 
+// Callback for WM_MOUSEMOVE while the menu is open, with the position in
+// window-client coordinates. The message ALSO reaches the game -- Unity reads
+// it to aim the camera, and swallowing it turned the character on every mouse
+// move -- so this is what feeds the position to ImGui instead.
+//
+// Plain integers, like the keyboard sink, to keep Windows.h out of this header.
+using mouse_sink = void (*)(int x, int y);
+
+// Install (or clear, with nullptr) the mouse sink.
+void set_mouse_sink(mouse_sink fn);
+
 // Resolve user32 and detour the four INPUT exports. Call ONCE, when the menu
 // pipeline is initialised. Returns true when the gate is armed (engine available
 // + >=1 hook).

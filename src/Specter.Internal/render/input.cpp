@@ -48,6 +48,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM, comme le backend Win32
 
 #include <atomic>
 #include <cstdint>
@@ -63,6 +64,7 @@ namespace {
 std::atomic<bool> g_open{false};
 std::atomic<bool> g_ungate{false};  // true only around a keyboard_sink call
 std::atomic<keyboard_sink> g_sink{nullptr};
+std::atomic<mouse_sink> g_mouse_sink{nullptr};
 bool g_armed = false;
 bool g_gave_up = false;
 
@@ -166,8 +168,40 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
             return 0;
         }
 
+        // LA POSITION PASSE, LES BOUTONS NON.
+        //
+        // WM_MOUSEMOVE etait avale avec les boutons, et c'etait faux.
+        //
+        // io.MousePos vient de WM_MOUSEMOVE : c'est la SEULE source de position
+        // de la souris pour le backend Win32 (imgui_impl_win32.cpp, case
+        // WM_MOUSEMOVE -> io.AddMousePosEvent). En l'avalant, on ne bloquait
+        // pas la souris : on jetait l'information dont le menu a besoin. La
+        // pastille ne suivait donc rien : elle restait calee. C'est exactement le
+        // symptome « la boule ne bouge pas », et la cause n'etait pas la
+        // souris bloquee.
+        //
+        // Et on ne peut PAS simplement laisser passer le message vers le jeu :
+        // Unity lit WM_MOUSEMOVE pour orienter la camera. Un menu ouvert ferait
+        // donc tourner le personnage des qu'on bouge la souris. C'est exactement
+        // ce que le gate empeche.
+        //
+        // On fait les deux : le jeu recoit le message (camera intacte), et on
+        // donne la position a ImGui en meme temps. Le jeu n'a pas de bouton, il
+        // n'a que la position -- on ne lui donne que ce qui ne peut pas faire de
+        // mal.
+        if (msg == WM_MOUSEMOVE) {
+            const mouse_sink sink = g_mouse_sink.load(std::memory_order_relaxed);
+            if (sink) {
+                sink(static_cast<short>(GET_X_LPARAM(l)),
+                     static_cast<short>(GET_Y_LPARAM(l)));
+            }
+            if (g_orig_wndproc) {
+                return ::CallWindowProcW(g_orig_wndproc, h, msg, w, l);
+            }
+            return ::DefWindowProcW(h, msg, w, l);
+        }
+
         switch (msg) {
-            case WM_MOUSEMOVE:
             case WM_LBUTTONDOWN:
             case WM_LBUTTONUP:
             case WM_LBUTTONDBLCLK:
@@ -183,7 +217,7 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL:
             case WM_INPUT:
-                return 0;  // the game sees no input while the menu is open
+                return 0;  // the game sees no BUTTON while the menu is open
             default:
                 break;
         }
@@ -287,6 +321,11 @@ bool install(void* hwnd)
 void set_keyboard_sink(keyboard_sink fn)
 {
     g_sink.store(fn, std::memory_order_relaxed);
+}
+
+void set_mouse_sink(mouse_sink fn)
+{
+    g_mouse_sink.store(fn, std::memory_order_relaxed);
 }
 
 void set_menu_open(bool open)
