@@ -10527,6 +10527,23 @@ static ImGuiWindow* FindBestWheelingWindow(const ImVec2& wheel)
     return (g.WheelingAxisAvg.x > g.WheelingAxisAvg.y) ? windows[0] : windows[1];
 }
 
+// DIAGNOSTIC TEMPORAIRE — un cran de molette perdu sur deux.
+static int g_specter_diag = 80;
+static void SpecterDiag(const char* a, const char* b)
+{
+    if (g_specter_diag-- <= 0)
+        return;
+    FILE* f = fopen("Z:/tmp/specter-imgui-diag.txt", "a");
+    if (f) { fprintf(f, "%s %s\n", a, b); fclose(f); }
+}
+static void SpecterDiagNum(const char* a, double v)
+{
+    if (g_specter_diag-- <= 0)
+        return;
+    FILE* f = fopen("Z:/tmp/specter-imgui-diag.txt", "a");
+    if (f) { fprintf(f, "%s %.2f\n", a, v); fclose(f); }
+}
+
 // Called by NewFrame()
 void ImGui::UpdateMouseWheel()
 {
@@ -10550,9 +10567,43 @@ void ImGui::UpdateMouseWheel()
     ImVec2 wheel;
     wheel.x = TestKeyOwner(ImGuiKey_MouseWheelX, owner_id) ? g.IO.MouseWheelH : 0.0f;
     wheel.y = TestKeyOwner(ImGuiKey_MouseWheelY, owner_id) ? g.IO.MouseWheel : 0.0f;
+    SpecterDiagNum("frame io.MouseWheel:", (double)g.IO.MouseWheel);
+    SpecterDiagNum("frame apres TestKeyOwner, wheel.y:", (double)wheel.y);
     //IMGUI_DEBUG_LOG("MouseWheel X:%.3f Y:%.3f\n", wheel_x, wheel_y);
     if (g.WheelingWindow != NULL)
     {
+        SetKeyOwner(ImGuiKey_MouseWheelX, owner_id);
+        SetKeyOwner(ImGuiKey_MouseWheelY, owner_id);
+    }
+    else if (wheel.x != 0.0f || wheel.y != 0.0f)
+    {
+        // LA MOLETTE A UN PROPRIETAIRE, ET LE PREMIER CRAN NE LE POSE PAS.
+        //
+        // SetKeyOwner() ci-dessus est sous « if (WheelingWindow != NULL) » : au
+        // tout premier cran, WheelingWindow est encore NULL (il ne sera pose que
+        // plus bas, par LockWheelingWindow). Donc le proprietaire n'est JAMAIS
+        // pose a la premiere molette.
+        //
+        // Et TestKeyOwner, trois lignes plus haut, fait :
+        //
+        //     if (owner_data->OwnerCurr != owner_id)
+        //         if (owner_data->OwnerCurr != NoOwner)
+        //             return false;      // <- rejete
+        //
+        // donc au cran suivant, si le proprietaire a ete pose entre-temps par un
+        // autre chemin, l'evenement est MIS A ZERO. Un cran sur deux disparait,
+        // toujours le premier apres un changement de direction — parce que c'est
+        // la seule fois ou la propriete est reenclenchee.
+        //
+        // MESURE : la suite des crans recus est COMPLETE et sans trou
+        // (-1, -1, +1, +1, -1, -1, ...). La perte n'est donc pas avant ImGui,
+        // elle est ici. Ce n'est pas le verrou, et ce n'est pas notre lecture de
+        // usButtonData : c'est ce test.
+        //
+        // On pose le proprietaire des la premiere molette des qu'elle a une
+        // fenetre cible. Sans cela, tout evenement suivant qui n'a pas le meme
+        // proprietaire est ecarte — ce qui est le cas systematiquement quand on
+        // change de direction, donc de fenetre active.
         SetKeyOwner(ImGuiKey_MouseWheelX, owner_id);
         SetKeyOwner(ImGuiKey_MouseWheelY, owner_id);
     }
@@ -10617,6 +10668,9 @@ void ImGui::UpdateMouseWheel()
                 LockWheelingWindow(window, wheel.y);
                 float max_step = window->InnerRect.GetHeight() * 0.67f;
                 float scroll_step = ImTrunc(ImMin(5 * window->FontRefSize, max_step));
+                SpecterDiagNum("defilement applique, Scroll actuel:", (double)window->Scroll.y);
+                SpecterDiagNum("defilement applique, ScrollMax.y:", (double)window->ScrollMax.y);
+                SpecterDiagNum("defilement applique, ScrollTarget pose a:", (double)(window->Scroll.y - wheel.y * scroll_step));
                 SetScrollY(window, window->Scroll.y - wheel.y * scroll_step);
                 g.WheelingWindowScrolledFrame = g.FrameCount;
             }
@@ -10716,9 +10770,15 @@ void ImGui::UpdateInputEvents(bool trickle_fast_inputs)
         {
             // Trickling Rule: Stop processing queued events if we got multiple action on the event
             if (trickle_fast_inputs && (mouse_moved || mouse_button_changed != 0))
+            {
+                SpecterDiagNum("queue cran recu mais REFILEE (souris bougee, bouton clique)",
+                              (double)e->MouseWheel.WheelY);
                 break;
+            }
             io.MouseWheelH += e->MouseWheel.WheelX;
             io.MouseWheel += e->MouseWheel.WheelY;
+            SpecterDiagNum("queue cran accepte, io.MouseWheel vaut maintenant",
+                           (double)io.MouseWheel);
             io.MouseSource = e->MouseWheel.MouseSource;
             mouse_wheeled = true;
         }
