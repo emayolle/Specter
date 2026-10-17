@@ -89,16 +89,33 @@ public:
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-        // La hauteur par defaut : la place disponible. C'est le meme calcul que
-    // celui de la carte d'avant, mais pris UNE FOIS au lieu d'etre recalcule a
-    // chaque ligne — et surtout, une BeginChild qui prend la taille de son
-    // conteneur ne se mesure pas elle-meme, donc elle ne peut pas boucler.
+        // LA HAUTEUR EST DONNEE PAR L'APPELANT. JAMAIS MESUREE.
     //
-    // On ne deduit PAS la hauteur du contenu : il n'est pas encore rendu. On
-    // prend ce que la page offre. Une carte trop haute laisse de l'espace vide
-    // en bas, c'est cosmetique ; une carte qui se mesure elle-meme plante.
-    const float h = hauteur > 0.0f ? hauteur : ImGui::GetContentRegionAvail().y;
-        ImGui::BeginChild(titre, ImVec2(0.0f, h), ImGuiChildFlags_Borders);
+    // Le defaut anterior — GetContentRegionAvail().y — etait FAUX, et c'est lui
+    // qui gelait l'application a l'injection, meme sans ouvrir le menu.
+    //
+    // Il y a deux manieres de se tromper, et la premiere ne se voit pas :
+    //
+    //   1. AutoResizeY (retire) : la carte se mesure ELLE-MEME. Embole dans un
+    //      BeginChild qui defile, la mesure se mord la queue — boucle, gel.
+    //
+    //   2. La place DISPONIBLE : la carte est plus petite que son contenu. Un
+    //      SliderFloat qui deborde fait alors defiler l'interieur de l'enfant,
+    //      dans un parent qui defile deja. Deux niveaux de defilement emboites,
+    //      et ImGui recalcule la visibilite a chaque item.
+    //
+    // Le second est plus sournois parce qu'il ne demande aucun imbrication :
+    // il suffisait d'une carte avec 7 curseurs dans la page par defaut. Et il
+    // gele, pas ne plante — parce que la boucle de mesure ne rend jamais la
+    // main, au lieu de sortir en erreur.
+    //
+    // Donc : la hauteur vient de l'appelant, qui COMPTE ses lignes. Compter
+    // d'abord, construire ensuite — l'inverse d'AutoResizeY, donc pas de boucle
+    // possible. Et le defaut n'est PAS la place disponible : c'est AsIs, qui
+    // laisse la carte se contenir elle-meme.
+    const float h = hauteur;
+    ImGui::BeginChild(titre, ImVec2(0.0f, h),
+                      ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
         if (titre_ && *titre_) {
             // TextDisabled, pas SeparatorText : le separateur avec son trait
             // etait demande a disparaitre. Le titre en gris fait le groupement

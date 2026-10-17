@@ -89,9 +89,16 @@ float* mult(const char* nom)
 
 void draw_ui()
 {
-    { render::Group g("Movement");
-
     bool on = g_actif;
+
+    // LA HAUTEUR EST COMPTEE, PAS MESUREE.
+    //
+    // Une carte avec une case + un curseur par ratio : le nombre de curseurs est
+    // connu (kN), donc la hauteur se calcule. C'est l'inverse d'AutoResizeY, et
+    // c'est pourquoi ca ne peut pas boucler -- voir render/ui_widgets.h.
+    const float h_mvt = 58.0f + (on ? static_cast<float>(kN) * 30.0f : 26.0f);
+    { render::Group g("Movement", h_mvt);
+
     if (ImGui::Checkbox("Speed multipliers", &on)) {
         g_actif = on;
     }
@@ -114,7 +121,7 @@ void draw_ui()
     }  // group
 
     // WHAT IT TOUCHES. Three lines on screen; the reasoning is on hover.
-    { render::Group g("Scope");
+    { render::Group g("Scope", 110.0f);
     ImGui::TextDisabled("You and your pets. NPCs keep their speed.");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
