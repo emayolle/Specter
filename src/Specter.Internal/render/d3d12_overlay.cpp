@@ -905,9 +905,33 @@ void on_present(IDXGISwapChain* sc)
     }
 
     try {
-        feed_input();
         ImGui_ImplDX12_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        // feed_input() DOIT etre ICI, entre le NewFrame du backend et celui
+        // d'ImGui -- et c'est l'ORDRE qui compte, pas la place dans le bloc.
+        //
+        // ImGui_ImplWin32_NewFrame() fait ceci, pour son repli :
+        //
+        //     if (!io.WantSetMousePos && bd->MouseTrackedArea == 0)
+        //         io.AddMousePosEvent(pos.x, pos.y);   // GetCursorPos
+        //
+        // MouseTrackedArea vaut 0 parce que le backend ne voit JAMAIS
+        // WM_MOUSEMOVE : c'est NOTRE sous-classe qui la recoit, et on ne le
+        // transmet pas. Le backend croit donc la souris hors de la fenetre et
+        // applique son repli — la position du curseur de l'OS.
+        //
+        // Or cette position est celle du JEU, donc VERROUILLEE au centre.
+        //
+        //feed_input etait appele AVANT : le backend ecrivait sa position apres
+        // la notre, et la derniere ecriture gagne. Le curseur virtuel se
+        // deplacait bien (mesure : 121 deltas, position 941,636 puis 493,594),
+        // et la pastille restait collee au centre -- exactement ce que donnait
+        // le symptome. La chaine fonctionnait; on etait ecrase juste apres.
+        //
+        // Apres, notre evenement est le dernier de la file, donc c'est lui qui
+        // est lu. Les evenements ImGui sont traites dans l'ordre : dernier
+        // ecrit, dernier lu.
+        feed_input();
         // The Win32 backend sizes the display from the window's client area;
         // pin it to the swapchain so the UI always maps 1:1 to what we draw.
         ImGui::GetIO().DisplaySize = ImVec2(static_cast<float>(g_width),
