@@ -160,8 +160,14 @@ void mouse_sink(int x, int y, int wheel)
     // AddMouseWheelEvent et non le handler Win32 : ce handler s'attend a un
     // WM_MOUSEWHEEL qu'on ne recoit jamais (fenetre fantome de 1x1 qui garde le
     // focus — voir input.cpp), et il convertirait un delta deja converti.
-    ImGui::GetIO().AddMouseWheelEvent(
-        0.0f, static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA));
+    // DIAGNOSTIC : la valeur recue, pour verifier le pas reel. Un cran doit
+    // valoir 1.0 ici ; au-dela, ImGui defile de plusieurs pages d'un coup.
+    const float pas = static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA);
+    if (pas < -20.0f || pas > 20.0f) {
+        static int n = 0;
+        if (++n <= 5) log::info("overlay: molette pas=%.1f (brut %d)", pas, wheel);
+    }
+    ImGui::GetIO().AddMouseWheelEvent(0.0f, pas);
 }
 
 void log_once(const char* what)
