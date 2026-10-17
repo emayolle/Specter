@@ -55,20 +55,50 @@ namespace render {
 
 // UNE CARTE : un titre, un cadre, les controles dedans.
 //
-// BeginChild avec ImGuiChildFlags_AutoResizeY, donc la carte se mesure sur son
-// contenu. C'est du stock, et c'est important : la version d'avant mesurait la
-// hauteur a la main avec GetContentRegionAvail, qui RETRECIT a chaque ligne
-// ajoutee — la hauteur du cadre dependait donc de l'ordre de dessin, et le
-// cadre etait trop court des que son contenu grandissait.
+// PAS DE AutoResizeY. IMBRIQUE, C'EST UN CRASH — et ImGui le dit lui-meme.
+//
+// La premiere version porta AutoResizeY, pour que la carte se mesure sur son
+// contenu. C'etait l'intention, et l'onglet « World » plantait a l'ouverture.
+//
+// La cause est dans imgui.cpp, sur le chemin AutoResizeY :
+//
+//     [EXPERIMENTAL] Breaks on nested Begin/End pairs.
+//
+// Un BeginChild en AutoResizeY doit mesurer son contenu ET borner son parent
+// dans la MEME frame. Embole dans un BeginChild scrollable — c'est exactement
+// le cas « World », dont la liste des reperes est un BeginChild qui defile, et
+// qui contient UNE carte par zone — la mesure se mord la queue : chaque
+// mesure du parent change la place disponible pour l'enfant, qui change sa
+// propre taille, qui change celle du parent. La boucle ne sort pas.
+//
+// Ce n'est donc PAS une height de 0, ni un dereferencement nul : c'est une
+// boucle de mesure, et elle est fatale dans la frame ou elle se serre.
+//
+// On garde le cadre, on retire le flag. Une carte a donc une taille fixe —
+// celle de son contenu a la premiere frame. C'est le compromis : ImGui ne sait
+// pas faire les deux, et « savoir les deux » vaut mieux qu'un onglet qui
+// plante.
 class Group {
 public:
-    explicit Group(const char* titre) : titre_(titre)
+    // `hauteur` a 0 = toute la place disponible de la page. C'est le defaut,
+    // et c'est ce qu'il faut pour une carte de controles : elle a un nombre de
+    // lignes connu, donc une hauteur qui colle au contenu est un detail, et le
+    // prix a payer est un espace vide en bas de la carte.
+    explicit Group(const char* titre, float hauteur = 0.0f) : titre_(titre)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-        ImGui::BeginChild(titre, ImVec2(0.0f, 0.0f),
-                          ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+        // La hauteur par defaut : la place disponible. C'est le meme calcul que
+    // celui de la carte d'avant, mais pris UNE FOIS au lieu d'etre recalcule a
+    // chaque ligne — et surtout, une BeginChild qui prend la taille de son
+    // conteneur ne se mesure pas elle-meme, donc elle ne peut pas boucler.
+    //
+    // On ne deduit PAS la hauteur du contenu : il n'est pas encore rendu. On
+    // prend ce que la page offre. Une carte trop haute laisse de l'espace vide
+    // en bas, c'est cosmetique ; une carte qui se mesure elle-meme plante.
+    const float h = hauteur > 0.0f ? hauteur : ImGui::GetContentRegionAvail().y;
+        ImGui::BeginChild(titre, ImVec2(0.0f, h), ImGuiChildFlags_Borders);
         if (titre_ && *titre_) {
             // TextDisabled, pas SeparatorText : le separateur avec son trait
             // etait demande a disparaitre. Le titre en gris fait le groupement

@@ -73,7 +73,7 @@ void draw_ui()
     // fond. SeparatorText fait la meme separation en UN item, sans la gestion
     // de la hauteur — et une hauteur mal calculee, c'est le contenu qui sort de
     // l'ecran, ce qui s'est produit.
-    { render::Group g("Position");
+    { render::Group g("Position", 76.0f);
     float cx = 0.0f, cy = 0.0f, cz = 0.0f;
     int csp = 0;
     if (features::teleport::have_position()) {
@@ -86,7 +86,7 @@ void draw_ui()
         ImGui::TextDisabled("unknown - get in-game");
     }
 
-    }  { render::Group g("Save here");
+    }  { render::Group g("Save here", 54.0f);
     ImGui::SetNextItemWidth(-1.0f - 200.0f);
     ImGui::InputText("##nom", g_tp_name, sizeof(g_tp_name));
     ImGui::SameLine();
@@ -99,7 +99,7 @@ void draw_ui()
         ImGui::SetTooltip("Saves the current position under this name.");
     }
 
-    }  { render::Group g("Teleport");
+    }  { render::Group g("Teleport", 150.0f);
     ImGui::TextDisabled("walks to the target in small steps");
     float stepv = features::teleport::lerp_step();
     if (render::slider_row("Step size", &stepv, 0.25f, 20.0f, "%.2f u", 110.0f)) {
@@ -133,7 +133,12 @@ void draw_ui()
     ImGui::TextDisabled("~%.0f u/s   steps x min(speed, %.0f fps)",
                        features::teleport::lerp_step() * eff_speed, cap);
 
-    }  { render::Group g("Saved positions");
+    }  { const int ns = features::teleport::count();
+      // 3 lignes d'entete, puis une par position (nom + coordonnees), et une
+      // ligne de plus si la liste est vide. Sans AutoResizeY, la hauteur doit
+      // etre fournie — voir ui_widgets.h pour pourquoi elle ne peut pas se
+      // mesurer elle-meme.
+      render::Group g("Saved positions", 90.0f + 34.0f * static_cast<float>(ns));
     if (features::teleport::count() == 0) {
         ImGui::TextDisabled("none yet - save one above");
     }
@@ -284,11 +289,43 @@ void draw_ui_waypoints()
                     char titre[32];
                     std::snprintf(titre, sizeof(titre), "Zone %d", zone);
 
-                    // UNE CARTE PAR ZONE. Group mesure sa hauteur sur son
-                    // contenu (AutoResizeY), donc il ne peut pas devenir trop
-                    // court -- contrairement a la version qui mesurait la
-                    // hauteur a la main, ou elle dependait de l'ordre de dessin.
-                    render::Group gz(titre);
+                    // UNE CARTE PAR ZONE, DE HAUTEUR FIXE.
+                    //
+                    // Group ne se mesure plus lui-meme (AutoResizeY plante
+                    // quand il est embarque dans un BeginChild qui defile,
+                    // voir ui_widgets.h). On compte donc les lignes de la zone
+                    // ICI, avant de la construire, et on donne cette hauteur.
+                    //
+                    // Compter d'abord, construire ensuite : c'est l'inverse de
+                    // ce que faisait AutoResizeY, et c'est pourquoi ca ne peut
+                    // pas boucler.
+                    int lignes = 0;
+                    for (int i = 0; i < nflora; ++i) {
+                        int z = 0;
+                        features::teleport::get_floraison(i, &z, nullptr,
+                                                          nullptr, nullptr);
+                        if (z == zone) {
+                            ++lignes;
+                        }
+                    }
+                    for (int i = 0; i < nwp; ++i) {
+                        int z = 0;
+                        features::teleport::get_waypoint(i, &z, nullptr, 0,
+                                                         nullptr, nullptr,
+                                                         nullptr);
+                        if (z == zone) {
+                            ++lignes;
+                        }
+                    }
+                    // Deux lignes par entree (nom + coordonnees) plus le titre,
+                    // l'espacement du tableau, et une marge de securite : une
+                    // carte trop courte fait deborder son contenu sur la
+                    // suivante, ce qui est laid mais pas fatal — on prefere
+                    // ca a une boucle de mesure.
+                    const float h_zone =
+                        static_cast<float>(lignes) * 34.0f + 40.0f;
+
+                    render::Group gz(titre, h_zone);
 
                     ImGui::BeginTable("##zp", 2,
                                       ImGuiTableFlags_SizingStretchSame |
