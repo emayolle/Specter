@@ -10528,7 +10528,7 @@ static ImGuiWindow* FindBestWheelingWindow(const ImVec2& wheel)
 }
 
 // DIAGNOSTIC TEMPORAIRE — un cran de molette perdu sur deux.
-static int g_specter_diag = 80;
+static int g_specter_diag = 400;
 static void SpecterDiag(const char* a, const char* b)
 {
     if (g_specter_diag-- <= 0)
@@ -10567,8 +10567,10 @@ void ImGui::UpdateMouseWheel()
     ImVec2 wheel;
     wheel.x = TestKeyOwner(ImGuiKey_MouseWheelX, owner_id) ? g.IO.MouseWheelH : 0.0f;
     wheel.y = TestKeyOwner(ImGuiKey_MouseWheelY, owner_id) ? g.IO.MouseWheel : 0.0f;
-    SpecterDiagNum("frame io.MouseWheel:", (double)g.IO.MouseWheel);
-    SpecterDiagNum("frame apres TestKeyOwner, wheel.y:", (double)wheel.y);
+    if (g.IO.MouseWheel != 0.0f || wheel.y != 0.0f) {
+        SpecterDiagNum("frame io.MouseWheel:", (double)g.IO.MouseWheel);
+        SpecterDiagNum("frame apres TestKeyOwner, wheel.y:", (double)wheel.y);
+    }
     //IMGUI_DEBUG_LOG("MouseWheel X:%.3f Y:%.3f\n", wheel_x, wheel_y);
     if (g.WheelingWindow != NULL)
     {
