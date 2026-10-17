@@ -114,7 +114,9 @@ bool g_etait_ouvert = false;
 struct Diagnostic {
     unsigned long messages = 0;   // WM_INPUT recus
     unsigned long deltas = 0;     // deltas non nuls recus
-    unsigned long roues = 0;      // WM_MOUSEWHEEL recus
+    // CRANS DE MOLETTE recus, lus dans usButtonFlags de l'entree brute.
+    // Un WM_MOUSEWHEEL n'arrive jamais : la fenetre fantome de 1x1 le vole.
+    unsigned long roues = 0;
     bool journalise = false;
 } g_diag;
 
@@ -318,6 +320,46 @@ if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
                     static_cast<UINT>(-1) &&
                 brut.header.dwType == RIM_TYPEMOUSE) {
                 accumuler_delta(brut.data.mouse.lLastX, brut.data.mouse.lLastY);
+
+                // ET LA ROUE, DANS LA MEME STRUCTURE.
+                //
+                // Quatre corrections ont cherche la molette du cote du focus.
+                // Toutes etaient fondee sur une idee fausse : que la molette
+                // arriverait un jour par WM_MOUSEWHEEL.
+                //
+                // Mesure : WM_MOUSEWHEEL n'arrive JAMAIS. Fenetre fantome 1x1 a
+                // (-1,-1) qui prend le focus et que Wine lui rend aussitot apres
+                // n'importe quel SetFocus. Le message part la, et la fenetre du
+                // jeu ne le voit pas. Reprendre le focus ne sert a rien : ce n'est
+                // pas le nôtre qui le vole.
+                //
+                // La molette est deja ici, depuis le debut : usButtonFlags porte
+                // RI_MOUSE_WHEEL et usButtonData porte le delta. C'est le meme
+                // message que les deltas de position — 125 fois par seconde,
+                // mesure. On le recevait entierement et on n'en lisait que
+                // lLastX/lLastY.
+                //
+                // Donc : UNE SEULE LECTURE, un seul chemin, celui qui fonctionne
+                // deja. Et le compteur de roues reste — il dira desormais le
+                // nombre de crans recus, ce qui est une mesure, pas un filtre.
+                //
+                // RI_MOUSE_HORIZONTAL_WHEEL n'existe PAS dans ce SDK : Microsoft
+                // l'a retiree apres Windows 8.1 (seule RI_MOUSE_WHEEL reste, sur
+                // 10.0.26100). Elle ne compilait pas. Ce n'est pas une perte :
+                // Win32 n'a pas de message de roue horizontale pour une souris
+                // classique, et le defilement vertical est le seul qui compte
+                // dans un menu.
+                const RAWMOUSE& m = brut.data.mouse;
+                if ((m.usButtonFlags & RI_MOUSE_WHEEL) != 0) {
+                    ++g_diag.roues;
+                    const mouse_sink sink =
+                        g_mouse_sink.load(std::memory_order_relaxed);
+                    if (sink) {
+                        // usButtonData est signe : vers le haut, c'est positif.
+                        // (short) evite de lire 65416 crans au lieu de -1.
+                        sink(0, 0, static_cast<short>(m.usButtonData));
+                    }
+                }
             }
             return 0;
         }
@@ -337,8 +379,12 @@ if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
             case WM_XBUTTONDBLCLK:
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL:
+                // Inatteignable en pratique — la fenetre fantome de 1x1 prend le
+                // focus et la molette part la. On avale quand meme : si une
+                // machine l'a jamais, le jeu ne doit pas zoomer non plus.
+                return 0;
             case WM_INPUT:
-                return 0;  // the game sees no BUTTON while the menu is open
+                return 0;  // le jeu ne voit rien du tout pendant le menu
             default:
                 break;
         }

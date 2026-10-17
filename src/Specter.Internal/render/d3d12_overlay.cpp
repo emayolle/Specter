@@ -149,12 +149,19 @@ bool keyboard_sink(void* hwnd, unsigned msg, uintptr_t wparam, intptr_t lparam)
 // arrondie au cran, et les petits defilements disparaissent.
 void mouse_sink(int x, int y, int wheel)
 {
+    (void)x;
+    (void)y;
     if (wheel == 0) {
         return;
     }
-    const LPARAM lp = MAKELPARAM(static_cast<short>(x), static_cast<short>(y));
-    ImGui_ImplWin32_WndProcHandler(g_hwnd, WM_MOUSEWHEEL,
-                                   MAKEWPARAM(0, (WORD)wheel), lp);
+    // Le delta est en UNITES DE WHEEL_DELTA (120 par cran), pas en messages.
+    // On convertit donc en unites de cran, ce qu'ImGui attend.
+    //
+    // AddMouseWheelEvent et non le handler Win32 : ce handler s'attend a un
+    // WM_MOUSEWHEEL qu'on ne recoit jamais (fenetre fantome de 1x1 qui garde le
+    // focus — voir input.cpp), et il convertirait un delta deja converti.
+    ImGui::GetIO().AddMouseWheelEvent(
+        0.0f, static_cast<float>(wheel) / static_cast<float>(WHEEL_DELTA));
 }
 
 void log_once(const char* what)
