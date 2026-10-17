@@ -73,7 +73,7 @@ void draw_ui()
     // fond. SeparatorText fait la meme separation en UN item, sans la gestion
     // de la hauteur — et une hauteur mal calculee, c'est le contenu qui sort de
     // l'ecran, ce qui s'est produit.
-    ImGui::SeparatorText("OU JE SUIS");
+    { render::Group g("Position");
     float cx = 0.0f, cy = 0.0f, cz = 0.0f;
     int csp = 0;
     if (features::teleport::have_position()) {
@@ -81,49 +81,46 @@ void draw_ui()
         char buf[96];
         std::snprintf(buf, sizeof(buf), "%.0f   %.0f   %.0f", cx, cy, cz);
         ImGui::Text("%s", buf);
-        ImGui::TextDisabled("x   y   z  -  scene %d", csp);
+        ImGui::TextDisabled("x  y  z   scene %d", csp);
     } else {
-        ImGui::TextDisabled("position inconnue - entre dans le monde");
+        ImGui::TextDisabled("unknown - get in-game");
     }
 
-    ImGui::SeparatorText("ENREGISTRER ICI");
+    }  { render::Group g("Save here");
     ImGui::SetNextItemWidth(-1.0f - 200.0f);
     ImGui::InputText("##nom", g_tp_name, sizeof(g_tp_name));
     ImGui::SameLine();
-    if (ImGui::Button("Enregistrer", ImVec2(180.0f, 0.0f))) {
+    if (ImGui::Button("Save here", ImVec2(180.0f, 0.0f))) {
         if (!features::teleport::save_current(g_tp_name)) {
             console::note("! tp: rien enregistre (position ou nom manquant)\n");
         }
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Sauvegarde la position courante sous ce nom.");
+        ImGui::SetTooltip("Saves the current position under this name.");
     }
 
-    ImGui::SeparatorText("TELEPORTATION");
-    ImGui::TextDisabled("le personnage marche vers la cible par petits pas");
-    ImGui::SetNextItemWidth(-1.0f);
-
+    }  { render::Group g("Teleport");
+    ImGui::TextDisabled("walks to the target in small steps");
     float stepv = features::teleport::lerp_step();
-    if (ImGui::SliderFloat("Pas (unites)", &stepv, 0.25f, 20.0f, "%.2f u")) {
+    if (render::slider_row("Step size", &stepv, 0.25f, 20.0f, "%.2f u", 110.0f)) {
         features::teleport::set_lerp_step(stepv);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Distance moved per small TP. Too big and the server "
-            "rejects it (rubber-band).");
+            "Distance moved per small TP. Too big and the server rejects it\n"
+            "(rubber-band).");
     }
     if (ImGui::IsItemDeactivatedAfterEdit()) {
         features::teleport::persist();
     }
 
     float spdv = features::teleport::lerp_speed();
-    if (ImGui::SliderFloat("Vitesse (pas/s)", &spdv, 5.0f, 120.0f, "%.0f")) {
+    if (render::slider_row("Speed", &spdv, 5.0f, 120.0f, "%.0f st/s", 110.0f)) {
         features::teleport::set_lerp_speed(spdv);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "How many steps are applied per second (capped by the "
-            "game frame rate).");
+            "Steps applied per second, capped by the game frame rate.");
     }
     if (ImGui::IsItemDeactivatedAfterEdit()) {
         features::teleport::persist();
@@ -133,12 +130,12 @@ void draw_ui()
     const float cap = fps > 1.0f ? fps : 60.0f;
     const float sps = features::teleport::lerp_speed();
     const float eff_speed = sps < cap ? sps : cap;
-    ImGui::TextDisabled("soit ~%.0f u/s  (pas x min(vitesse, %.0f fps))",
+    ImGui::TextDisabled("~%.0f u/s   steps x min(speed, %.0f fps)",
                        features::teleport::lerp_step() * eff_speed, cap);
 
-    ImGui::SeparatorText("MES POSITIONS");
+    }  { render::Group g("Saved positions");
     if (features::teleport::count() == 0) {
-        ImGui::TextDisabled("rien pour l'instant - enregistre une position ci-dessus");
+        ImGui::TextDisabled("none yet - save one above");
     }
     for (int i = 0; i < features::teleport::count(); ++i) {
         char nm[36] = {};
@@ -172,27 +169,28 @@ void draw_ui()
         ImGui::TextDisabled("%s", xyz);
 
         ImGui::TableNextColumn();
-        if (ImGui::Button("Aller", ImVec2(-1.0f, 0.0f))) {
+        if (ImGui::Button("Go", ImVec2(-1.0f, 0.0f))) {
             if (!features::teleport::teleport_to(i)) {
                 console::note("! tp: bridge not ready\n");
             }
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Teleporte jusqu'a cette position.");
+            ImGui::SetTooltip("Teleports there.");
         }
 
         ImGui::TableNextColumn();
-        if (ImGui::Button("Effacer", ImVec2(-1.0f, 0.0f))) {
+        if (ImGui::Button("Delete", ImVec2(-1.0f, 0.0f))) {
             features::teleport::remove_at(i);
             --i;   // les slots ont recule d'un cran
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Supprime cette position.");
+            ImGui::SetTooltip("Removes this position.");
         }
 
         ImGui::EndTable();
         ImGui::PopID();
     }
+    }  // group
 }
 
 void draw_ui_waypoints()
@@ -244,13 +242,12 @@ void draw_ui_waypoints()
                 }
 
                 if (features::teleport::marks_pending()) {
-                    ImGui::TextDisabled("scanning the game...");
+                    ImGui::TextDisabled("scanning...");
                 } else {
-                    ImGui::TextDisabled("%d zone(s): %d Floraison(s), %d waypoint(s)",
-                                       nz, nflora, nwp);
+                    ImGui::TextDisabled("%d zones   %d flowers   %d waypoints", nz, nflora, nwp);
                 }
                 ImGui::SameLine();
-                if (ImGui::Button("Refresh from game")) {
+                if (ImGui::Button("Refresh")) {
                     if (features::console::ready()) {
                         features::teleport::request_marks();
                     } else {
@@ -269,16 +266,16 @@ void draw_ui_waypoints()
                 //
                 // Elle passe apres les deux cases dans le registre : elle est
                 // donc en dernier, et ce qui reste de la page est exactement sa
-                // hauteur. Avant, elle etait en AutoResizeY et prenait la page
-                // entiere - les deux cases se retrouvaient sous le bord, et il
-                // fallait defiler pour les atteindre.
+                // hauteur. Avant, elle prenait la page entiere - les deux cases
+                // se retrouvaient sous le bord.
                 const float h = std::max(ImGui::GetContentRegionAvail().y - 14.0f,
                                          140.0f);
                 ImGui::BeginChild("##wp_list", ImVec2(0.0f, h));
 
                 if (nz == 0) {
-                    ImGui::TextDisabled("nothing yet - press Refresh once in-world");
+                    ImGui::TextDisabled("nothing yet - press Refresh in-game");
                 }
+
                 for (int zi = 0; zi < nz; ++zi) {
                     const int zone = zones[zi];
                     if (zi > 0) {
@@ -287,16 +284,17 @@ void draw_ui_waypoints()
                     char titre[32];
                     std::snprintf(titre, sizeof(titre), "Zone %d", zone);
 
-                    // Titre de zone + tableau, comme ci-dessus. ligne_repere
-                    // faisait trois dessins a trois positions differentes et
-                    // reservait sa ligne a la main ; un tableau aligne tout seul,
-                    // et ne peut pas laisser le curseur ou il ne devrait pas.
-                    ImGui::SeparatorText(titre);
+                    // UNE CARTE PAR ZONE. Group mesure sa hauteur sur son
+                    // contenu (AutoResizeY), donc il ne peut pas devenir trop
+                    // court -- contrairement a la version qui mesurait la
+                    // hauteur a la main, ou elle dependait de l'ordre de dessin.
+                    render::Group gz(titre);
 
                     ImGui::BeginTable("##zp", 2,
                                       ImGuiTableFlags_SizingStretchSame |
                                           ImGuiTableFlags_NoSavedSettings);
-                    ImGui::TableSetupColumn("quoi", ImGuiTableColumnFlags_WidthStretch);
+                    ImGui::TableSetupColumn("quoi",
+                                            ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableSetupColumn("tp", ImGuiTableColumnFlags_WidthFixed,
                                             100.0f);
 
@@ -310,7 +308,7 @@ void draw_ui_waypoints()
                         ImGui::PushID(100000 + i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::Text("Floraison");
+                        ImGui::TextUnformatted("Floraison");
                         ImGui::TextDisabled("(%.0f, %.0f, %.0f)", fx, fy, fz);
                         ImGui::TableNextColumn();
                         if (ImGui::Button("Teleport", ImVec2(-1.0f, 0.0f))) {
@@ -332,8 +330,7 @@ void draw_ui_waypoints()
                         ImGui::PushID(200000 + i);
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::Text("%s",
-                                           nm[0] ? nm : "(unnamed)");
+                        ImGui::TextUnformatted("%s", nm[0] ? nm : "(unnamed)");
                         ImGui::TextDisabled("(%.0f, %.0f, %.0f)", wx, wy, wz);
                         ImGui::TableNextColumn();
                         if (ImGui::Button("Teleport", ImVec2(-1.0f, 0.0f))) {
@@ -343,8 +340,10 @@ void draw_ui_waypoints()
                         }
                         ImGui::PopID();
                     }
+
                     ImGui::EndTable();
-                }
+                }  // zone
+
                 ImGui::EndChild();
 }
 

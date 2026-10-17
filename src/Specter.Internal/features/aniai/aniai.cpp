@@ -51,41 +51,30 @@ const char* etat_label(int v)
 
 void draw_ui()
 {
-    ImGui::SeparatorText("COMPORTEMENT DES ANIIMOE");
-
     bool on = g_enabled;
-    if (ImGui::Checkbox("IA des Aniimoe", &on)) {
+    if (ImGui::Checkbox("Aniimoe AI", &on)) {
         g_enabled = on;
     }
-    // La bulle porte sur la CASE. Elle portait sur le texte d'a cote, donc le
-    // survol de la case n'affichait rien — et c'est la case qu'on vise.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Ecrit Common.Const.AiConst.GLOBAL_OPEN_TICK.\n\n"
-            "  decochee -> false : les Aniimoe ne poursuivent plus, ne "
-            "reagissent plus\n"
-            "  cochee   -> true  : leur IA reprend\n\n"
-            "Applique par scripts/ani_ai.lua, joue a chaque nouvel etat Lua, "
-            "qui relit `specter.var.ani_ia` toutes les 250 ms.\n\n"
-            "Il ecrit inconditionnellement : le jeu peut remettre sa valeur "
-            "entre deux passages, et une ecriture conditionnelle ne le "
-            "remarkerait pas.");
+            "Writes AiConst.GLOBAL_OPEN_TICK.\n"
+            "  off -> false: Aniimoe stop chasing and reacting\n"
+            "  on  -> true : their AI resumes\n"
+            "Rewritten every 250 ms, because the game puts its own value back.");
     }
 
-    // L'etat lu par le jeu, a cote de la case qui le commande. Desactive : on
-    // ne peut pas cliquer dessus, et le gris le dit sans qu'on ait a le dire.
+    // What the GAME reads, right of the checkbox that commands it. Greyed,
+    // because clicking it does nothing.
+    ImGui::SameLine();
     ImGui::BeginDisabled();
     if (g_etat == 0) {
         ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "%s",
                            etat_label(g_etat));
     } else {
-        ImGui::Text("%s", etat_label(g_etat));
+        ImGui::TextDisabled("%s", etat_label(g_etat));
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Ce que le JEU lit en ce moment.\n"
-                          "La case ci-dessus est ce que TU demandes.");
-    }
+
 }
 
 }  // namespace aniai

@@ -532,25 +532,25 @@ void draw_ui()
     // dans Divers, avec le reste de l'etat du client, ou elle sert a quelque
     // chose : quand le pont ne repond plus.
     ImGui::InputTextMultiline("##lua_src", g_src, sizeof(g_src),
-                              ImVec2(-1.0f, 180.0f));
+                              ImVec2(-1.0f, 190.0f));
 
     // Le tampon est plein => le prochain caractere est perdu. Ça se voit ici,
     // en clair, AVANT que Lua ne rende une erreur qui accuse le pont.
     const int srcLen = static_cast<int>(std::strlen(g_src));
     if (srcLen >= static_cast<int>(sizeof(g_src)) - 1) {
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-                           "TAMPON PLEIN (%d / %d octets) : le texte est coupe, "
-                           "l'execution echouera.", srcLen,
+                           "BUFFER FULL (%d / %d bytes) - the text is truncated, "
+                           "it will not run.", srcLen,
                            static_cast<int>(sizeof(g_src)) - 1);
     }
-    if (ImGui::Button("Execute")) {
+    if (ImGui::Button("Run")) {
         const int n = srcLen;
         if (!submit(kChannelConsole, g_src, n)) {
             g_log += "! bridge not ready\n";
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Clear output")) {
+    if (ImGui::Button("Clear")) {
         g_log.clear();
     }
     ImGui::SameLine();
@@ -559,31 +559,29 @@ void draw_ui()
     // The shell window. Ticking this is the only thing that lets anything run
     // Lua without the Execute button, which is the whole point: the precondition
     // stays a human action, and it lapses on its own.
-    ImGui::Separator();
     bool open = g_cli_armed_at.load(std::memory_order_relaxed) != 0;
-    if (ImGui::Checkbox("Autoriser le shell", &open)) {
+    if (ImGui::Checkbox("Allow shell", &open)) {
         if (open) {
             arm_cli();
         } else {
             g_cli_armed_at.store(0, std::memory_order_relaxed);
-            log::info("cli: canal ferme");
+            log::info("cli: channel closed");
         }
     }
     // IsItemHovered porte sur la case, pas sur le texte d'a cote : c'est la
     // case qu'on survole, et ImGui sait laquelle.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Cochee : le canal reste ouvert, et tout script passe par "
-            "tools/lua.sh s'execute sans passer par le bouton Execute.\n\n"
-            "C'est une precondition humaine, et elle se leve d'elle-meme : "
-            "aucune fenetre de tir n'est cablee, donc decocher ferme pour la "
-            "session.");
+            "While ticked, anything run through tools/lua.sh executes without the\n"
+            "Run button.\n"
+            "It is a human precondition and it lapses on its own: there is\n"
+            "no time window wired, so unticking closes it for the session.");
     }
     ImGui::SameLine();
     if (open) {
-        ImGui::Text("ouvert (par defaut) -- decocher pour fermer");
+        ImGui::TextDisabled("on");
     } else {
-        ImGui::TextDisabled("ferme");
+        ImGui::TextDisabled("off");
     }
 
     ImGui::BeginChild("##lua_out", ImVec2(-1.0f, -1.0f), true);

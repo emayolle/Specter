@@ -66,40 +66,28 @@ const char* phase_label(int v)
 
 void draw_ui()
 {
-    ImGui::SeparatorText("RAMASSAGE AUTOMATIQUE");
-
     bool on = g_enabled;
-    if (ImGui::Checkbox("Auto-farm (ramasse ce qui s'interagit, SAUF les coffres)",
-                        &on)) {
+    if (ImGui::Checkbox("Auto-farm", &on)) {
         set_enabled(on);
     }
-
-    // Ce que la case fait, pas ce qu'elle a OUVERT. Une case qui dit « coche »
-    // sans dire si la boucle tourne, c'est une case aveugle.
-    //
-    // La bulle porte sur la CASE. Elle portait sur ce texte, et donc ne
-    // s'affichait pas au survol de la case — c'est-a-dire de la ou on regarde.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Boucle permanente, demarree par scripts/autofarm_loop.lua a chaque "
-            "nouvel etat Lua.\n\n"
-            "Elle ecarte les coffres et les objets a contact, et elle ne "
-            "s'arrete jamais : quand il ne reste rien, elle attend et "
-            "reessaie.\n\n"
-            "Une cible n'est comptee qu'APRES la disparition de son entite. Un "
-            "appel d'interaction qui rend sans erreur ne prouve rien.\n\n"
-            "Si l'auto-ouverture des coffres est cochee en meme temps, UNE "
-            "seule des deux boucles se deplace a la fois : l'autre attend. Les "
-            "deux se disputeraient le meme teleportement.");
+            "Loops forever over anything interactable, EXCEPT chests.\n"
+            "A target only counts after its entity disappears -- an\n"
+            "interaction call that returns cleanly proves nothing.\n"
+            "If auto-open chests is on too, only one of the two moves at a\n"
+            "time: the other waits. They would fight over the teleport.");
     }
 
+    ImGui::SameLine();
     ImGui::BeginDisabled();
     if (on) {
-        ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
+        ImGui::Text("%d", g_ouverts);
     } else {
-        ImGui::TextDisabled("desactive");
+        ImGui::TextDisabled("off");
     }
     ImGui::EndDisabled();
+
 }
 
 }  // namespace autofarm

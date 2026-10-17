@@ -89,68 +89,52 @@ float* mult(const char* nom)
 
 void draw_ui()
 {
-    ImGui::SeparatorText("VITESSE");
+    { render::Group g("Movement");
 
     bool on = g_actif;
-    if (ImGui::Checkbox("Multiplicateurs de vitesse", &on)) {
+    if (ImGui::Checkbox("Speed multipliers", &on)) {
         g_actif = on;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("One slider per ratio, read live by the script.");
     }
 
     if (on) {
-        // UN CURSEUR PAR RATIO, ET LE RATIO EST DANS SON NOM.
-        //
-        // ImGui ecrit le libelle A DROITE de la piste en 1.92. C'est l'apparence
-        // stock, et elle a un avantage qu'on ne voit pas : IsItemHovered et
-        // IsItemDeactivatedAfterEdit portent sur le CURSEUR, alors que le
-        // wrapper d'avant finissait sur un Dummy et donc rapportait le survol
-        // de toute la ligne.
         for (int i = 0; i < kN; ++i) {
             const Curseur& c = kCurseurs[i];
             if (g_mult[i] == 0.0f) {
-                g_mult[i] = c.defaut;   // 0 n'est pas une valeur : « pas lu »
+                g_mult[i] = c.defaut;   // 0 is not a value: it means "not read"
             }
-            ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::SliderFloat(c.label, &g_mult[i], c.min_v, c.max_v,
-                                   "%.1fx")) {
-                // Lu en direct par le script : un curseur bouge agit sans
-                // qu'on ait a rejouer quoi que ce soit.
-            }
+            render::slider_row(c.label, &g_mult[i], c.min_v, c.max_v, "%.1fx");
             if (ImGui::IsItemHovered() && c.aide) {
                 ImGui::SetTooltip("%s", c.aide);
             }
         }
-    } else {
-        ImGui::TextDisabled("desactive -- les vitesses originales sont restaurees");
     }
+    }  // group
 
-    // CE QUE CELA TOUCHE, ET CE QUE CELA NE TOUCHE PAS.
-    //
-    // Le patch est pose sur la CLASSE -- c'est la que le jeu resout la methode.
-    // Pose sur l'instance, personne ne bougeait : le champ pose la n'est pas la
-    // ou le jeu va le chercher. Mais pose sur la classe sans condition, tout le
-    // monde accelerait : 32 PNJ mesures a la meme valeur que le joueur.
-    //
-    // Donc le wrapper est CONDITIONNEL : il ne multiplie que si l'instance
-    // appelante est la tienne ou celle d'un de tes pets.
-    ImGui::SeparatorText("PORTEE");
-    ImGui::TextDisabled("Toi et tes pets. Les PNJ et les betes sauvages non.");
+    // WHAT IT TOUCHES. Three lines on screen; the reasoning is on hover.
+    { render::Group g("Scope");
+    ImGui::TextDisabled("You and your pets. NPCs keep their speed.");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Le patch enveloppe les methodes de vitesse de la CLASSE,\n"
-            "parce que c est la que le jeu les resout : pose sur\n"
-            "l instance, il n etait jamais consulte.\n\n"
-            "Mais il est CONDITIONNEL : le multiplicateur ne s applique\n"
-            "que si l entite appelante est la tienne ou un de tes pets.\n"
-            "Les PNJ et les betes sauvages gardent leur vitesse.\n\n"
-            "Il est REPOSE quand tu decoches, et reapplique toutes les\n"
-            "demi-secondes -- parce que le jeu peut recreer l attribut,\n"
-            "et un patch disparu sans raison est un reglage inerte.\n\n"
-            "L ESCALADE N'EST PAS LA. Le source du jeu dit\n"
-            "getClimbSpeed = climbSpeedLevels[canClimb], sans aucun ratio, et\n"
-            "SetAISpeed n'a QU'UN appelant dans tout le jeu : AIControllerUtils.\n"
-            "Ce que TU controles passe par un autre chemin. Le seul levier\n"
-            "restant sur l'escalade est « Cout de stamina » en dessous.");
+            "The patch wraps the CLASS methods -- that is where the game\n"
+            "resolves them -- but it is CONDITIONAL: it only multiplies for\n"
+            "your entity or your pets. Unconditional, 32 NPCs were measured\n"
+            "at the player's speed.\n"
+            "It is removed when you untick, and reapplied twice a second,\n"
+            "because the game can recreate the attribute and a patch that\n"
+            "vanished for no reason is a dead setting.");
     }
+    ImGui::TextDisabled("Climbing is not here.");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(
+            "Game source: getClimbSpeed = climbSpeedLevels[canClimb], no\n"
+            "ratio anywhere, and SetAISpeed has ONE caller in the whole\n"
+            "game -- AIControllerUtils. What you control goes another way.\n"
+            "Stamina cost, below, is the only lever left on climbing.");
+    }
+    }  // group
 }
 
 }  // namespace vitesse

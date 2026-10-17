@@ -52,19 +52,15 @@ bool enabled()
 void draw_ui()
 {
     bool inf = g_enabled;
-    if (ImGui::Checkbox("Infinite movement stamina (sprint / dash / glide / climb)",
-                        &inf)) {
+    if (ImGui::Checkbox("Infinite stamina", &inf)) {
         set_enabled(inf);
     }
-    // La bulle porte sur la CASE, pas sur ce qui suit a cote.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Patches the player's stamina cost function (changeStamina) on "
-            "its CLASS, so every instance is covered and a relog cannot lose "
-            "it. Movement costs are swallowed; stamina is not re-pinned every "
-            "frame, which is what used to stutter. Turning it off restores the "
-            "normal behaviour immediately.");
+            "Movement costs are swallowed: sprint, dash, glide, climb.\n"
+            "Turning it off restores normal behaviour at once.");
     }
+
 }
 
 }  // namespace stamina

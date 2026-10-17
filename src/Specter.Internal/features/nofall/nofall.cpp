@@ -44,22 +44,19 @@ bool enabled()
 
 void draw_ui()
 {
+    // ONE checkbox, no card. A card around a single option is a box with one
+    // line in it, and it costs a border and a title to say nothing.
     bool on = g_enabled;
     if (ImGui::Checkbox("No fall damage", &on)) {
         set_enabled(on);
     }
-    // La bulle porte sur la CASE. Avant, elle etaitappelee apres un SameLine :
-    // elle portait donc sur le texte de droite, et une zone cliquable sans
-    // infobulle. Meme information, mauvaise cible.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Patches checkImmuneFallDamage, the game's OWN fall-damage "
-            "immunity decision, so both of its call sites are covered -- the "
-            "player and the pet -- and the per-zone immunity it already "
-            "implements is respected. This one does not depend on where you "
-            "are. Turning it off restores the normal behaviour immediately: "
-            "the patch stays installed and becomes a pass-through.");
+            "Patches the game's OWN immunity check, so the player and the pet\n"
+            "are both covered. Turning it off restores normal behaviour at\n"
+            "once: the patch stays installed and becomes a pass-through.");
     }
+
 }
 
 }  // namespace nofall

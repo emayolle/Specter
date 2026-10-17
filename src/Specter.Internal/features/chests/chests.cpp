@@ -102,108 +102,67 @@ const char* phase_label(int v)
 
 void draw_ui()
 {
-    ImGui::SeparatorText("OUVERTURE DES COFFRES");
-
     bool on = g_enabled;
-    if (ImGui::Checkbox("Auto-ouverture (SEULEMENT les coffres, rien d'autre)",
-                        &on)) {
+    if (ImGui::Checkbox("Auto-open chests", &on)) {
         set_enabled(on);
     }
-
-    // Ce que la case fait, pas ce qu'elle a OUVERT. Une case qui dit « coche »
-    // sans dire si la boucle tourne, c'est une case aveugle.
-    //
-    // La bulle porte sur la CASE. Elle portait sur le texte d'a cote, donc le
-    // survol de la case — de la ou on regarde — n'affichait rien.
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip(
-            "Boucle permanente, demarree par scripts/chest-open.lua a chaque "
-            "nouvel etat Lua.\n\n"
-            "ELLE NE TOUCHE QU'AUX COFFRES. Le jeu pose `isChest` aussi sur les "
-            "ramassages, les Aniipods et les oeufs -- mesure : 19 cibles "
-            "retenues, 1 seul coffre. Une entite n'est gardee que si la config "
-            "du jeu dit coffre : Data.chest_data[son template].markConfigId "
-            "== 10506. Mesure : 12 coffres acceptes sur 12, 0 desaccord.\n\n"
-            "Un coffre n'est compte qu'APRES la disparition de son entite. Un "
-            "appel d'interaction qui rend sans erreur ne prouve rien.\n\n"
-            "Une seule boucle se deplace a la fois : si l'auto-farm est "
-            "cochee, celle-ci attend. Les deux se disputeraient le meme "
-            "teletportement, et aucune n'arriverait.");
+            "CHESTS ONLY. The game sets isChest on pickups and Aniipods too --\n"
+            "measured: 19 targets kept, 1 was a chest.\n"
+            "A target is kept only if Data.chest_data[template].markConfigId\n"
+            "== 10506. Measured: 12 accepted, 0 disagreements.\n"
+            "Counts only after the entity disappears. Same one-mover-at-a-time\n"
+            "rule as auto-farm.");
     }
 
-    // UNE ERREUR DU PILOTE, EN TETE, ET EN ROUGE.
+    // THE THREE NUMBERS THAT CAN GO WRONG. Each one is hidden until it is
+    // wrong, because a line that always reads "0" is a line nobody reads.
     //
-    // Elle passe AVANT le compteur d'echecs de TP : une erreur du pilote, c'est
-    // une boucle qui ne demarre pas du tout, ce qui est plus grave qu'un
-    // teleport rate. Et elle se voit tout de suite, parce qu'elle est la seule
-    // ligne de cette page qui dit « ca ne marche pas » sans ambiguite.
+    // Driver error first: that is a loop that never started at all, which is
+    // worse than a missed teleport, and it used to be silent -- a pcall
+    // swallows, the loop sleeps, and the menu cheerfully says "searching".
     if (g_erreurs > 0) {
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-                           "ERREUR : le pilote Lua a echoue %d fois", g_erreurs);
+                           "driver errors: %d", g_erreurs);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
-                "Le pilote est un pcall : sans ce compteur, une erreur y est\n"
-                "muette. La boucle se repose, le pilote recommence, et le menu\n"
-                "affiche « cherche des coffres » sans jamais rien ouvrir.\n\n"
-                "Le message est dans le store :\n"
-                "  tools/lua.sh -f scripts/erreurs-coffres.lua");
+                "The driver is a pcall, so its errors were silent.\n"
+                "Message: tools/lua.sh -f scripts/erreurs-coffres.lua");
         }
     }
-
-    // LES COFFRES QUI ONT COUTE DES PV.
-    //
-    // Affiche meme si l'ouverture compte, parce que c'est exactement ce que le
-    // compteur d'ouverts ne peut pas dire : le coffre a bien ete ouvert, ET on
-    // a paye. Un coup affiche ici est un coffre que la boucle ne retente pas
-    // dans la scene -- pas un coffre qu'elle n'a pas reussi.
     if (g_gagnes > 0) {
         ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.35f, 1.0f),
-                           "%d coffre(s) ont coute des PV", g_gagnes);
+                           "chests that cost HP: %d", g_gagnes);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
-                "Le coffre a bien ete ouvert, et le joueur a perdu un coeur "
-                "pendant le cycle : Aniipods, ou une chute en chemin.\n\n"
-                "Ces coffres-la sont ecartes pour la scene en cours. Les PV "
-                "sont en coeurs (mesure : curHp=6, maxHp=6), et le controle "
-                "porte sur deux signaux -- curHp qui baisse, ou lastHurtTime "
-                "qui avance -- parce que la regeneration ferait sinon remonter "
-                "le compteur et masquerait une perte.\n\n"
-                "Un coffre n'est ecarte que sur une PREUVE de degats, jamais "
-                "sur une absence d'information.");
+                "Opened, and you paid for it. Those are skipped for the scene.\n"
+                "HP is in hearts (measured: curHp=6, maxHp=6), and the check\n"
+                "watches TWO signals -- curHp falling, lastHurtTime moving --\n"
+                "because regeneration would mask the loss.\n"
+                "Only skipped on PROOF of damage, never on missing data.");
         }
     }
-
-    // LES TP QUI N'ARRIVENT PAS.
-    //
-    // Ligne separee, en couleur d'alerte, parce que c'est le seul chiffre qui
-    // distingue « la boucle cherche et ne trouve rien » de « la boucle ne peut
-    // pas se deplacer ». Les deux affichent « cherche des coffres », et le
-    // second peut durer une session entiere sans rien dire. Ca s'est produit :
-    // le teleport a refuse toute ecriture de position pendant plusieurs heures,
-    // et rien ne l'a signale parce que rien ne le comptait.
     if (g_echecs > 0) {
         ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
-                           "%d teleportation(s) sans arrivee", g_echecs);
+                           "teleports not reached: %d", g_echecs);
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
-                "Un coffre n'a pas ete atteint dans le delai : la boucle passe "
-                "au suivant et retente.\n\n"
-                "Si ce chiffre monte et que « ouverts » reste a zero, la boucle "
-                "ne se deplace pas. Le jeu peut alors maintenir le joueur sur "
-                "un point : toute ecriture de position est ramenee en moins de "
-                "50 ms, et aucun teleport n'aboutit.\n\n"
-                "C'est un etat du jeu, pas un bug du filtre a coffres.");
+                "If this climbs while \"opened\" stays at 0, the loop cannot\n"
+                "move: the game holds the player on a spot, and any position\n"
+                "write is reverted within 50 ms. A game state, not a bug.");
         }
     }
 
-    // La phase et les compteurs, en bas : ils expliquent le chiffre de la case.
+    ImGui::SameLine();
     ImGui::BeginDisabled();
     if (on) {
-        ImGui::Text("%s -- %d ouvert(s)", phase_label(g_phase), g_ouverts);
+        ImGui::Text("%d opened", g_ouverts);
     } else {
-        ImGui::TextDisabled("desactive");
+        ImGui::TextDisabled("off");
     }
     ImGui::EndDisabled();
+
 }
 
 }  // namespace chests

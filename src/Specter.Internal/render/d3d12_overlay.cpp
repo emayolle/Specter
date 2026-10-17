@@ -421,13 +421,18 @@ InitResult init_once(IDXGISwapChain* sc)
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;   // never write imgui.ini into the game prefix
     io.LogFilename = nullptr;
-    // The game hides the OS cursor; draw ImGui's own so the user can see what
-    // they are pointing at. The OS cursor is forced hidden while the menu is up
-    // (see render/input.*).
-    io.MouseDrawCursor = true;
+    // PAS DE CURSEUR IMGUI.
+    //
+    // io.MouseDrawCursor dessinait la fleche d'ImGui, pour remplacer le curseur
+    // de l'OS que notre gate rendait invisible. Les deux causes ont disparu : le
+    // gate ne touche plus au curseur (voir render/input.cpp), donc le curseur du
+    // jeu reste cache en jeu, ce qui est coherent -- et le menu dessine sa
+    // PASTILLE a la position souris, sur la draw list d'avant-plan. Voir
+    // dessiner_pastille().
+    io.MouseDrawCursor = false;
     ImGui::StyleColorsDark();
 
-    // LE MENU S'OUVRE SUR « Joueur », UNE FOIS PAR SESSION.
+    // LE MENU S'OUVRE SUR « Player », UNE FOIS PAR SESSION.
     //
     // g_onglet_defaut_pose est un static local de build_ui(), donc il survit a
     // la destruction du contexte ImGui : sans cette remise a zero, le premier
@@ -500,6 +505,49 @@ void feed_input()
 // une pour six entrees ne vaut pas le cout. Les libelles sont la navigation.
 
 using namespace specter::render;
+
+// LA PASTILLE : ou est la souris, sans toucher au curseur du jeu.
+//
+// Un jeu a la premiere personne cache son curseur -- il appelle SetCursor(NULL)
+// lui-meme -- donc en jeu il n'y a rien a afficher. Mais quand le menu est
+// ouvert, il faut savoir ou on pointe. Donc on dessine un point, et on ne
+// touche a rien d'autre.
+//
+// LA DRAW LIST D'AVANT-PLAN, ET POURQUOI PAS UNE AUTRE.
+//
+// GetForegroundDrawList() est dessinee AU-DESSUS de la fenetre et de tout le
+// reste, et son contenu n'est pas ecrete par la fenetre du menu. Une pastille
+// dessinee dans la fenetre, elle, disparaitrait des que le curseur sortirait
+// du cadre du menu -- et disparaitrait visuellement alors que la souris est
+// encore dessus.
+//
+// ET PAS DANS LE FLUX NORMAL, pour une raison qui compte.
+//
+// Un ImGui::CircleFilled() entre deux widgets avance le curseur, donc la
+// pastille mangerait la place d'un controle et decalerait la mise en page. On
+// la dessine donc sur la draw list, hors du flux : aucun item, aucun effet sur
+// ce qui suit.
+//
+// UNE PASTILLE, ET SON ANNEAU. L'anneau sombre de 4 px se voit sur fond clair
+// comme sur fond sombre, et le point blanc de 2 px reste visible sur les deux.
+// Un disque plein, lui, disparaitrait sur un fond clair.
+void dessiner_pastille()
+{
+    if (!g_ui_enabled.load(std::memory_order_relaxed)) {
+        return;   // menu ferme : on ne dessine rien, le jeu garde son curseur
+    }
+
+    const ImVec2 p = ImGui::GetIO().MousePos;
+    // Avant la premiere frame, MousePos vaut -FLT_MAX. Un cercle dessine la-bas
+    // ne coute rien mais n'a aucun sens.
+    if (p.x < -1000.0f || p.y < -1000.0f) {
+        return;
+    }
+
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    dl->AddCircleFilled(p, 4.0f, IM_COL32(20, 20, 20, 200));
+    dl->AddCircleFilled(p, 2.0f, IM_COL32(255, 255, 255, 235));
+}
 
 void build_ui()
 {
@@ -606,7 +654,7 @@ void build_ui()
                 // dit ce qu'il veut dire.
                 ImGuiTabItemFlags drapeaux = ImGuiTabItemFlags_None;
                 if (!g_onglet_defaut_pose &&
-                    std::strcmp(f->tab, "Joueur") == 0) {
+                    std::strcmp(f->tab, "Player") == 0) {
                     drapeaux = ImGuiTabItemFlags_SetSelected;
                     g_onglet_defaut_pose = true;
                 }
@@ -624,14 +672,14 @@ void build_ui()
                 }
             }
 
-            if (ImGui::BeginTabItem("Divers")) {
+            if (ImGui::BeginTabItem("Misc")) {
 
                 ImGui::Separator();
                 ImGui::Checkbox("ImGui demo window", &g_demo);
                 ImGui::Separator();
                 ImGui::Text("FPS %.1f (%.2f ms)", io.Framerate,
                             1000.0f / (io.Framerate > 0.1f ? io.Framerate : 1.0f));
-                if (ImGui::Button("Close menu (DELETE)", ImVec2(-1.0f, 0.0f))) {
+                if (ImGui::Button("Close menu  (DELETE)", ImVec2(-1.0f, 0.0f))) {
                     g_ui_enabled = false;
                 }
                 ImGui::EndTabItem();
@@ -849,6 +897,7 @@ void on_present(IDXGISwapChain* sc)
                                              static_cast<float>(g_height));
         ImGui::NewFrame();
         build_ui();
+        dessiner_pastille();
         ImGui::Render();
         render_frame();
     } catch (...) {

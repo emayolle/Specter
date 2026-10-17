@@ -1,23 +1,28 @@
-// Specter.Internal — game input gate + OS cursor control for the overlay menu.
+// Specter.Internal — game input gate for the overlay menu.
 //
-// When the ImGui menu is open we want the OS cursor free and we want the game to
-// receive *no* input at all. The game reads input through user32.dll:
+// WE DO NOT TOUCH THE CURSOR. See input.cpp for why the cursor hooks were
+// removed; the short version is that ShowCursor's display counter is a STACK,
+// not a boolean, so any save/restore was a reconstruction of Win32's bookkeeping
+// against a game we do not control. The menu now draws a dot of its own and
+// leaves the game's cursor entirely alone.
+//
+// What remains is the input gate, and it is here for one reason: without it a
+// click inside the menu would pass through to the game and turn the character.
+//
+// The game reads input through user32.dll:
 //   * GetRawInputData / GetRawInputBuffer  (raw keyboard/mouse, Input System)
 //   * GetAsyncKeyState / GetKeyState       (polled legacy key state)
-//   * ClipCursor / ShowCursor / SetCursor  (the locked first-person cursor)
+//   * and, for mouse buttons and keys, window messages (Unity reads them from
+//     DispatchMessage -> WndProc)
 //
-// We detour those user32 exports with our own inline-detour engine
+// We detour the four polled exports with our own inline-detour engine
 // (platform/hook/detour.*), a port of the Steam overlay's engine (we cannot call
 // Steam's own copy: it is manual-mapped but never initialised in this game — see
-// docs/STEAM_HOOK.md). While the menu is open the proxies return neutral values
-// (no keys, no raw input, no re-clip, cursor stays hidden); closed, each proxy
-// forwards to the saved trampoline (the real function).
+// docs/STEAM_HOOK.md). While the menu is open the proxies return neutral values;
+// closed, each proxy forwards to the saved trampoline (the real function).
 //
-// Those hooks miss input that arrives as *window messages* (Unity reads mouse
-// buttons from DispatchMessage -> WndProc), so install() also subclasses the
-// game window and swallows input messages while the menu is up, and owns
-// WM_SETCURSOR. The visible cursor is drawn by ImGui itself (io.MouseDrawCursor),
-// which is why the OS cursor is forced hidden rather than shown.
+// Because those hooks miss input that arrives as window messages, install() also
+// subclasses the game window and swallows input messages while the menu is up.
 //
 // Our own overlay code (the SUPPR toggle, ImGui mouse buttons) must bypass the
 // gate, so it calls real_async_key_state() instead of GetAsyncKeyState().
@@ -41,14 +46,13 @@ using keyboard_sink = bool (*)(void* hwnd, unsigned msg, uintptr_t wparam,
 // context exists.
 void set_keyboard_sink(keyboard_sink fn);
 
-// Resolve user32 and detour the input/cursor exports. Call ONCE, when the menu
-// pipeline is initialised. `hwnd` is currently unused (kept for a future window
-// subclass). Returns true when the gate is armed (engine available + >=1 hook).
+// Resolve user32 and detour the four INPUT exports. Call ONCE, when the menu
+// pipeline is initialised. Returns true when the gate is armed (engine available
+// + >=1 hook).
 bool install(void* hwnd);
 
 // Apply the menu state. Idempotent: called every frame from the render thread.
-// While open the game's input is blocked and the OS cursor is released; closing
-// restores exactly what was saved.
+// While open the game's input is blocked. The cursor is NOT touched.
 void set_menu_open(bool open);
 
 // True once install() has actually armed the gate (engine ready + hooks in

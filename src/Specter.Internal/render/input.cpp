@@ -1,14 +1,44 @@
-// Specter.Internal — game input gate + OS cursor control (implementation).
+// Specter.Internal — game input gate (implementation).
 //
-// We hook seven user32 exports with our own inline-detour engine (detour.*,
-// ported from Steam's overlay engine):
+// NOUS NE TOUCHONS PLUS AU CURSEUR. C'EST LA REGLE.
+//
+// Ce fichier derivait sept exports user32 avec notre moteur de detour (detour.*,
+// port du moteur de l'overlay Steam) :
 //   GetRawInputData, GetRawInputBuffer, GetAsyncKeyState, GetKeyState,
 //   ClipCursor, ShowCursor, SetCursor
-// Each proxy consults one atomic flag: menu closed -> forward to the trampoline
-// (the real function); menu open -> return a neutral value. The cursor itself is
-// released by our own code in set_menu_open(), which must call the trampolines
-// (never the hooked exports) or its ClipCursor/ShowCursor calls would be
-// swallowed by our own gate.
+//
+// Les quatre premiers restent. Les trois derniers — ClipCursor, ShowCursor et
+// SetCursor — ont ete RETIRES.
+//
+// POURQUOI, ET CE QUE CA COUTAIT
+//
+// Un jeu a la premiere personne cache son propre curseur : il appelle
+// SetCursor(NULL) et rogne la souris a la fenetre. Pour afficher un menu, il
+// faut donc deriver le curseur -- ce que faisait enter_menu(), qui enregistrait
+// la zone de rognage et le compteur d'affichage, forcait SetCursor(NULL), puis
+// restaurait tout a la fermeture.
+//
+// Ce systeme etait fragile PAR CONSTRUCTION, et la restauration en particulier
+// ne pouvait pas etre exacte : le compteur de ShowCursor est une PILE, pas un
+// booleen. Il existe meme un etat invalide, ou le jeu croit le curseur visible
+// alors qu'il ne l'est pas. Toute la logique etait une reconstruction de la
+// pile de Win32, contre un jeu qu'on ne controle pas.
+//
+// Le resultat etait ce que le menu montrait deja : un curseur inutile.
+//
+// CE QU'ON FAIT MAINTENANT
+//
+// On ne touche a rien. Les ClipCursor / ShowCursor / SetCursor du jeu
+// s'executent, le jeu garde SON etat de curseur — cache en jeu, ce qui est
+// coherent — et le menu se contente de dessiner un POINT a la position souris,
+// sur la draw list d'avant-plan. Voir d3d12_overlay.cpp.
+//
+// Un point ne demande aucune release, aucune sauvegarde, et rien a restaurer :
+// il n'y a plus d'etat a synchroniser, donc plus rien a desynchroniser.
+//
+// Ce qui reste du gate, c'est l'ENTREE : sans ca, un clic dans le menu
+// traverserait vers le jeu et le personnage tournerait. Les quatre detours
+// d'entree et la sous-classe de fenetre restent donc intacts.
 //
 // Threading: the hooks run on whatever thread the game polls input from, so they
 // only touch the atomic flag and the (immutable after install) trampolines.
@@ -41,17 +71,11 @@ using GetRawInputData_t = UINT(WINAPI*)(HRAWINPUT, UINT, LPVOID, PUINT, UINT);
 using GetRawInputBuffer_t = UINT(WINAPI*)(PRAWINPUT, PUINT, UINT);
 using GetAsyncKeyState_t = SHORT(WINAPI*)(int);
 using GetKeyState_t = SHORT(WINAPI*)(int);
-using ClipCursor_t = BOOL(WINAPI*)(const RECT*);
-using ShowCursor_t = int(WINAPI*)(BOOL);
-using SetCursor_t = HCURSOR(WINAPI*)(HCURSOR);
 
 GetRawInputData_t real_get_raw_input_data = nullptr;
 GetRawInputBuffer_t real_get_raw_input_buffer = nullptr;
 GetAsyncKeyState_t real_get_async_key_state = nullptr;
 GetKeyState_t real_get_key_state = nullptr;
-ClipCursor_t real_clip_cursor = nullptr;
-ShowCursor_t real_show_cursor = nullptr;
-SetCursor_t real_set_cursor = nullptr;
 
 // ---- hook proxies --------------------------------------------------------
 
@@ -94,104 +118,6 @@ SHORT WINAPI hk_get_key_state(int vk)
         return 0;
     }
     return real_get_key_state(vk);
-}
-
-BOOL WINAPI hk_clip_cursor(const RECT* r)
-{
-    // While the menu is up we keep the cursor unclipped: swallow the game's
-    // re-clip and report success.
-    if (g_open.load(std::memory_order_relaxed)) {
-        return TRUE;
-    }
-    return real_clip_cursor(r);
-}
-
-int WINAPI hk_show_cursor(BOOL show)
-{
-    // The game hides the hardware cursor; while the menu is up we do not let it.
-    if (g_open.load(std::memory_order_relaxed)) {
-        return 1;
-    }
-    return real_show_cursor(show);
-}
-
-HCURSOR WINAPI hk_set_cursor(HCURSOR c)
-{
-    // While the menu is up ImGui draws its own cursor (io.MouseDrawCursor) and
-    // asks for the OS cursor to be hidden, so we neutralise every SetCursor —
-    // the game's and ImGui's alike — to NULL.
-    if (g_open.load(std::memory_order_relaxed)) {
-        return real_set_cursor(nullptr);
-    }
-    return real_set_cursor(c);
-}
-
-// ---- cursor save/restore -------------------------------------------------
-
-bool g_cursor_saved = false;
-bool g_had_clip = false;
-RECT g_saved_clip = {};
-int g_saved_show_count = 0;
-
-void enter_menu()
-{
-    if (!g_armed) {
-        return;
-    }
-
-    // Capture and release the game's clip region so the cursor can travel.
-    RECT cur = {};
-    if (::GetClipCursor(&cur)) {
-        g_saved_clip = cur;
-        g_had_clip = true;
-    } else {
-        g_had_clip = false;
-    }
-
-    // Record the exact OS cursor display-counter the game had. While the menu
-    // is open every ShowCursor/SetCursor call is swallowed by the gate, so the
-    // counter is frozen at this value and leave_menu() can restore it exactly.
-    g_saved_show_count = real_show_cursor(0);
-    real_clip_cursor(nullptr);
-    real_set_cursor(nullptr);
-
-    g_cursor_saved = true;
-    log::info("input: menu open - cursor released (clip=%d, show=%d)",
-              g_had_clip, g_saved_show_count);
-}
-
-void leave_menu()
-{
-    if (!g_armed || !g_cursor_saved) {
-        return;
-    }
-
-    if (g_had_clip) {
-        real_clip_cursor(&g_saved_clip);
-    } else {
-        real_clip_cursor(nullptr);
-    }
-
-    // The game keeps its hardware cursor hidden by setting it to NULL; hand
-    // the OS back exactly that state.
-    real_set_cursor(nullptr);
-
-    // Restore the display counter to the value it had when the menu opened —
-    // do NOT force it negative. Pushing it below zero desynchronises the
-    // game's own ShowCursor(TRUE/FALSE) pairs: its next single TRUE no longer
-    // reaches the visible range, so the game cursor stays invisible most of
-    // the time even when the game asks to show it.
-    const int cur_count = real_show_cursor(0);  // read, no change
-    const int n = g_saved_show_count - cur_count;
-    const BOOL dir = n < 0 ? FALSE : TRUE;
-    int n_abs = n < 0 ? -n : n;
-    if (n_abs > 64) n_abs = 64;
-    for (int i = 0; i < n_abs; ++i) {
-        real_show_cursor(dir);
-    }
-    g_cursor_saved = false;
-    log::info("input: menu closed - cursor state restored (show %d -> %d)",
-              cur_count, g_saved_show_count);
 }
 
 // ---- window subclass -----------------------------------------------------
@@ -241,9 +167,6 @@ LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM w, LPARAM l)
         }
 
         switch (msg) {
-            case WM_SETCURSOR:
-                ::SetCursor(nullptr);
-                return TRUE;
             case WM_MOUSEMOVE:
             case WM_LBUTTONDOWN:
             case WM_LBUTTONUP:
@@ -304,11 +227,6 @@ bool install(void* hwnd)
          (void**)&real_get_async_key_state},
         {"GetKeyState", "GetKeyState", (void*)&hk_get_key_state,
          (void**)&real_get_key_state},
-        {"ClipCursor", "ClipCursor", (void*)&hk_clip_cursor,
-         (void**)&real_clip_cursor},
-        {"ShowCursor", "ShowCursor", (void*)&hk_show_cursor,
-         (void**)&real_show_cursor},
-        {"SetCursor", "SetCursor", (void*)&hk_set_cursor, (void**)&real_set_cursor},
     };
 
     const int total = static_cast<int>(sizeof(targets) / sizeof(targets[0]));
@@ -373,21 +291,22 @@ void set_keyboard_sink(keyboard_sink fn)
 
 void set_menu_open(bool open)
 {
-    // Drive the hook proxies from the desired state even when the gate is not
-    // armed yet, so that it takes effect the instant install() succeeds.
+    // UN SEUL FLAG, ET C'EST TOUT.
+    //
+    // Ce fonction faisait 60 lignes : il enregistrait la zone de rognage du
+    // jeu et le compteur d'affichage du curseur, forcait SetCursor(NULL) a
+    // l'ouverture, puis les restaurait exactement a la fermeture — y compris un
+    // rattrapage du compteur ShowCursor, boucle de 64 iterations, parce que le
+    // compteur de Win32 est une pile et non un booleen.
+    //
+    // Tout cela etait la pour une FLICHE. On dessine maintenant un point (voir
+    // d3d12_overlay.cpp), donc plus personne ne touche au curseur du jeu : ses
+    // propres ClipCursor / ShowCursor / SetCursor s'executent normalement, et
+    // l'etat dans lequel il les laisse est le sien.
+    //
+    // Ce qui reste, c'est le blocage d'ENTREE : sans lui, un clic dans le menu
+    // traverserait vers le jeu et le personnage tournerait.
     g_open.store(open, std::memory_order_relaxed);
-
-    if (!g_armed) {
-        return;
-    }
-    // Compare against the *applied* cursor state, not the previous desired
-    // state: the gate may arm while the menu is already open, in which case
-    // enter_menu() still has to run.
-    if (open && !g_cursor_saved) {
-        enter_menu();
-    } else if (!open && g_cursor_saved) {
-        leave_menu();
-    }
 }
 
 bool armed()
